@@ -34,7 +34,7 @@ if [ -n "$STAGED_FILES" ]; then
       wecom-desktop/ffmpeg/*)
         continue
         ;;
-      docs/*)
+      docs/*|android_run_test-main/docs/*)
         continue
         ;;
     esac
@@ -61,7 +61,14 @@ fi
 
 # Run lint-staged on staged files only (fast feedback)
 echo "🔍 Running lint-staged on staged files..."
-npx lint-staged
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -n "$REPO_ROOT" ] && [ -f "$REPO_ROOT/android_run_test-main/package.json" ]; then
+  (cd "$REPO_ROOT/android_run_test-main" && npx lint-staged)
+elif [ -f "package.json" ]; then
+  npx lint-staged
+else
+  echo "⚠️  No package.json found; skipping lint-staged"
+fi
 
 # Exit with lint-staged's exit code
 exit $?

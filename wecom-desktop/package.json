@@ -17,12 +17,6 @@
     "typecheck": "vue-tsc --noEmit",
     "test:unit": "vitest run"
   },
-  "lint-staged": {
-    "src/**/*.{vue,ts,tsx,js}": [
-      "eslint --fix",
-      "prettier --write"
-    ]
-  },
   "dependencies": {
     "@heroicons/vue": "^2.2.0",
     "@vueuse/core": "^10.7.0",

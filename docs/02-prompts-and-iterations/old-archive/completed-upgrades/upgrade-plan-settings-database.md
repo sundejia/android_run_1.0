@@ -359,6 +359,12 @@ class SidecarSettings(BaseModel):
     poll_interval: int = 10
 
 
+# Historical sketch only. Current code uses @dataclass SidecarSettings in
+# wecom-desktop/backend/services/settings/models.py with fields aligned to
+# services/settings/defaults.py (SIDECAR category), including sidecar_timeout
+# and night-mode keys — required for SidecarSettings(**data) in get_sidecar_settings().
+
+
 class GeneralSettings(BaseModel):
     timezone: str = "Asia/Shanghai"
     backend_url: str = "http://localhost:8765"

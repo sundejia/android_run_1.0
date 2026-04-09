@@ -121,20 +121,54 @@ Results stored in `ai_health_checks` table. If unhealthy, the circuit breaker is
 
 ---
 
+### Follow-up fix (2026-04-10) — `SidecarSettings` dataclass vs database keys
+
+**Symptom (production logs):**
+
+- `SidecarSettings.__init__() got an unexpected keyword argument 'sidecar_timeout'`
+- `cannot access local variable 'ai_server_url' where it is not associated with a value`
+
+**Cause:**
+
+- Phase 2 added four SIDECAR keys in `defaults.py` (`sidecar_timeout`, `night_mode_sidecar_timeout`, `night_mode_start_hour`, `night_mode_end_hour`).
+- `SettingsService.get_sidecar_settings()` builds `SidecarSettings(**data)` from the full category dict. The `SidecarSettings` dataclass originally only listed five fields, so the extra keys broke construction whenever `get_all_settings()` / `get_flat_settings()` ran (for example from `load_settings()` during AI reply generation in `response_detector.py`).
+- The generic `except` around the AI request block logged `ai_server_url` even when the failure happened before that variable was assigned, which raised a secondary `UnboundLocalError`.
+
+**Fix:**
+
+- `wecom-desktop/backend/services/settings/models.py` — add the four missing fields to `SidecarSettings` with defaults matching `defaults.py`.
+- `wecom-desktop/backend/services/followup/response_detector.py` — set a default `ai_server_url` immediately before the `try` that loads settings and calls the AI, so error logging and metrics always have a defined value.
+
+**Regression test:** `tests/unit/test_sidecar_settings_models.py` — ensures `SidecarSettings(**data)` accepts the full SIDECAR category shape.
+
+### Repo tooling (2026-04-10) — pre-commit, lint-staged, pre-push
+
+- **`lint-staged.config.mjs`** (package root) — single lint-staged configuration: Prettier for `docs/**/*.md`, Ruff (via `uv run --extra dev`) for `wecom-desktop/backend/**/*.py` and `tests/**/*.py`, ESLint/Prettier for `wecom-desktop/src/**/*.{ts,tsx,vue,js}`. Resolves paths whether Git reports them from the monorepo root or as absolute Windows paths. Avoid `*/` inside block comments in `.mjs` files (it terminates the comment).
+- **`wecom-desktop/package.json`** — removed duplicate `lint-staged` key so nested config does not steal staged files from the root config.
+- **`.husky/pre-commit`** — runs `npx lint-staged` from `android_run_test-main/` when the repo root is one level up; skips `android_run_test-main/docs/*` in the secret scan; documents path layout.
+- **`.husky/pre-push`** — dropped invalid `--no-cov` pytest flag when `pytest-cov` is not installed.
+
+---
+
 ## Files Changed
 
-| File                                                           | Type     |
-| -------------------------------------------------------------- | -------- |
-| `wecom-desktop/backend/services/followup/circuit_breaker.py`   | **New**  |
-| `wecom-desktop/backend/services/heartbeat_service.py`          | **New**  |
-| `wecom-desktop/backend/services/ai_health_checker.py`          | **New**  |
-| `wecom-desktop/backend/routers/monitoring.py`                  | **New**  |
-| `wecom-desktop/backend/services/followup/response_detector.py` | Modified |
-| `wecom-desktop/backend/services/realtime_reply_manager.py`     | Modified |
-| `wecom-desktop/backend/scripts/realtime_reply_process.py`      | Modified |
-| `wecom-desktop/backend/main.py`                                | Modified |
-| `wecom-desktop/backend/services/settings/defaults.py`          | Modified |
+| File                                                           | Type                                  |
+| -------------------------------------------------------------- | ------------------------------------- |
+| `wecom-desktop/backend/services/followup/circuit_breaker.py`   | **New**                               |
+| `wecom-desktop/backend/services/heartbeat_service.py`          | **New**                               |
+| `wecom-desktop/backend/services/ai_health_checker.py`          | **New**                               |
+| `wecom-desktop/backend/routers/monitoring.py`                  | **New**                               |
+| `wecom-desktop/backend/services/followup/response_detector.py` | Modified                              |
+| `wecom-desktop/backend/services/realtime_reply_manager.py`     | Modified                              |
+| `wecom-desktop/backend/scripts/realtime_reply_process.py`      | Modified                              |
+| `wecom-desktop/backend/main.py`                                | Modified                              |
+| `wecom-desktop/backend/services/settings/defaults.py`          | Modified                              |
+| `wecom-desktop/backend/services/settings/models.py`            | Modified (2026-04-10 follow-up)       |
+| `tests/unit/test_sidecar_settings_models.py`                   | **New** (2026-04-10 follow-up)        |
+| `lint-staged.config.mjs`                                       | **New** (2026-04-10 tooling)          |
+| `wecom-desktop/package.json`                                   | Modified (nested lint-staged removed) |
+| `.husky/pre-commit` / `.husky/pre-push`                        | Modified (2026-04-10 tooling)         |
 
 ## Test Validation
 
-All 511 existing unit tests pass (`tests/unit/`). No test changes required — the new code is additive and behind existing interfaces.
+Run `pytest tests/unit/ -v --tb=short` from the `android_run_test-main` package directory (see `.husky/pre-push`). After the 2026-04-10 follow-up, a dedicated test covers `SidecarSettings` construction with all SIDECAR keys; the full unit suite must pass before push.

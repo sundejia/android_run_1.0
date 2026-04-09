@@ -27,10 +27,10 @@ fi
 # Run Python unit tests (fast tests only)
 echo "🧪 Running Python unit tests..."
 if command -v uv > /dev/null 2>&1; then
-  uv run --extra dev python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q', '--no-cov']))"
+  uv run --extra dev python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q']))"
   PYTEST_EXIT=$?
 elif command -v python > /dev/null 2>&1; then
-  python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q', '--no-cov']))"
+  python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q']))"
   PYTEST_EXIT=$?
 else
   echo "❌ Neither uv nor python found. Install uv (recommended) or Python with dev deps to run pre-push tests."

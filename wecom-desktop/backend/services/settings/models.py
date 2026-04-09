@@ -8,7 +8,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class SettingCategory(str, Enum):
@@ -44,13 +44,13 @@ class SettingRecord:
     key: str
     value_type: str
     value: Any
-    id: Optional[int] = None
-    description: Optional[str] = None
+    id: int | None = None
+    description: str | None = None
     is_sensitive: bool = False
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
         return {
             "id": self.id,
@@ -208,6 +208,10 @@ class SidecarSettings:
     poll_interval: int = 10
     show_logs: bool = True
     max_panels: int = 3
+    sidecar_timeout: int = 300
+    night_mode_sidecar_timeout: int = 30
+    night_mode_start_hour: int = 22
+    night_mode_end_hour: int = 8
 
 
 @dataclass
@@ -238,9 +242,7 @@ class FollowupSettings:
     followup_prompt: str = ""  # 补刀 AI 提示词
     idle_threshold_minutes: int = 30  # 空闲多久后进入补刀队列（分钟）
     max_attempts_per_customer: int = 3  # 每个客户最大补刀次数
-    attempt_intervals: list = field(
-        default_factory=lambda: [60, 120, 180]
-    )  # 第1/2/3次补刀后的等待时间（分钟）
+    attempt_intervals: list = field(default_factory=lambda: [60, 120, 180])  # 第1/2/3次补刀后的等待时间（分钟）
     avoid_duplicate_messages: bool = False  # 是否避免重复消息（去重功能）
     templates_hash: str = ""  # 模板hash（用于检测模板修改）
 
@@ -260,7 +262,7 @@ class AllSettings:
     realtime: RealtimeSettings = field(default_factory=RealtimeSettings)
     followup: FollowupSettings = field(default_factory=FollowupSettings)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典（用于 API 响应）"""
         from dataclasses import asdict
 
@@ -277,7 +279,7 @@ class AllSettings:
             "followup": asdict(self.followup),
         }
 
-    def to_flat_dict(self) -> Dict[str, Any]:
+    def to_flat_dict(self) -> dict[str, Any]:
         """转换为扁平字典（用于前端兼容）"""
         return {
             # General

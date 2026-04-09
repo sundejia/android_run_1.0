@@ -2280,6 +2280,8 @@ class ResponseDetector:
 
             self._logger.debug(f"[{device_serial}] {traceback.format_exc()}")
 
+        ai_server_url = "http://47.113.187.234:8000"
+
         try:
             # Try to use AIReplyService from full sync module
             from routers.settings import load_settings as load_app_settings

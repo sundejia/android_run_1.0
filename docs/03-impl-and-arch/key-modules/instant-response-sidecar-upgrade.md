@@ -20,14 +20,14 @@ Currently, `ResponseDetector` (Instant Response) directly calls `wecom.send_mess
 
 ## 2. Proposed Changes
 
-### 2.1. Backend Service Update (`servic../03-impl-and-arch/service.py`)
+### 2.1. Backend Service Update (`wecom-desktop/backend/services/followup/service.py` or equivalent follow-up service)
 
 The `FollowUpService` needs to manage `SidecarQueueClient` instances, similar to how it manages the scanner.
 
 - **Add Sidecar Client**: Initialize `SidecarQueueClient` when `start_background_scanner` is called (or processing begins).
 - **Config**: Read sidecar settings (enabled, URL).
 
-### 2.2. Response Detector Refactoring (`servic../03-impl-and-arch/response_detector.py`)
+### 2.2. Response Detector Refactoring (`wecom-desktop/backend/services/followup/response_detector.py`)
 
 Refactor `detect_and_reply` and `_process_unread_user_with_wait` to support Sidecar.
 
@@ -49,7 +49,7 @@ Refactor `detect_and_reply` and `_process_unread_user_with_wait` to support Side
 
 Ensure `FollowUpSettings` includes Sidecar controls (inherited from global Sidecar settings or specific overrides).
 
-- `SidecarSettings` already exists in `models.py`.
+- `SidecarSettings` lives in `wecom-desktop/backend/services/settings/models.py` as a dataclass. **Every** key under the SIDECAR category in `defaults.py` (including `sidecar_timeout` and night-mode fields) must be a field on `SidecarSettings`, because `SettingsService.get_sidecar_settings()` uses `SidecarSettings(**data)` from the database.
 - `ResponseDetector` should check `settings.sidecar.send_via_sidecar`.
 
 ## 3. Detailed Implementation Steps
