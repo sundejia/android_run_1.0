@@ -1,0 +1,42 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python:*)",
+      "Bash(rm:*)",
+      "Bash(openspec validate:*)",
+      "Bash(npx eslint:*)",
+      "Bash(npm run typecheck:*)",
+      "Bash(git add:*)",
+      "Bash(ruff check:*)",
+      "Bash(npx lint-staged:*)",
+      "Bash(ruff format:*)",
+      "Bash(git commit:*)",
+      "Bash(cat:*)",
+      "Bash(echo:*)",
+      "Bash(pytest:*)",
+      "Bash(git push:*)",
+      "Bash(git reset:*)",
+      "Bash(tasklist:*)",
+      "Bash(findstr:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(.venv/Scripts/python:*)",
+      "Bash(git restore:*)",
+      "Bash(npx vue-tsc:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git rm:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(find:*)",
+      "Bash(xargs:*)",
+      "Bash(done)",
+      "Bash(for:*)",
+      "Bash(git diff:*)",
+      "Bash(cmd:*)",
+      "WebSearch",
+      "Bash(set CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS=1)",
+      "Bash(set:*)",
+      "Bash(.venv/Scripts/pip:*)",
+      "Bash(uv pip install -e \".[dev]\")"
+    ]
+  }
+}

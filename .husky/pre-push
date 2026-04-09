@@ -1,0 +1,41 @@
+#!/bin/sh
+
+# Skip hooks in CI environment
+if [ "$CI" = "true" ]; then
+  echo "⏭️  Skipping pre-push hook in CI environment"
+  exit 0
+fi
+
+echo "🚀 Running pre-push checks..."
+
+# Type checking for frontend
+echo "📘 Running TypeScript type check..."
+cd wecom-desktop && npx vue-tsc --noEmit
+TYPECHECK_EXIT=$?
+cd ..
+
+if [ $TYPECHECK_EXIT -ne 0 ]; then
+  echo "❌ TypeScript type check failed. Please fix type errors before pushing."
+  exit 1
+fi
+
+# Run Python unit tests (fast tests only)
+echo "🧪 Running Python unit tests..."
+if command -v uv > /dev/null 2>&1; then
+  uv run --extra dev python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q', '--no-cov']))"
+  PYTEST_EXIT=$?
+elif command -v python > /dev/null 2>&1; then
+  python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q', '--no-cov']))"
+  PYTEST_EXIT=$?
+else
+  echo "❌ Neither uv nor python found. Install uv (recommended) or Python with dev deps to run pre-push tests."
+  exit 1
+fi
+
+if [ $PYTEST_EXIT -ne 0 ]; then
+  echo "❌ Python unit tests failed. Please fix failing tests before pushing."
+  exit 1
+fi
+
+echo "✅ Pre-push checks passed!"
+exit 0

@@ -1,0 +1,2 @@
+# Local SQLite used by test_voice_save_integration.py
+*.db

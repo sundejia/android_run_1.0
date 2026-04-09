@@ -1,0 +1,17 @@
+# Build outputs
+dist/
+dist-electron/
+
+# Dependencies
+node_modules/
+
+# Backend (Python)
+backend/
+
+# Generated files
+*.min.js
+*.min.css
+
+# Config files that shouldn't be formatted
+pnpm-lock.yaml
+package-lock.json

@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AI Server Integration Test</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e6e6e6;
+      padding: 20px;
+      margin: 0;
+      min-height: 100vh;
+    }
+    .container { max-width: 800px; margin: 0 auto; }
+    h1 { color: #00d4ff; margin-bottom: 20px; }
+    .section {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid #0f3460;
+    }
+    .section h2 { color: #00d4ff; margin-top: 0; font-size: 1.2rem; }
+    label { display: block; margin-bottom: 5px; color: #a0a0a0; font-size: 0.9rem; }
+    input, textarea, select {
+      width: 100%;
+      padding: 10px;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      background: #1a1a2e;
+      color: #e6e6e6;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+    textarea { min-height: 100px; resize: vertical; font-family: monospace; }
+    button {
+      background: #00d4ff;
+      color: #1a1a2e;
+      border: none;
+      padding: 10px 20px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      margin-right: 10px;
+      margin-bottom: 10px;
+    }
+    button:hover { background: #00b8d9; }
+    button:disabled { background: #0f3460; color: #666; cursor: not-allowed; }
+    button.secondary {
+      background: #0f3460;
+      color: #e6e6e6;
+    }
+    button.secondary:hover { background: #1a3d6e; }
+    .log {
+      background: #0f0f1a;
+      border: 1px solid #0f3460;
+      border-radius: 4px;
+      padding: 15px;
+      font-family: 'Monaco', 'Consolas', monospace;
+      font-size: 12px;
+      max-height: 400px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+    .log-entry { margin-bottom: 10px; padding-bottom: 10px; border-bottom: 1px solid #1a1a2e; }
+    .log-entry:last-child { margin-bottom: 0; border-bottom: none; }
+    .log-time { color: #666; }
+    .log-success { color: #4caf50; }
+    .log-error { color: #f44336; }
+    .log-info { color: #2196f3; }
+    .status-indicator {
+      display: inline-block;
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      margin-right: 8px;
+      vertical-align: middle;
+    }
+    .status-connected { background: #4caf50; }
+    .status-disconnected { background: #f44336; }
+    .status-checking { background: #ff9800; animation: pulse 1s infinite; }
+    @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+    .preset { cursor: pointer; padding: 5px 10px; background: #0f3460; border-radius: 4px; margin-right: 5px; margin-bottom: 5px; display: inline-block; font-size: 12px; }
+    .preset:hover { background: #1a3d6e; }
+    .result-box {
+      background: #0f0f1a;
+      border: 2px solid #0f3460;
+      border-radius: 8px;
+      padding: 20px;
+      margin-top: 15px;
+    }
+    .result-box.success { border-color: #4caf50; }
+    .result-box.error { border-color: #f44336; }
+    .result-label { color: #a0a0a0; font-size: 0.8rem; margin-bottom: 5px; }
+    .result-content { color: #e6e6e6; font-size: 1rem; line-height: 1.5; }
+    .timing { color: #ff9800; font-size: 0.85rem; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🤖 AI Server Integration Test</h1>
+
+    <div class="section">
+      <h2>Server Configuration</h2>
+      <label for="serverUrl">AI Server URL</label>
+      <input type="text" id="serverUrl" value="http://localhost:8000" placeholder="http://localhost:8000">
+      
+      <label for="timeout">Timeout (seconds)</label>
+      <input type="number" id="timeout" value="10" min="1" max="60">
+      
+      <button onclick="testConnection()">🔌 Test Connection</button>
+      <span id="connectionStatus">
+        <span class="status-indicator status-disconnected"></span>
+        Not tested
+      </span>
+    </div>
+
+    <div class="section">
+      <h2>Test Message Input</h2>
+      <label>Quick Presets:</label>
+      <div style="margin-bottom: 15px;">
+        <span class="preset" onclick="setPreset('followup')">📢 Follow-up (想的怎么样了?)</span>
+        <span class="preset" onclick="setPreset('reply')">💬 Reply (last message)</span>
+        <span class="preset" onclick="setPreset('greeting')">👋 Greeting</span>
+        <span class="preset" onclick="setPreset('raw')">📝 Raw prompt</span>
+      </div>
+      
+      <label for="testMessage">Test Message (as seen in sidecar)</label>
+      <textarea id="testMessage" placeholder="Enter a test message like: 测试信息: 想的怎么样了?">测试信息: 想的怎么样了?</textarea>
+      
+      <button onclick="runTest()">🚀 Send to AI Server</button>
+      <button class="secondary" onclick="parseOnly()">🔍 Parse Only</button>
+      <button class="secondary" onclick="clearLog()">🗑️ Clear Log</button>
+    </div>
+
+    <div class="section">
+      <h2>AI Response</h2>
+      <div id="result" class="result-box">
+        <div class="result-label">Waiting for test...</div>
+        <div class="result-content" style="color: #666;">Click "Send to AI Server" to test</div>
+      </div>
+    </div>
+
+    <div class="section">
+      <h2>Operation Log</h2>
+      <div id="log" class="log">
+        <div class="log-entry log-info">Ready to test AI server integration...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Message parsing logic (mirrors aiService.ts)
+    function parseTestMessage(message) {
+      const trimmed = message.trim();
+      
+      if (!trimmed.startsWith('测试信息:') && !trimmed.startsWith('测试信息：')) {
+        return { type: 'unknown', content: trimmed };
+      }
+
+      const prefixMatch = trimmed.match(/^测试信息[:：]\s*(.*)$/);
+      if (!prefixMatch) {
+        return { type: 'unknown', content: trimmed };
+      }
+
+      const content = prefixMatch[1].trim();
+
+      if (content === '想的怎么样了?' || content === '想的怎么样了？') {
+        return { type: 'followup', content };
+      }
+
+      return { type: 'reply', content };
+    }
+
+    function getAIPrompt(parsed) {
+      if (parsed.type === 'followup') {
+        return '主播没有回复上次的信息，请在生成一个"补刀"信息，再尝试与主播建立联系';
+      }
+      if (parsed.type === 'reply') {
+        return parsed.content;
+      }
+      return parsed.content;
+    }
+
+    // UI functions
+    function log(message, type = 'info') {
+      const logEl = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${type}`;
+      entry.innerHTML = `<span class="log-time">[${time}]</span> ${escapeHtml(message)}`;
+      logEl.appendChild(entry);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function escapeHtml(text) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      return div.innerHTML;
+    }
+
+    function clearLog() {
+      document.getElementById('log').innerHTML = '<div class="log-entry log-info">Log cleared...</div>';
+    }
+
+    function setPreset(type) {
+      const input = document.getElementById('testMessage');
+      switch (type) {
+        case 'followup':
+          input.value = '测试信息: 想的怎么样了?';
+          break;
+        case 'reply':
+          input.value = '测试信息: 你好，我想了解一下主播招募的条件';
+          break;
+        case 'greeting':
+          input.value = '测试信息: 你好';
+          break;
+        case 'raw':
+          input.value = '请介绍一下你们的主播招募计划';
+          break;
+      }
+    }
+
+    function showResult(success, content, timing) {
+      const resultEl = document.getElementById('result');
+      resultEl.className = `result-box ${success ? 'success' : 'error'}`;
+      resultEl.innerHTML = `
+        <div class="result-label">${success ? '✅ AI Reply' : '❌ Error'}</div>
+        <div class="result-content">${escapeHtml(content)}</div>
+        ${timing ? `<div class="timing">⏱️ Response time: ${timing}ms</div>` : ''}
+      `;
+    }
+
+    function setConnectionStatus(status, message) {
+      const el = document.getElementById('connectionStatus');
+      const statusClass = {
+        connected: 'status-connected',
+        disconnected: 'status-disconnected',
+        checking: 'status-checking'
+      }[status] || 'status-disconnected';
+      
+      el.innerHTML = `<span class="status-indicator ${statusClass}"></span>${escapeHtml(message)}`;
+    }
+
+    // Test functions
+    async function testConnection() {
+      const serverUrl = document.getElementById('serverUrl').value.trim();
+      setConnectionStatus('checking', 'Checking...');
+      log(`Testing connection to ${serverUrl}/health`);
+      
+      try {
+        const startTime = Date.now();
+        const response = await fetch(`${serverUrl}/health`, {
+          method: 'GET',
+          signal: AbortSignal.timeout(5000)
+        });
+        const latency = Date.now() - startTime;
+        
+        if (response.ok) {
+          const data = await response.json();
+          setConnectionStatus('connected', `Connected (${latency}ms)`);
+          log(`✅ Connected! Status: ${data.status || 'healthy'}, Latency: ${latency}ms`, 'success');
+        } else {
+          setConnectionStatus('disconnected', `Error ${response.status}`);
+          log(`❌ Server returned ${response.status}`, 'error');
+        }
+      } catch (error) {
+        setConnectionStatus('disconnected', 'Connection failed');
+        log(`❌ Connection failed: ${error.message}`, 'error');
+      }
+    }
+
+    function parseOnly() {
+      const message = document.getElementById('testMessage').value;
+      const parsed = parseTestMessage(message);
+      const prompt = getAIPrompt(parsed);
+      
+      log(`📋 Parse Result:`);
+      log(`   Type: ${parsed.type}`);
+      log(`   Content: ${parsed.content}`);
+      log(`   AI Prompt: ${prompt}`);
+      
+      showResult(true, `Type: ${parsed.type}\nContent: ${parsed.content}\nAI Prompt: ${prompt}`, null);
+    }
+
+    async function runTest() {
+      const serverUrl = document.getElementById('serverUrl').value.trim();
+      const timeout = parseInt(document.getElementById('timeout').value) || 10;
+      const message = document.getElementById('testMessage').value;
+      
+      // Parse message
+      const parsed = parseTestMessage(message);
+      const prompt = getAIPrompt(parsed);
+      
+      log(`\n🔄 Starting AI request...`);
+      log(`   Original message: ${message}`);
+      log(`   Parsed type: ${parsed.type}`);
+      log(`   AI Prompt: ${prompt}`);
+      log(`   Timeout: ${timeout}s`);
+      
+      const startTime = Date.now();
+      
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout * 1000);
+        
+        const requestBody = {
+          chatInput: prompt,
+          sessionId: `test_session_${Date.now()}`,
+          username: 'test_user',
+          message_type: 'text',
+          metadata: {
+            source: 'test_page',
+            timestamp: new Date().toISOString()
+          }
+        };
+        
+        log(`📤 Request body: ${JSON.stringify(requestBody, null, 2)}`);
+        
+        const response = await fetch(`${serverUrl}/chat`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        const latency = Date.now() - startTime;
+        
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => 'Unknown error');
+          throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+        
+        const data = await response.json();
+        log(`✅ Response received in ${latency}ms`, 'success');
+        log(`   Success: ${data.success}`);
+        log(`   Output: ${data.output}`);
+        log(`   Session: ${data.session_id}`);
+        log(`   Stage: ${data.stage}`);
+        
+        showResult(data.success, data.output, latency);
+        
+      } catch (error) {
+        const latency = Date.now() - startTime;
+        const isTimeout = error.name === 'AbortError';
+        const errorMsg = isTimeout ? `Timeout after ${timeout}s` : error.message;
+        
+        log(`❌ Request failed: ${errorMsg}`, 'error');
+        showResult(false, errorMsg, latency);
+      }
+    }
+
+    // Auto-test connection on load
+    setTimeout(testConnection, 500);
+  </script>
+</body>
+</html>
+

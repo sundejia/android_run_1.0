@@ -1,0 +1,1 @@
+"""Media auto-action implementations."""

@@ -1,0 +1,285 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0D1117;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #30363D;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #484F58;
+}
+
+/* Selection */
+::selection {
+  background: rgba(26, 173, 25, 0.3);
+}
+
+/* Base styles */
+body {
+  font-family: 'JetBrains Mono', 'SF Mono', Menlo, monospace;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Drag region for frameless window */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Log entry animations */
+.log-entry-enter-active {
+  animation: slideIn 0.2s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Status indicator pulse */
+.status-pulse {
+  animation: statusPulse 2s ease-in-out infinite;
+}
+
+@keyframes statusPulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Glow effect for active elements */
+.glow-green {
+  box-shadow: 0 0 20px rgba(26, 173, 25, 0.3);
+}
+
+.glow-blue {
+  box-shadow: 0 0 20px rgba(56, 139, 253, 0.3);
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: all 0.2s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* Button styles */
+.btn-primary {
+  @apply bg-wecom-primary hover:bg-wecom-secondary text-white font-medium py-2 px-4 rounded-lg transition-all duration-200;
+}
+
+.btn-secondary {
+  @apply bg-wecom-surface hover:bg-wecom-border text-wecom-text font-medium py-2 px-4 rounded-lg border border-wecom-border transition-all duration-200;
+}
+
+.btn-danger {
+  @apply bg-red-600 hover:bg-red-500 text-white font-medium py-2 px-4 rounded-lg transition-all duration-200;
+}
+
+/* Input styles */
+.input-field {
+  @apply bg-wecom-surface border border-wecom-border rounded-lg px-4 py-2 text-wecom-text placeholder-wecom-muted focus:outline-none focus:border-wecom-primary transition-colors;
+}
+
+/* ============================================ */
+/* CHART & DATA VISUALIZATION ANIMATIONS */
+/* ============================================ */
+
+/* Smooth number counter animation */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-count-up {
+  animation: countUp 0.5s ease-out forwards;
+}
+
+/* Bar chart grow animation */
+@keyframes barGrow {
+  from {
+    transform: scaleX(0);
+    transform-origin: left;
+  }
+  to {
+    transform: scaleX(1);
+    transform-origin: left;
+  }
+}
+
+.animate-bar-grow {
+  animation: barGrow 0.8s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Donut chart segment animation */
+@keyframes donutDraw {
+  from {
+    stroke-dashoffset: 1000;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.animate-donut-draw {
+  animation: donutDraw 1.2s ease-out forwards;
+}
+
+/* Subtle floating animation for decorative elements */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-10px) rotate(2deg);
+  }
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+/* Gradient shimmer effect */
+@keyframes gradientShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+.shimmer-gradient {
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.05) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: gradientShimmer 3s ease-in-out infinite;
+}
+
+/* Staggered fade-in for lists */
+.stagger-fade-in > * {
+  opacity: 0;
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.stagger-fade-in > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-fade-in > *:nth-child(2) { animation-delay: 50ms; }
+.stagger-fade-in > *:nth-child(3) { animation-delay: 100ms; }
+.stagger-fade-in > *:nth-child(4) { animation-delay: 150ms; }
+.stagger-fade-in > *:nth-child(5) { animation-delay: 200ms; }
+.stagger-fade-in > *:nth-child(6) { animation-delay: 250ms; }
+.stagger-fade-in > *:nth-child(7) { animation-delay: 300ms; }
+.stagger-fade-in > *:nth-child(8) { animation-delay: 350ms; }
+.stagger-fade-in > *:nth-child(9) { animation-delay: 400ms; }
+.stagger-fade-in > *:nth-child(10) { animation-delay: 450ms; }
+
+/* Glassmorphism effect */
+.glass {
+  background: rgba(22, 27, 34, 0.7);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Stat card gradient backgrounds */
+.stat-gradient-green {
+  background: linear-gradient(135deg, rgba(16, 185, 129, 0.15) 0%, transparent 50%);
+}
+
+.stat-gradient-blue {
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, transparent 50%);
+}
+
+.stat-gradient-purple {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, transparent 50%);
+}
+
+.stat-gradient-amber {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.15) 0%, transparent 50%);
+}
+
+/* Hover lift effect */
+.hover-lift {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.hover-lift:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 12px 40px -12px rgba(0, 0, 0, 0.4);
+}
+
+/* Interactive ring on focus/hover */
+.interactive-ring {
+  position: relative;
+}
+
+.interactive-ring::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  border: 2px solid transparent;
+  transition: border-color 0.2s ease;
+  pointer-events: none;
+}
+
+.interactive-ring:hover::after,
+.interactive-ring:focus::after {
+  border-color: rgba(26, 173, 25, 0.5);
+}
+
+/* Data value highlight */
+.data-highlight {
+  position: relative;
+  display: inline-block;
+}
+
+.data-highlight::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 30%;
+  background: linear-gradient(to top, rgba(26, 173, 25, 0.2), transparent);
+  border-radius: 4px;
+  z-index: -1;
+}
+

@@ -1,0 +1,67 @@
+#!/bin/sh
+
+# Skip hooks in CI environment
+if [ "$CI" = "true" ]; then
+  echo "⏭️  Skipping pre-commit hook in CI environment"
+  exit 0
+fi
+
+# Check for potential secrets in staged files
+echo "🔐 Checking for potential secrets..."
+SECRETS_FOUND=0
+
+# Get list of staged files (excluding deleted files)
+STAGED_FILES=$(git diff --cached --name-only --diff-filter=d 2>/dev/null)
+
+if [ -n "$STAGED_FILES" ]; then
+  # Patterns that indicate potential secrets
+  # Using grep with extended regex for portability
+  PATTERNS="(password|passwd|pwd)\s*[:=]\s*['\"][^'\"]+['\"]|\
+(api[_-]?key|apikey)\s*[:=]\s*['\"][^'\"]+['\"]|\
+(secret[_-]?key|secretkey)\s*[:=]\s*['\"][^'\"]+['\"]|\
+(access[_-]?token|accesstoken)\s*[:=]\s*['\"][^'\"]+['\"]|\
+(auth[_-]?token|authtoken)\s*[:=]\s*['\"][^'\"]+['\"]|\
+(private[_-]?key)\s*[:=]\s*['\"][^'\"]+['\"]|\
+-----BEGIN\s+(RSA|DSA|EC|OPENSSH)\s+PRIVATE\s+KEY-----|\
+(aws[_-]?access[_-]?key[_-]?id|aws[_-]?secret[_-]?access[_-]?key)"
+
+  for FILE in $STAGED_FILES; do
+    # Skip binary files, lock files, docs (may document secret patterns), and common non-secret files
+    case "$FILE" in
+      *.lock|*.png|*.jpg|*.jpeg|*.gif|*.ico|*.woff*|*.ttf|*.eot|*.pdf|package-lock.json|uv.lock|*.db|*.exe|*.dll)
+        continue
+        ;;
+      wecom-desktop/ffmpeg/*)
+        continue
+        ;;
+      docs/*)
+        continue
+        ;;
+    esac
+
+    # Skip if file doesn't exist (renamed files)
+    [ -f "$FILE" ] || continue
+
+    # Check staged content only (not working directory)
+    if git show ":$FILE" 2>/dev/null | grep -iE "$PATTERNS" > /dev/null 2>&1; then
+      echo "⚠️  Potential secret found in: $FILE"
+      SECRETS_FOUND=1
+    fi
+  done
+fi
+
+if [ $SECRETS_FOUND -ne 0 ]; then
+  echo ""
+  echo "❌ Potential secrets detected in staged files!"
+  echo "   Please review the files above and remove any sensitive data."
+  echo "   If this is a false positive, you can bypass with: git commit --no-verify"
+  echo ""
+  exit 1
+fi
+
+# Run lint-staged on staged files only (fast feedback)
+echo "🔍 Running lint-staged on staged files..."
+npx lint-staged
+
+# Exit with lint-staged's exit code
+exit $?

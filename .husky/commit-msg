@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Skip hooks in CI environment
+if [ "$CI" = "true" ]; then
+  echo "⏭️  Skipping commit-msg hook in CI environment"
+  exit 0
+fi
+
+# Validate commit message format using commitlint
+echo "📝 Validating commit message..."
+npx --no -- commitlint --edit "$1"

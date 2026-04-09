@@ -1,0 +1,145 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+nul
+
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+.cursor/
+*.swp
+*.swo
+*~
+
+# Environment files (secrets)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# Logs
+*.log
+
+# Common rotated logs / dated logs (e.g. *.log.2026-01-26)
+*.log.*
+
+# Output files (generated during execution)
+output/
+conversation_images/
+conversation_videos/
+conversation_voices/
+
+# Avatar images (generated/synced from device)
+avatars/
+
+# Database files
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.db.backup
+
+# Track main conversation database
+# NOTE: Database files are now ignored to avoid committing large data files
+# !wecom_conversations.db
+# !wecom_conversations.db.backup
+
+# Legacy blacklist file (now using database)
+user_blacklist.json
+
+# PID files
+*.pid
+
+# Runtime logs folders (generated)
+logs/**
+wecom-desktop/logs/**
+
+# Keep empty log dir structure
+!logs/**/
+!logs/**/.gitkeep
+!wecom-desktop/logs/**/
+!wecom-desktop/logs/**/.gitkeep
+
+# Metrics output (generated)
+*.jsonl
+*.jsonl.*
+
+# Built/compiled Electron files
+wecom-desktop/dist-electron/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Node.js
+node_modules/
+
+# Husky internal directory (hooks themselves should be tracked)
+.husky/_
+
+# Prevent test files in wrong locations
+/test_*.py
+!/test_ai_server.py
+/debug_*.py
+/src/**/test_*.py
+/scripts/test_*.py
+
+# Admin actions data files
+settings/admin_actions.json
+settings/admin_actions.xlsx
+settings/admin_actions_backup.xlsx
+
+# Followup test UI dumps (test artifacts, can be regenerated)
+followup_test/ui_dumps/
+followup_test/ui_tree_*.json
+followup_test/debug_search_*.json
+followup_test/*_comparison_*.json
+followup_test/*_comparison_*.txt
+
+# Followup test scripts (debug tools, not core code)
+followup_test/_parse_rows.py
+followup_test/compare_ui_trees.py
+followup_test/debug_search_click.py
+followup_test/debug_zero_messages.py
+followup_test/test_search_exists_and_missing.py
+followup_test/test_search_only.py
+
+# Git worktrees (isolated workspaces for parallel development)
+.worktrees/

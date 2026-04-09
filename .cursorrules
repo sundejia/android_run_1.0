@@ -1,0 +1,106 @@
+# Cursor Rules for WeCom Automation Project
+
+## Test Organization
+
+**All test files MUST be placed in the designated test directories.**
+
+### Python Tests
+
+- **Unit tests**: `tests/unit/test_<module>.py`
+- **Integration tests**: `tests/integration/test_<feature>.py`
+- **Backend API tests**: `wecom-desktop/backend/tests/test_<api>.py`
+
+### Rules
+
+1. ❌ **Never** create test files in project root (e.g., `test_*.py`, `debug_*.py`)
+2. ❌ **Never** create test files in `src/` directory
+3. ❌ **Never** create test files in `scripts/` directory
+4. ✅ **Always** place tests in `tests/unit/` or `tests/integration/`
+5. ✅ **Always** use `test_` prefix for test files
+
+### When Creating Tests
+
+- Default location for new tests: `tests/unit/`
+- If test requires device/external services: `tests/integration/`
+- If testing FastAPI routes: `wecom-desktop/backend/tests/`
+
+### Example
+
+```python
+# ❌ Wrong
+# File: test_parser.py (in root)
+
+# ✅ Correct
+# File: tests/unit/test_parser.py
+```
+
+## Commit Message Format
+
+Use Conventional Commits format:
+
+```
+type(scope): description
+```
+
+**Types**: feat, fix, docs, style, refactor, perf, test, chore, ci, build, revert
+
+**Examples**:
+- `feat(sync): add auto-retry on failure`
+- `fix(ui): resolve button click issue`
+- `docs: update installation guide`
+- `test: add unit tests for timestamp parser`
+
+## Code Style
+
+### Python
+
+- Use Ruff for linting and formatting
+- Line length: 120 characters
+- Follow PEP 8 conventions
+- Use type hints where applicable
+
+### TypeScript/Vue
+
+- Use ESLint + Prettier
+- Single quotes for strings
+- No semicolons
+- Line length: 100 characters
+
+## File Organization
+
+- **Source code**: `src/wecom_automation/`
+- **Tests**: `tests/` or `wecom-desktop/backend/tests/`
+- **Documentation**: `docs/` (see Docs Organization below)
+- **Scripts**: `scripts/` (utility scripts only, not tests)
+- **Configuration**: Project root
+
+## Docs Organization
+
+**All documentation MUST be placed in the correct subdirectory under `docs/`. Do NOT create `.md` files directly in `docs/` root (only `INDEX.md` is allowed there).**
+
+### Subdirectories
+
+| Directory | Use for |
+|-----------|---------|
+| `docs/analysis/` | 流程/逻辑/时序/格式分析、根因分析 |
+| `docs/architecture/` | 架构设计、存储设计 |
+| `docs/bugs/` | Bug 报告与修复记录 |
+| `docs/development/` | 开发规范、Git、测试、文档规范 |
+| `docs/features/` | 功能设计与实现说明 |
+| `docs/followup/` | Follow-up 专题 |
+| `docs/guides/` | 使用/测试指南 |
+| `docs/plans/` | 改进计划、升级计划、方案 |
+| `docs/implementation/` | 实现总结、迁移说明、非 bug 的修复 |
+| `docs/sync/` | 同步流程、黑名单选择等 |
+| `docs/sidecar/` | Sidecar 相关 |
+| `docs/ai/` | AI 提示词与回复逻辑 |
+| `docs/settings/` | 设置/配置相关 |
+| `docs/prompts/` | Agent 提示词 |
+
+When creating new docs: choose the appropriate subdirectory by content type; if unsure, use `analysis/` for analysis, `features/` or `implementation/` for feature/implementation notes. See `docs/development/docs-organization.md` for full convention.
+
+## Avatar Storage
+
+- **Single source**: `avatars/` (project root)
+- Frontend accesses via backend API: `GET /avatars/{filename}`
+- No static copies or duplicates
