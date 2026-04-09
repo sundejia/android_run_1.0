@@ -42,7 +42,13 @@
 - ✅ **Customer Detail View**: View individual customer conversations with message breakdown and history
 - ✅ **Device Detail Page**: Comprehensive device information page with hardware specs, system info, connection details, and quick actions (sync, mirror, logs)
 
-## Recent Updates (2026-02-05)
+## Recent Updates (2026-04-09)
+
+- **System Robustness**: AI circuit breaker, structured failure metrics, click-failure cooldown, process auto-restart with exponential backoff ([details](docs/implementation/2026-04-09-system-robustness-fixes.md))
+- **Monitoring Infrastructure**: SQLite heartbeat service, 3-layer AI health checker, `/api/monitoring/*` REST API
+- **Night-Mode Sidecar Timeout**: Configurable 30 s timeout (22:00–08:00) vs 300 s daytime
+
+### Previous (2026-02-05)
 
 - **Architecture Review**: Completed comprehensive code audit ([view report](docs/05-changelog-and-upgrades/2026-02-05-architecture-review.md))
 - **Code Cleanup**: Removed deprecated features (Learning Suggestions, Prompt Updates)

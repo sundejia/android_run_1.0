@@ -11,12 +11,12 @@ import os
 import platform
 import re
 import subprocess
+import time as _time
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from pathlib import Path
-from typing import Dict, List, Optional, Set, Callable, Any, Coroutine
-import tempfile
+from typing import Any
 
 # 复用 DeviceManager 的工具类
 if platform.system() == "Windows":
@@ -50,9 +50,9 @@ class RealtimeReplyState:
     message: str = ""
     responses_detected: int = 0
     replies_sent: int = 0
-    errors: List[str] = field(default_factory=list)
-    started_at: Optional[datetime] = None
-    last_scan_at: Optional[datetime] = None
+    errors: list[str] = field(default_factory=list)
+    started_at: datetime | None = None
+    last_scan_at: datetime | None = None
 
 
 LogCallback = Callable[[dict], Coroutine[Any, Any, None]]
@@ -67,20 +67,29 @@ class RealtimeReplyManager:
     日志通过回调广播到设备对应的 WebSocket。
     """
 
+    MAX_AUTO_RESTARTS = 10
+    AUTO_RESTART_BASE_DELAY = 5.0
+    AUTO_RESTART_MAX_DELAY = 300.0
+    STABLE_RUN_THRESHOLD = 300.0  # seconds running before restart counter resets
+
     def __init__(self):
-        self._processes: Dict[str, asyncio.subprocess.Process] = {}
-        self._states: Dict[str, RealtimeReplyState] = {}
-        self._log_callbacks: Dict[str, Set[LogCallback]] = {}
-        self._status_callbacks: Dict[str, Set[StatusCallback]] = {}
-        self._read_tasks: Dict[str, asyncio.Task] = {}
+        self._processes: dict[str, asyncio.subprocess.Process] = {}
+        self._states: dict[str, RealtimeReplyState] = {}
+        self._log_callbacks: dict[str, set[LogCallback]] = {}
+        self._status_callbacks: dict[str, set[StatusCallback]] = {}
+        self._read_tasks: dict[str, asyncio.Task] = {}
+        self._startup_params: dict[str, dict] = {}
+        self._restart_counts: dict[str, int] = {}
+        self._auto_restart_enabled: dict[str, bool] = {}
+        self._process_start_times: dict[str, float] = {}
 
     # ==================== 状态查询 ====================
 
-    def get_state(self, serial: str) -> Optional[RealtimeReplyState]:
+    def get_state(self, serial: str) -> RealtimeReplyState | None:
         """获取设备的 followup 状态"""
         return self._states.get(serial)
 
-    def get_all_states(self) -> Dict[str, RealtimeReplyState]:
+    def get_all_states(self) -> dict[str, RealtimeReplyState]:
         """获取所有设备的 followup 状态"""
         return self._states.copy()
 
@@ -176,6 +185,14 @@ class RealtimeReplyManager:
                 await self._broadcast_log(serial, "WARNING", "Follow-up already running")
                 return False
 
+        # Persist startup params for auto-restart
+        self._startup_params[serial] = {
+            "scan_interval": scan_interval,
+            "use_ai_reply": use_ai_reply,
+            "send_via_sidecar": send_via_sidecar,
+        }
+        self._auto_restart_enabled[serial] = True
+
         # 初始化状态
         self._states[serial] = RealtimeReplyState(
             status=RealtimeReplyStatus.STARTING,
@@ -215,6 +232,7 @@ class RealtimeReplyManager:
             process = await self._create_subprocess(cmd, env)
 
             self._processes[serial] = process
+            self._process_start_times[serial] = _time.monotonic()
             self._states[serial].status = RealtimeReplyStatus.RUNNING
             self._states[serial].message = "Follow-up running"
             await self._broadcast_status(serial)
@@ -249,6 +267,8 @@ class RealtimeReplyManager:
 
     async def stop_realtime_reply(self, serial: str) -> bool:
         """停止设备的实时回复进程"""
+        self._auto_restart_enabled[serial] = False
+        self._restart_counts.pop(serial, None)
         state = self._states.get(serial)
 
         if serial not in self._processes:
@@ -298,7 +318,7 @@ class RealtimeReplyManager:
 
             try:
                 await asyncio.wait_for(process.wait(), timeout=5.0)
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 process.kill()
                 await process.wait()
 
@@ -472,7 +492,7 @@ class RealtimeReplyManager:
                 if resp.status_code == 200:
                     response_data = resp.json()
                     await self._broadcast_log(serial, "DEBUG", f"🔍 Skip request response body: {response_data}")
-                    await self._broadcast_log(serial, "INFO", f"Skip requested via sidecar API (unified mechanism)")
+                    await self._broadcast_log(serial, "INFO", "Skip requested via sidecar API (unified mechanism)")
                     return True
                 else:
                     response_text = resp.text
@@ -488,11 +508,11 @@ class RealtimeReplyManager:
         """停止所有设备的 follow-up"""
         serials = list(self._processes.keys())
         for serial in serials:
-            await self.stop_followup(serial)
+            await self.stop_realtime_reply(serial)
 
     # ==================== 内部方法 ====================
 
-    async def _create_subprocess(self, cmd: List[str], env: dict):
+    async def _create_subprocess(self, cmd: list[str], env: dict):
         """创建子进程（平台兼容）"""
         if platform.system() == "Windows":
             cmd_str = " ".join(f'"{arg}"' if " " in arg else arg for arg in cmd)
@@ -530,7 +550,7 @@ class RealtimeReplyManager:
             if platform.system() == "Windows":
                 try:
                     return data.decode("gbk").rstrip()
-                except:
+                except Exception:
                     pass
             return data.decode("utf-8", errors="replace").rstrip()
 
@@ -596,33 +616,85 @@ class RealtimeReplyManager:
         await self._broadcast_status(serial)
 
     async def _wait_for_completion(self, serial: str, process, stdout_task, stderr_task):
-        """等待进程完成"""
+        """等待进程完成, with auto-restart on unexpected exit."""
         try:
             await asyncio.gather(stdout_task, stderr_task)
             return_code = await process.wait()
 
             state = self._states.get(serial)
+
+            # Check if process ran long enough to reset restart counter
+            start_ts = self._process_start_times.get(serial, 0)
+            run_duration = _time.monotonic() - start_ts if start_ts else 0
+            if run_duration >= self.STABLE_RUN_THRESHOLD:
+                self._restart_counts[serial] = 0
+
             if state:
                 if return_code == 0:
                     state.status = RealtimeReplyStatus.STOPPED
                     state.message = "Follow-up completed"
-                elif state.status != RealtimeReplyStatus.STOPPED:
+                    await self._broadcast_status(serial)
+                elif state.status == RealtimeReplyStatus.STOPPED:
+                    await self._broadcast_status(serial)
+                else:
                     state.status = RealtimeReplyStatus.ERROR
                     state.message = f"Follow-up exited with code {return_code}"
                     state.errors.append(f"Exit code: {return_code}")
-                await self._broadcast_status(serial)
+                    await self._broadcast_status(serial)
+
+                    # Attempt auto-restart on abnormal exit
+                    if self._auto_restart_enabled.get(serial, False):
+                        asyncio.create_task(self._attempt_restart(serial))
+                        return
         except asyncio.CancelledError:
             pass
         finally:
-            if serial in self._processes:
-                del self._processes[serial]
-            if serial in self._read_tasks:
-                del self._read_tasks[serial]
+            self._processes.pop(serial, None)
+            self._read_tasks.pop(serial, None)
+            self._process_start_times.pop(serial, None)
+
+    async def _attempt_restart(self, serial: str) -> None:
+        """Auto-restart a crashed process with exponential backoff."""
+        attempt = self._restart_counts.get(serial, 0) + 1
+        self._restart_counts[serial] = attempt
+
+        if attempt > self.MAX_AUTO_RESTARTS:
+            await self._broadcast_log(
+                serial, "ERROR", f"Auto-restart limit reached ({self.MAX_AUTO_RESTARTS}). Manual intervention required."
+            )
+            return
+
+        delay = min(
+            self.AUTO_RESTART_BASE_DELAY * (3 ** (attempt - 1)),
+            self.AUTO_RESTART_MAX_DELAY,
+        )
+        await self._broadcast_log(
+            serial,
+            "WARNING",
+            f"Process crashed. Auto-restart #{attempt} in {delay:.0f}s (max {self.MAX_AUTO_RESTARTS})",
+        )
+        await asyncio.sleep(delay)
+
+        if not self._auto_restart_enabled.get(serial, False):
+            await self._broadcast_log(serial, "INFO", "Auto-restart cancelled (stop requested)")
+            return
+
+        params = self._startup_params.get(serial, {})
+        success = await self.start_realtime_reply(
+            serial,
+            scan_interval=params.get("scan_interval", 60),
+            use_ai_reply=params.get("use_ai_reply", True),
+            send_via_sidecar=params.get("send_via_sidecar", True),
+        )
+        if success:
+            await self._broadcast_log(serial, "INFO", f"Auto-restart #{attempt} succeeded")
+        else:
+            await self._broadcast_log(serial, "ERROR", f"Auto-restart #{attempt} failed")
 
 
 # ==================== 单例管理 ====================
 
-_realtime_reply_manager: Optional[RealtimeReplyManager] = None
+_realtime_reply_manager: RealtimeReplyManager | None = None
 
 
 def get_realtime_reply_manager() -> RealtimeReplyManager:

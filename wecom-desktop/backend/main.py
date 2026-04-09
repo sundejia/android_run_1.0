@@ -9,8 +9,8 @@ This backend provides:
 """
 
 import os
-import sys
 import platform
+import sys
 import time
 from pathlib import Path
 
@@ -52,19 +52,15 @@ from utils.path_utils import get_project_root
 project_root = get_project_root()
 
 _proj_root_lower = str(project_root).lower()
-sys.path = [
-    p for p in sys.path
-    if p.lower().startswith(_proj_root_lower) or "android_run_test" not in p.lower()
-]
+sys.path = [p for p in sys.path if p.lower().startswith(_proj_root_lower) or "android_run_test" not in p.lower()]
 sys.path.insert(0, str(project_root / "src"))
 
 from contextlib import asynccontextmanager
+
+import uvicorn
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-from wecom_automation.core.performance import runtime_metrics
 
-from services.conversation_storage import DEVICE_STORAGE_ROOT, get_control_db_path, list_device_conversation_targets
 from routers import (
     ai_config,
     avatars,
@@ -82,6 +78,7 @@ from routers import (
     log_upload,
     logs,
     media_actions,
+    monitoring,
     realtime_reply,
     resources,
     settings,
@@ -89,11 +86,14 @@ from routers import (
     streamers,
     sync,
 )
+from services.conversation_storage import DEVICE_STORAGE_ROOT, get_control_db_path, list_device_conversation_targets
+from wecom_automation.core.performance import runtime_metrics
 
 
 def ensure_directories():
     """在应用启动时确保所有必需目录存在"""
     from utils.path_utils import get_project_root
+
     project_root = get_project_root()
 
     directories = [
@@ -102,7 +102,7 @@ def ensure_directories():
         project_root / "conversation_videos",
         project_root / "conversation_voices",
         DEVICE_STORAGE_ROOT,
-        project_root / "logs",              # 全局日志目录
+        project_root / "logs",  # 全局日志目录
         project_root / "logs" / "metrics",  # 指标日志目录
     ]
 
@@ -135,10 +135,7 @@ def setup_backend_logging():
     hostname = _get_hostname()
     print(f"[startup] Initializing logging for hostname: {hostname}")
     init_logging(hostname=hostname, level="INFO", console=True)
-    print(
-        f"[startup] Logging: console; per-device file logs/{hostname}-<serial>.log "
-        "from sync/realtime subprocesses"
-    )
+    print(f"[startup] Logging: console; per-device file logs/{hostname}-<serial>.log from sync/realtime subprocesses")
 
 
 @asynccontextmanager
@@ -159,8 +156,8 @@ async def lifespan(app: FastAPI):
 
     # Run database migrations
     try:
-        from wecom_automation.database.schema import run_migrations
         from services.media_action_state_migration import migrate_media_action_state_to_control
+        from wecom_automation.database.schema import run_migrations
 
         control_db_path = str(get_control_db_path())
         print(f"[startup] Running control DB migrations: {control_db_path}")
@@ -191,6 +188,15 @@ async def lifespan(app: FastAPI):
                 print(f"[startup] [OK] Applied blacklist fallback repairs: {', '.join(repairs)}")
         except Exception as repair_error:
             print(f"[startup] [FAIL] Blacklist fallback repair failed: {repair_error}")
+
+    # Ensure monitoring tables exist
+    try:
+        from services.heartbeat_service import ensure_tables as ensure_monitoring_tables
+
+        ensure_monitoring_tables()
+        print("[startup] [OK] Monitoring tables ensured")
+    except Exception as e:
+        print(f"[startup] [FAIL] Monitoring table setup failed: {e}")
 
     print("[startup] Follow-up system uses multi-device processes; no global startup needed.")
 
@@ -266,6 +272,8 @@ app.include_router(backup.router, prefix="/api/backup", tags=["backup"])
 app.include_router(log_upload.router, prefix="/api/log-upload", tags=["log-upload"])
 # Media auto-actions (auto-blacklist, auto-group-invite on customer media)
 app.include_router(media_actions.router, prefix="/api/media-actions", tags=["media-actions"])
+# Monitoring endpoints (heartbeat, AI health, process events)
+app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
 
 
 @app.get("/health")

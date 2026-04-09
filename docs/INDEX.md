@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-04-05 (Media auto-actions: post-group message templates, chat header menu compatibility, docs link fixes)
+> Last Updated: 2026-04-09 (System robustness: AI circuit breaker, failure metrics, process auto-restart, heartbeat monitoring, AI health checks, night-mode Sidecar timeout)
 
 ---
 
@@ -31,6 +31,7 @@
 
 | Feature                                                                                     | Status      | Date       | Description                                                                                                                                                                                                 |
 | ------------------------------------------------------------------------------------------- | ----------- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [System Robustness Fixes](implementation/2026-04-09-system-robustness-fixes.md)             | ✅ Complete | 2026-04-09 | AI circuit breaker, failure metrics, process auto-restart, heartbeat monitoring API, AI health checks, night-mode Sidecar timeout                                                                           |
 | [Media Auto-Actions](features/media-auto-actions.md)                                        | ✅ Complete | 2026-04-05 | Auto-blacklist + Android group invite; configurable post-group message template + desktop preview; `test-trigger` does not run full UI invite without `WeComService`; chat header “more” menu compatibility |
 | [Follow-up Message Deduplication](01-product/followup-deduplication-feature.md)             | ✅ Complete | 2026-02-06 | Prevent duplicate message templates per customer, requires 3+ templates                                                                                                                                     |
 | [UI Improvements - Dashboard, Realtime, Stickers](01-product/2026-02-05-ui-improvements.md) | ✅ Complete | 2026-02-05 | Unified dashboard card heights, Realtime Reply AI always enabled, fixed sticker display                                                                                                                     |
@@ -170,6 +171,7 @@ See [Current Architecture](03-impl-and-arch/) for high-level design.
 - [Blacklist shim, sync media bus, Windows runbook](implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md) - Desktop `blacklist_service` shim, `test_sync_factory`, `_is_chat_screen` for external groups
 - [Multi-Device Sync Storage Isolation](implementation/2026-04-02-multi-device-sync-storage-isolation.md) - Default per-device media output roots for parallel sync
 - [Pre-push Python tests restore](implementation/2026-04-03-pre-push-python-tests-restore.md) - Re-enabled `tests/unit` on push; fixed Windows pytest capture and path setup
+- [System Robustness Fixes](implementation/2026-04-09-system-robustness-fixes.md) - AI circuit breaker, failure metrics, heartbeat service, AI health checks, process auto-restart, night-mode timeout
 - [Followup System](03-impl-and-arch/key-modules/) - Multiple docs on followup logic
 - [Realtime Reply](03-impl-and-arch/key-modules/) - Settings, configuration
 - [Sidecar](03-impl-and-arch/key-modules/) - Real-time context pane

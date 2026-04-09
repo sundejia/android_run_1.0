@@ -21,8 +21,6 @@ from pathlib import Path
 from typing import Any
 
 # Add project root to path for imports
-import sys
-from pathlib import Path
 
 # Import from backend utils (go up 2 levels: followup -> services -> backend)
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
@@ -34,9 +32,8 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT / "src"))
 
 # Import blacklist checker
-from wecom_automation.services.blacklist_service import BlacklistChecker
-
 from services.conversation_storage import get_control_db_path
+from wecom_automation.services.blacklist_service import BlacklistChecker
 
 from .repository import ConversationRepository
 from .settings import SettingsManager
@@ -50,10 +47,12 @@ except ImportError:
     HAS_AVATAR_MANAGER = False
 
 # Import MetricsLogger for business metrics
-from wecom_automation.core.metrics_logger import get_metrics_logger
-
 # Import loguru logger
 from wecom_automation.core.logging import get_logger
+from wecom_automation.core.metrics_logger import get_metrics_logger
+
+# Import AI Circuit Breaker
+from .circuit_breaker import AICircuitBreaker
 
 logger = get_logger("response_detector")
 
@@ -357,8 +356,7 @@ class MessageTracker:
                             "idx": i,
                             "content": content,
                             "reason": (
-                                f"完整签名已存在 (cached_is_self={cached_is_self})"
-                                f"{_skipped_message_image_hint(msg)}"
+                                f"完整签名已存在 (cached_is_self={cached_is_self}){_skipped_message_image_hint(msg)}"
                             ),
                         }
                     )
@@ -448,6 +446,13 @@ class ResponseDetector:
         self._followup_scan_running = False
         self._media_event_bus = None
         self._media_action_settings: dict = {}
+        self._ai_circuit_breaker = AICircuitBreaker(
+            failure_threshold=3,
+            recovery_timeout=120.0,
+            half_open_max_calls=1,
+            logger=self._logger,
+        )
+        self._click_fail_cooldown: dict[str, tuple[float, int]] = {}
 
     def set_followup_scan_running(self, running: bool) -> None:
         """设置跟进扫描是否正在运行（用于跳过响应扫描）"""
@@ -460,6 +465,36 @@ class ResponseDetector:
     def reset_cancel(self) -> None:
         """重置取消标志"""
         self._cancel_requested = False
+
+    def _clean_expired_click_cooldowns(self) -> None:
+        """Remove expired entries from the click-failure cooldown map."""
+        now = time.time()
+        expired = [k for k, (until, _) in self._click_fail_cooldown.items() if now >= until]
+        for k in expired:
+            del self._click_fail_cooldown[k]
+
+    def _get_sidecar_timeout(self) -> float:
+        """Return the Sidecar review timeout, reduced during night hours."""
+        try:
+            from services.settings import get_settings_service
+
+            svc = get_settings_service()
+            all_settings = svc.get_all_settings_flat()
+
+            day_timeout = float(all_settings.get("sidecar_timeout", 300))
+            night_timeout = float(all_settings.get("night_mode_sidecar_timeout", 30))
+            night_start = int(all_settings.get("night_mode_start_hour", 22))
+            night_end = int(all_settings.get("night_mode_end_hour", 8))
+        except Exception:
+            day_timeout, night_timeout, night_start, night_end = 300.0, 30.0, 22, 8
+
+        hour = datetime.now().hour
+        if night_start > night_end:
+            is_night = hour >= night_start or hour < night_end
+        else:
+            is_night = night_start <= hour < night_end
+
+        return night_timeout if is_night else day_timeout
 
     async def _init_media_event_bus(self, wecom, serial: str) -> None:
         """Build and cache the MediaEventBus for this scan cycle.
@@ -475,8 +510,7 @@ class ResponseDetector:
                     from routers.global_websocket import broadcast_media_action_triggered
 
                     serialised = [
-                        {"action_name": r.action_name, "status": r.status.value, "message": r.message}
-                        for r in results
+                        {"action_name": r.action_name, "status": r.status.value, "message": r.message} for r in results
                     ]
                     await broadcast_media_action_triggered(
                         customer_name=event.customer_name,
@@ -773,7 +807,6 @@ class ResponseDetector:
                     # Get user from queue
                     user = user_queue.popleft()
                     user_name = user.name
-                    user_channel = getattr(user, "channel", None)
 
                     # Skip if already processed
                     if user_name in processed_names:
@@ -818,7 +851,7 @@ class ResponseDetector:
                         try:
                             await wecom.go_back()
                             await asyncio.sleep(0.3)
-                        except:
+                        except Exception:
                             pass
 
                     # After processing, re-detect red dots for prioritization
@@ -952,7 +985,6 @@ class ResponseDetector:
 
         # Initialize metrics logger
         metrics = get_metrics_logger(serial)
-        start_time = time.time()
 
         self._logger.info("")
         self._logger.info(f"[{serial}] Processing: {user_name}")
@@ -1016,6 +1048,24 @@ class ResponseDetector:
             # Step 1: Enter chat
             self._logger.info(f"[{serial}]    Step 1: Entering chat...")
 
+            # Click cooldown: skip customers that recently failed to click
+            self._clean_expired_click_cooldowns()
+            cooldown_key = f"{serial}:{user_name}"
+            if cooldown_key in self._click_fail_cooldown:
+                cooldown_until, fail_count = self._click_fail_cooldown[cooldown_key]
+                if time.time() < cooldown_until:
+                    self._logger.warning(
+                        f"[{serial}]    Click cooldown active for {user_name} "
+                        f"(failures={fail_count}, retry in {int(cooldown_until - time.time())}s)"
+                    )
+                    metrics.log_error(
+                        error_type="click_cooldown_skip",
+                        error_message=f"Skipping {user_name} due to click cooldown",
+                        customer_name=user_name,
+                        context={"serial": serial, "fail_count": fail_count},
+                    )
+                    return result
+
             # Check for skip before entering chat
             if sidecar_client:
                 try:
@@ -1038,7 +1088,28 @@ class ResponseDetector:
             clicked = await wecom.click_user_in_list(user_name, user_channel)
             if not clicked:
                 self._logger.warning(f"[{serial}]    Could not click on {user_name}, skipping")
+                prev_until, prev_count = self._click_fail_cooldown.get(cooldown_key, (0.0, 0))
+                new_count = prev_count + 1
+                if new_count >= 3:
+                    cooldown_secs = 600.0
+                elif new_count == 2:
+                    cooldown_secs = 300.0
+                else:
+                    cooldown_secs = 120.0
+                self._click_fail_cooldown[cooldown_key] = (time.time() + cooldown_secs, new_count)
+                self._logger.info(
+                    f"[{serial}]    Click cooldown set for {user_name}: {int(cooldown_secs)}s (failure #{new_count})"
+                )
+                metrics.log_error(
+                    error_type="click_failed",
+                    error_message=f"Could not click on {user_name}",
+                    customer_name=user_name,
+                    context={"serial": serial, "fail_count": new_count, "cooldown_seconds": cooldown_secs},
+                )
                 return result
+
+            # Click succeeded — clear any prior cooldown for this customer
+            self._click_fail_cooldown.pop(cooldown_key, None)
 
             await asyncio.sleep(1.0)
 
@@ -1119,15 +1190,16 @@ class ResponseDetector:
                 content = getattr(last_customer_msg, "content", "") or ""
                 self._logger.info(f"[{serial}]    Step 4: Last customer message: {content[:40]}...")
 
-                # Get the message DB ID of the last customer message for metrics
+                # Get the message DB ID of the last customer message for metrics.
+                # message_db_ids is ordered the same as messages (stored in order).
+                # Walk backwards through both lists to find the matching customer msg ID.
                 last_customer_msg_db_id = None
                 if message_db_ids:
-                    # Find the DB ID of the last customer message
-                    for msg in reversed(messages):
+                    for i, msg in enumerate(reversed(messages)):
                         if not getattr(msg, "is_self", False):
-                            # This is a customer message, we need to find its DB ID
-                            # Since we don't track the exact mapping, we'll use the last stored ID
-                            # This is an approximation - ideally we should track the mapping
+                            idx = len(message_db_ids) - 1 - i
+                            if 0 <= idx < len(message_db_ids):
+                                last_customer_msg_db_id = message_db_ids[idx]
                             break
 
                 # Generate AI reply
@@ -1145,9 +1217,26 @@ class ResponseDetector:
                         # Log detailed error but continue processing (skip check is optional)
                         self._logger.warning(f"[{serial}] Error checking skip before AI: {type(e).__name__}: {e}")
 
-                ai_start_time = time.time()
-                reply = await self._generate_reply(user_name, messages[-5:], serial, user_channel)
-                ai_generation_time = (time.time() - ai_start_time) * 1000
+                # Circuit breaker gate: skip AI call when breaker is open
+                if not self._ai_circuit_breaker.allow_request():
+                    self._logger.warning(f"[{serial}]    AI circuit breaker OPEN — skipping AI call for {user_name}")
+                    metrics.log_error(
+                        error_type="ai_circuit_open",
+                        error_message="AI circuit breaker is open, skipping AI call",
+                        customer_name=user_name,
+                        context={"serial": serial, "circuit_state": self._ai_circuit_breaker.state.value},
+                    )
+                    reply = None
+                    ai_generation_time = 0.0
+                else:
+                    ai_start_time = time.time()
+                    reply = await self._generate_reply(user_name, messages[-5:], serial, user_channel)
+                    ai_generation_time = (time.time() - ai_start_time) * 1000
+
+                    if reply:
+                        self._ai_circuit_breaker.record_success()
+                    else:
+                        self._ai_circuit_breaker.record_failure()
 
                 if reply:
                     self._logger.info(f"[{serial}]    Sending reply: {reply[:40]}...")
@@ -1200,6 +1289,23 @@ class ResponseDetector:
                             method="sidecar" if sidecar_client else "direct",
                             error="Failed to send reply",
                         )
+                else:
+                    metrics.log_reply_sent(
+                        customer_name=user_name,
+                        success=False,
+                        method="none",
+                        error="ai_generation_failed",
+                    )
+                    metrics.log_error(
+                        error_type="ai_no_reply",
+                        error_message="AI returned None, customer not replied",
+                        customer_name=user_name,
+                        context={
+                            "ai_generation_time_ms": ai_generation_time,
+                            "serial": serial,
+                            "circuit_state": self._ai_circuit_breaker.state.value,
+                        },
+                    )
             else:
                 self._logger.info(f"[{serial}]    No customer message found (last message is from agent)")
 
@@ -1283,7 +1389,7 @@ class ResponseDetector:
             try:
                 await wecom.go_back()
                 await asyncio.sleep(0.5)
-            except:
+            except Exception:
                 pass
 
         return result
@@ -1398,8 +1504,18 @@ class ResponseDetector:
                 content = getattr(latest_msg, "content", "") or ""
                 self._logger.info(f"[{serial}]    Customer: {content[:40]}...")
 
-                # Generate and send reply
-                reply = await self._generate_reply(user_name, current_messages[-5:], serial, user_channel)
+                # Generate and send reply (with circuit breaker)
+                loop_metrics = get_metrics_logger(serial)
+                if not self._ai_circuit_breaker.allow_request():
+                    self._logger.warning(f"[{serial}]    AI circuit breaker OPEN — skipping AI in interactive loop")
+                    reply = None
+                else:
+                    reply = await self._generate_reply(user_name, current_messages[-5:], serial, user_channel)
+                    if reply:
+                        self._ai_circuit_breaker.record_success()
+                    else:
+                        self._ai_circuit_breaker.record_failure()
+
                 if reply:
                     success, sent_text = await self._send_reply_wrapper(
                         wecom, serial, user_name, user_channel, reply, sidecar_client
@@ -1410,8 +1526,18 @@ class ResponseDetector:
                         result["reply_sent"] = True
 
                         # Store sent message
-                        await self._store_sent_message(user_name, user_channel, sent_text or reply, serial)
+                        reply_db_id = await self._store_sent_message(
+                            user_name, user_channel, sent_text or reply, serial
+                        )
                         result["messages_stored"] += 1
+
+                        loop_metrics.log_reply_sent(
+                            customer_name=user_name,
+                            success=True,
+                            method="sidecar" if sidecar_client else "direct",
+                            reply_db_id=reply_db_id,
+                        )
+                        loop_metrics.record_ai_reply_generated()
 
                         # === Image Sender: 检测固定回复关键词，追加发送收藏图片 ===
                         await self._maybe_send_favorite_image(wecom, serial, sent_text or reply)
@@ -1420,6 +1546,20 @@ class ResponseDetector:
                         await asyncio.sleep(1)
                         updated_messages = await self._extract_visible_messages(wecom, serial)
                         tracker.record_current_state(updated_messages)
+                    else:
+                        loop_metrics.log_reply_sent(
+                            customer_name=user_name,
+                            success=False,
+                            method="sidecar" if sidecar_client else "direct",
+                            error="send_failed_in_interactive_loop",
+                        )
+                else:
+                    loop_metrics.log_error(
+                        error_type="ai_no_reply_interactive",
+                        error_message="AI returned None in interactive wait loop",
+                        customer_name=user_name,
+                        context={"serial": serial, "circuit_state": self._ai_circuit_breaker.state.value},
+                    )
 
                 # Reset timeout after customer interaction
                 start_time = time.time()
@@ -1595,13 +1735,9 @@ class ResponseDetector:
         customer_id: int | None = None
         if user_name:
             try:
-                customer_id = self._repository.find_or_create_customer(
-                    user_name, user_channel, serial
-                )
+                customer_id = self._repository.find_or_create_customer(user_name, user_channel, serial)
             except Exception as exc:
-                self._logger.warning(
-                    f"[{serial}] Preload: could not resolve customer for image folder: {exc}"
-                )
+                self._logger.warning(f"[{serial}] Preload: could not resolve customer for image folder: {exc}")
         if customer_id is not None:
             image_dir = base_images_root / f"customer_{customer_id}"
             # Same layout as post-DB storage: avoid flat conversation_videos + copy
@@ -1632,17 +1768,13 @@ class ResponseDetector:
                 if getattr(image_info, "local_path", None):
                     existing_image = Path(image_info.local_path)
                     if existing_image.exists():
-                        self._logger.info(
-                            f"[{serial}]    图片已下载，跳过预加载: {existing_image}"
-                        )
+                        self._logger.info(f"[{serial}]    图片已下载，跳过预加载: {existing_image}")
                         continue
 
                 if dedupe_repo is not None:
                     probe = image_message_record_for_dedupe(msg, customer_id)
                     if dedupe_repo.message_exists(probe):
-                        self._logger.debug(
-                            f"[{serial}]    Preload skip image idx {index}: already in database"
-                        )
+                        self._logger.debug(f"[{serial}]    Preload skip image idx {index}: already in database")
                         continue
 
                 output_path = image_dir / f"realtime_{serial}_{timestamp_prefix}_{index}.png"
@@ -1671,9 +1803,7 @@ class ResponseDetector:
                 if dedupe_repo is not None:
                     probe = video_message_record_for_dedupe(msg, customer_id)
                     if dedupe_repo.message_exists(probe):
-                        self._logger.debug(
-                            f"[{serial}]    Preload skip video idx {index}: already in database"
-                        )
+                        self._logger.debug(f"[{serial}]    Preload skip video idx {index}: already in database")
                         continue
 
                 try:
@@ -1696,9 +1826,7 @@ class ResponseDetector:
                     self._logger.warning(f"[{serial}] Failed to preload video at index {index}")
 
         if images_ok or videos_ok:
-            self._logger.info(
-                f"[{serial}]    Media preload complete: {images_ok} image(s), {videos_ok} video(s)"
-            )
+            self._logger.info(f"[{serial}]    Media preload complete: {images_ok} image(s), {videos_ok} video(s)")
 
     async def _store_messages_to_db(
         self,
@@ -2094,6 +2222,8 @@ class ResponseDetector:
             followup_prompt: 补刀场景专用提示词，会拼接到 user_prompt 中
         如果数据库不可用，回退到使用传入的 UI 提取消息。
         """
+        _gen_metrics = get_metrics_logger(device_serial)
+
         # Try to get FULL conversation history from database for better context
         context_messages = messages  # Default to UI-extracted messages
 
@@ -2343,6 +2473,12 @@ class ResponseDetector:
                         # Check for human request command
                         if ai_reply and "command back to user operation" in ai_reply.lower():
                             self._logger.info(f"[{device_serial}] Human agent requested, stopping auto-reply")
+                            _gen_metrics.log_error(
+                                error_type="ai_human_transfer",
+                                error_message="AI requested transfer to human agent",
+                                customer_name=user_name,
+                                context={"serial": device_serial},
+                            )
                             return None
 
                         if ai_reply and len(ai_reply.strip()) > 0:
@@ -2372,11 +2508,27 @@ class ResponseDetector:
                         else:
                             self._logger.warning(f"[{device_serial}] AI returned empty reply")
                             self._logger.info(f"[{device_serial}] " + "=" * 60)
+                            _gen_metrics.log_error(
+                                error_type="ai_empty_reply",
+                                error_message="AI returned an empty reply",
+                                customer_name=user_name,
+                                context={"serial": device_serial, "ai_server_url": ai_server_url},
+                            )
                     else:
                         response_text = await response.text()
                         self._logger.warning(f"[{device_serial}] AI server returned {response.status}")
                         self._logger.warning(f"[{device_serial}] Response body: {response_text}")
                         self._logger.info(f"[{device_serial}] " + "=" * 60)
+                        _gen_metrics.log_error(
+                            error_type="ai_http_error",
+                            error_message=f"AI server returned HTTP {response.status}",
+                            customer_name=user_name,
+                            context={
+                                "serial": device_serial,
+                                "status_code": response.status,
+                                "ai_server_url": ai_server_url,
+                            },
+                        )
 
         except TimeoutError:
             self._logger.warning(f"[{device_serial}] " + "=" * 60)
@@ -2386,6 +2538,12 @@ class ResponseDetector:
             self._logger.warning(f"[{device_serial}] Timeout after: {ai_timeout}s")
             self._logger.warning(f"[{device_serial}] AI Server: {ai_server_url}")
             self._logger.warning(f"[{device_serial}] " + "=" * 60)
+            _gen_metrics.log_error(
+                error_type="ai_timeout",
+                error_message=f"AI request timed out after {ai_timeout}s",
+                customer_name=user_name,
+                context={"serial": device_serial, "timeout_seconds": ai_timeout, "ai_server_url": ai_server_url},
+            )
         except Exception as e:
             self._logger.error(f"[{device_serial}] " + "=" * 60)
             self._logger.error(f"[{device_serial}] AI REQUEST ERROR")
@@ -2397,6 +2555,12 @@ class ResponseDetector:
 
             self._logger.error(f"[{device_serial}] Traceback:\n{traceback.format_exc()}")
             self._logger.error(f"[{device_serial}] " + "=" * 60)
+            _gen_metrics.log_error(
+                error_type="ai_connection_error",
+                error_message=f"AI request failed: {type(e).__name__}: {e}",
+                customer_name=user_name,
+                context={"serial": device_serial, "exception_type": type(e).__name__, "ai_server_url": ai_server_url},
+            )
 
         return None
 
@@ -2629,8 +2793,6 @@ class ResponseDetector:
         """
         from datetime import datetime, timedelta
 
-        from wecom_automation.database.repository import ConversationRepository
-
         from .queue_manager import ConversationInfo
 
         conversations = []
@@ -2639,8 +2801,6 @@ class ResponseDetector:
         self._logger.info(f"[{serial}]       - 数据库: {self._repository._db_path}")
 
         try:
-            repo = ConversationRepository(self._repository._db_path)
-
             # 获取最近 24 小时内有消息的客户
             import sqlite3
 
@@ -2655,7 +2815,7 @@ class ResponseDetector:
 
             # 通过 devices → kefu_devices → kefus → customers 链接按设备过滤
             query = """
-                SELECT 
+                SELECT
                     c.id as customer_id,
                     c.name as customer_name,
                     c.channel as customer_channel,
@@ -2669,7 +2829,7 @@ class ResponseDetector:
                 JOIN kefu_devices kd ON k.id = kd.kefu_id
                 JOIN devices d ON kd.device_id = d.id
                 WHERE m.id = (
-                    SELECT MAX(m2.id) FROM messages m2 
+                    SELECT MAX(m2.id) FROM messages m2
                     WHERE m2.customer_id = c.id
                 )
                 AND m.timestamp_parsed >= ?
@@ -2789,8 +2949,11 @@ class ResponseDetector:
                     else:
                         self._logger.info(f"[{serial}] ⏱️ Countdown started, waiting for send...")
 
-                        # Step 3: 等待用户审核/发送（最长300秒）
-                        result = await sidecar_client.wait_for_send(msg_id, timeout=300.0)
+                        # Determine timeout: use night-mode value during off-hours
+                        sidecar_timeout = self._get_sidecar_timeout()
+
+                        # Step 3: 等待用户审核/发送
+                        result = await sidecar_client.wait_for_send(msg_id, timeout=sidecar_timeout)
 
                         reason = result.get("reason", "unknown")
                         if result.get("success") or reason == "sent":

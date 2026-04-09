@@ -4,19 +4,33 @@ Settings 默认值定义
 定义所有设置的默认值、类型和描述信息。
 """
 
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 from .models import SettingCategory, ValueType
 
 # 设置定义: (category, key, value_type, default_value, description, is_sensitive)
-SETTING_DEFINITIONS: List[Tuple[str, str, str, Any, str, bool]] = [
-    (SettingCategory.GENERAL.value, "image_review_timeout_seconds", ValueType.INT.value, 40, "图片审核等待超时(秒)", False),
+SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
+    (
+        SettingCategory.GENERAL.value,
+        "image_review_timeout_seconds",
+        ValueType.INT.value,
+        40,
+        "图片审核等待超时(秒)",
+        False,
+    ),
     # ============================================================================
     # General Settings
     # ============================================================================
     (SettingCategory.GENERAL.value, "hostname", ValueType.STRING.value, "", "主机名称（用于日志文件前缀）", False),
     (SettingCategory.GENERAL.value, "device_id", ValueType.STRING.value, "", "稳定设备 ID（用于上传身份识别）", False),
-    (SettingCategory.GENERAL.value, "person_name", ValueType.STRING.value, "", "人员姓名（用于上传业务身份展示）", False),
+    (
+        SettingCategory.GENERAL.value,
+        "person_name",
+        ValueType.STRING.value,
+        "",
+        "人员姓名（用于上传业务身份展示）",
+        False,
+    ),
     (SettingCategory.GENERAL.value, "timezone", ValueType.STRING.value, "Asia/Shanghai", "IANA 时区标识", False),
     (
         SettingCategory.GENERAL.value,
@@ -28,12 +42,26 @@ SETTING_DEFINITIONS: List[Tuple[str, str, str, Any, str, bool]] = [
     ),
     (SettingCategory.GENERAL.value, "auto_refresh_interval", ValueType.INT.value, 5000, "自动刷新间隔(毫秒)", False),
     (SettingCategory.GENERAL.value, "log_max_entries", ValueType.INT.value, 1000, "日志最大条目数", False),
-    (SettingCategory.GENERAL.value, "log_upload_enabled", ValueType.BOOLEAN.value, False, "是否启用日志定时上传", False),
+    (
+        SettingCategory.GENERAL.value,
+        "log_upload_enabled",
+        ValueType.BOOLEAN.value,
+        False,
+        "是否启用日志定时上传",
+        False,
+    ),
     (SettingCategory.GENERAL.value, "log_upload_time", ValueType.STRING.value, "02:00", "日志每日上传时间", False),
     (SettingCategory.GENERAL.value, "log_upload_url", ValueType.STRING.value, "", "日志上传平台地址", False),
     (SettingCategory.GENERAL.value, "log_upload_token", ValueType.STRING.value, "", "日志上传鉴权令牌", True),
     (SettingCategory.GENERAL.value, "image_server_ip", ValueType.STRING.value, "", "图片审核服务器地址", False),
-    (SettingCategory.GENERAL.value, "image_upload_enabled", ValueType.BOOLEAN.value, True, "是否启用图片自动上传到审核平台", False),
+    (
+        SettingCategory.GENERAL.value,
+        "image_upload_enabled",
+        ValueType.BOOLEAN.value,
+        True,
+        "是否启用图片自动上传到审核平台",
+        False,
+    ),
     (SettingCategory.GENERAL.value, "low_spec_mode", ValueType.BOOLEAN.value, False, "低配机器性能模式", False),
     # ============================================================================
     # Sync Settings
@@ -109,12 +137,23 @@ SETTING_DEFINITIONS: List[Tuple[str, str, str, Any, str, bool]] = [
     (SettingCategory.SIDECAR.value, "poll_interval", ValueType.INT.value, 10, "轮询间隔(秒)", False),
     (SettingCategory.SIDECAR.value, "show_logs", ValueType.BOOLEAN.value, True, "Sidecar 是否显示日志面板", False),
     (SettingCategory.SIDECAR.value, "max_panels", ValueType.INT.value, 3, "Sidecar 最大并排面板数量", False),
+    (SettingCategory.SIDECAR.value, "sidecar_timeout", ValueType.INT.value, 300, "Sidecar 审核超时(秒)", False),
+    (SettingCategory.SIDECAR.value, "night_mode_sidecar_timeout", ValueType.INT.value, 30, "夜间审核超时(秒)", False),
+    (SettingCategory.SIDECAR.value, "night_mode_start_hour", ValueType.INT.value, 22, "夜间模式开始时间(时)", False),
+    (SettingCategory.SIDECAR.value, "night_mode_end_hour", ValueType.INT.value, 8, "夜间模式结束时间(时)", False),
     # ============================================================================
     # Realtime Reply Settings
     # ============================================================================
     (SettingCategory.REALTIME.value, "scan_interval", ValueType.INT.value, 60, "扫描间隔(秒)", False),
     (SettingCategory.REALTIME.value, "use_ai_reply", ValueType.BOOLEAN.value, True, "使用 AI 回复 (始终启用)", False),
-    (SettingCategory.REALTIME.value, "send_via_sidecar", ValueType.BOOLEAN.value, True, "通过 Sidecar 发送 (始终启用)", False),
+    (
+        SettingCategory.REALTIME.value,
+        "send_via_sidecar",
+        ValueType.BOOLEAN.value,
+        True,
+        "通过 Sidecar 发送 (始终启用)",
+        False,
+    ),
     # ============================================================================
     # Followup Settings (补刀功能专用配置)
     # ============================================================================
@@ -189,7 +228,7 @@ SETTING_DEFINITIONS: List[Tuple[str, str, str, Any, str, bool]] = [
 
 
 # 前端键名映射 (前端 camelCase -> 后端 category.key)
-FRONTEND_KEY_MAPPING: Dict[str, Tuple[str, str]] = {
+FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     # General
     "hostname": (SettingCategory.GENERAL.value, "hostname"),
     "deviceId": (SettingCategory.GENERAL.value, "device_id"),
@@ -272,7 +311,7 @@ FRONTEND_KEY_MAPPING: Dict[str, Tuple[str, str]] = {
 
 
 # 反向映射 (category.key -> 前端 camelCase)
-BACKEND_TO_FRONTEND_MAPPING: Dict[Tuple[str, str], str] = {v: k for k, v in FRONTEND_KEY_MAPPING.items()}
+BACKEND_TO_FRONTEND_MAPPING: dict[tuple[str, str], str] = {v: k for k, v in FRONTEND_KEY_MAPPING.items()}
 
 
 def get_default_value(category: str, key: str) -> Any:
@@ -291,9 +330,9 @@ def get_value_type(category: str, key: str) -> str:
     return ValueType.STRING.value
 
 
-def get_all_defaults() -> Dict[str, Dict[str, Any]]:
+def get_all_defaults() -> dict[str, dict[str, Any]]:
     """获取所有默认值，按类别分组"""
-    result: Dict[str, Dict[str, Any]] = {}
+    result: dict[str, dict[str, Any]] = {}
     for cat, key, _, default, _, _ in SETTING_DEFINITIONS:
         if cat not in result:
             result[cat] = {}
@@ -301,7 +340,7 @@ def get_all_defaults() -> Dict[str, Dict[str, Any]]:
     return result
 
 
-def get_category_defaults(category: str) -> Dict[str, Any]:
+def get_category_defaults(category: str) -> dict[str, Any]:
     """获取指定类别的所有默认值"""
     result = {}
     for cat, key, _, default, _, _ in SETTING_DEFINITIONS:

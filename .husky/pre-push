@@ -8,6 +8,11 @@ fi
 
 echo "🚀 Running pre-push checks..."
 
+# If the git root is one level above the project, cd into the project directory
+if [ -d "android_run_test-main/wecom-desktop" ] && [ ! -d "wecom-desktop" ]; then
+  cd android_run_test-main
+fi
+
 # Type checking for frontend
 echo "📘 Running TypeScript type check..."
 cd wecom-desktop && npx vue-tsc --noEmit

@@ -984,6 +984,14 @@ async def _generate_message(  # ✅ Now async
 - `docs/01-product/blacklist-system.md` - Blacklist feature docs
 - `TECHNICAL_HANDOVER.md` - Technical handover documentation
 
+### Monitoring & Robustness (2026-04-09)
+
+- `docs/implementation/2026-04-09-system-robustness-fixes.md` - AI circuit breaker, failure metrics, heartbeat, health checks, auto-restart, night-mode timeout
+- `wecom-desktop/backend/services/followup/circuit_breaker.py` - AI call circuit breaker (CLOSED/OPEN/HALF_OPEN)
+- `wecom-desktop/backend/services/heartbeat_service.py` - SQLite-backed process heartbeats + AI health storage
+- `wecom-desktop/backend/services/ai_health_checker.py` - Periodic 3-layer AI health probe
+- `wecom-desktop/backend/routers/monitoring.py` - `/api/monitoring/*` REST endpoints
+
 ### Desktop Application
 
 - `wecom-desktop/README.md` - Desktop app documentation

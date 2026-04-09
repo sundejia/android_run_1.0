@@ -105,6 +105,9 @@ ignore = [
 [tool.ruff.lint.per-file-ignores]
 "__init__.py" = ["F401"]  # Allow unused imports in __init__.py
 "tests/**" = ["B011"]     # Allow assert in tests
+"wecom-desktop/backend/main.py" = ["E402"]  # Path setup before imports
+"wecom-desktop/backend/scripts/*" = ["E402"]  # Path setup before imports
+"wecom-desktop/backend/services/followup/response_detector.py" = ["E402"]  # Path setup before imports
 
 [tool.ruff.format]
 quote-style = "double"

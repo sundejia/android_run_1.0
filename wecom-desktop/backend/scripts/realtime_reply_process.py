@@ -13,7 +13,6 @@ import argparse
 import asyncio
 import sys
 from pathlib import Path
-from typing import Optional
 
 # 添加项目路径
 # IMPORTANT: Configure sys.path BEFORE importing utils.path_utils
@@ -21,11 +20,11 @@ backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
 
 # Now we can import from backend
-from utils.path_utils import get_project_root
 from services.conversation_storage import (
     get_control_db_path,
     get_device_conversation_db_path,
 )
+from utils.path_utils import get_project_root
 
 PROJECT_ROOT = get_project_root()
 sys.path.insert(0, str(PROJECT_ROOT))
@@ -47,7 +46,7 @@ def _get_hostname() -> str:
 
 def setup_logging(serial: str, debug: bool = False):
     """设置日志 - 使用 loguru，同时输出到文件和 stdout（由父进程捕获）"""
-    from wecom_automation.core.logging import init_logging, get_logger
+    from wecom_automation.core.logging import get_logger, init_logging
 
     level = "DEBUG" if debug else "INFO"
     hostname = _get_hostname()
@@ -90,22 +89,21 @@ async def run(args):
 
     # 导入必要模块
     try:
-        from wecom_automation.services.wecom_service import WeComService
-        from wecom_automation.services.ai.reply_service import AIReplyService
-        from wecom_automation.services.integration.sidecar import SidecarQueueClient
-
         # 导入 FollowUp 组件（复用现有逻辑）
         from services.followup.repository import ConversationRepository
-        from services.followup.settings import SettingsManager
         from services.followup.response_detector import ResponseDetector
+        from services.followup.settings import SettingsManager
+        from wecom_automation.services.ai.reply_service import AIReplyService  # noqa: F401
+        from wecom_automation.services.integration.sidecar import SidecarQueueClient
+        from wecom_automation.services.wecom_service import WeComService  # noqa: F401
     except ImportError as e:
         # 备用导入路径
         logger.warning(f"Import warning: {e}, trying alternative paths...")
         # PROJECT_ROOT / "wecom-desktop" / "backend" already in path from line 29
 
         from services.followup.repository import ConversationRepository
-        from services.followup.settings import SettingsManager
         from services.followup.response_detector import ResponseDetector
+        from services.followup.settings import SettingsManager
 
     # 初始化组件
     db_path = str(get_device_conversation_db_path(args.serial))
@@ -124,11 +122,51 @@ async def run(args):
         except Exception as e:
             logger.warning(f"Failed to init Sidecar client: {e}")
 
+    # Start periodic AI health checker
+    try:
+        from services.ai_health_checker import PeriodicAIHealthChecker
+        from services.settings.service import SettingsService
+
+        _settings_svc = SettingsService(str(get_control_db_path()))
+        _all_settings = _settings_svc.get_all_settings_flat()
+        _ai_url = _all_settings.get("aiServerUrl", "http://47.113.187.234:8000")
+        if not _ai_url:
+            _ai_url = "http://47.113.187.234:8000"
+
+        _health_checker = PeriodicAIHealthChecker(
+            ai_server_url=_ai_url,
+            interval_seconds=300.0,
+            circuit_breaker=detector._ai_circuit_breaker,
+            logger=logger,
+        )
+        _health_checker.start()
+        logger.info(f"AI health checker started (interval=300s, url={_ai_url})")
+    except Exception as e:
+        logger.warning(f"Failed to start AI health checker: {e}")
+        _health_checker = None
+
+    # Heartbeat / lifecycle tracking
+    import time as _time
+
+    try:
+        from services.heartbeat_service import ensure_tables, record_heartbeat, record_process_event
+
+        ensure_tables()
+        _has_heartbeat = True
+    except Exception as _hb_err:
+        logger.warning(f"Heartbeat service unavailable: {_hb_err}")
+        _has_heartbeat = False
+
+    process_start = _time.monotonic()
+    if _has_heartbeat:
+        record_process_event(args.serial, "started")
+
     # 主循环
     scan_count = 0
     while True:
         try:
             scan_count += 1
+            scan_start = _time.monotonic()
             logger.info("")
             logger.info(f"[Scan #{scan_count}] Checking for unread messages...")
 
@@ -138,6 +176,22 @@ async def run(args):
                 interactive_wait_timeout=10,
                 sidecar_client=sidecar_client,
             )
+
+            scan_duration_ms = (_time.monotonic() - scan_start) * 1000
+            queue_size = result.get("users_processed", 0)
+
+            # Record heartbeat
+            if _has_heartbeat:
+                try:
+                    record_heartbeat(
+                        device_serial=args.serial,
+                        scan_number=scan_count,
+                        status="alive",
+                        scan_duration_ms=scan_duration_ms,
+                        customers_in_queue=queue_size,
+                    )
+                except Exception as hb_err:
+                    logger.warning(f"Failed to write heartbeat: {hb_err}")
 
             # 报告结果
             responses = result.get("responses_detected", 0)
@@ -161,9 +215,23 @@ async def run(args):
             import traceback
 
             logger.error(traceback.format_exc())
+
+            if _has_heartbeat:
+                try:
+                    record_heartbeat(args.serial, scan_count, status="error")
+                except Exception:
+                    pass
+
             logger.info("Waiting 30s before retry...")
             await asyncio.sleep(30)
 
+    # Cleanup
+    if _health_checker:
+        _health_checker.stop()
+
+    uptime = _time.monotonic() - process_start
+    if _has_heartbeat:
+        record_process_event(args.serial, "stopped", scan_count=scan_count, uptime_seconds=uptime)
     logger.info("Follow-up process exiting")
 
 

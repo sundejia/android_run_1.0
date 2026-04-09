@@ -108,6 +108,35 @@
 | `session_summary`      | 会话结束汇总   | L1 汇总数据                   |
 | `error_occurred`       | 发生错误       | 错误详情                      |
 
+#### 2.3.1 新增错误子类型 (2026-04-09)
+
+`error_occurred` 事件的 `error_type` 字段现已覆盖所有 AI 失败路径：
+
+| `error_type`              | 含义                        | 触发条件                                         |
+| ------------------------- | --------------------------- | ------------------------------------------------ |
+| `ai_no_reply`             | AI 返回 None，客户未获回复  | `_process_unread_user_with_wait` 中 `reply=None` |
+| `ai_no_reply_interactive` | 交互等待循环中 AI 返回 None | `_interactive_wait_loop` 中 `reply=None`         |
+| `ai_circuit_open`         | AI 熔断器打开，跳过调用     | 连续 3 次 AI 失败后                              |
+| `ai_timeout`              | AI 请求超时                 | `_generate_reply` 中 `TimeoutError`              |
+| `ai_connection_error`     | AI 连接/网络错误            | `_generate_reply` 中其他异常                     |
+| `ai_http_error`           | AI 返回非 200 HTTP 状态码   | `_generate_reply` 中 `response.status != 200`    |
+| `ai_empty_reply`          | AI 返回空字符串             | `_generate_reply` 中回复为空                     |
+| `ai_human_transfer`       | AI 请求转人工               | AI 回复含 "command back to user operation"       |
+| `click_failed`            | 点击进入聊天失败            | `click_user_in_list` 返回 False                  |
+| `click_cooldown_skip`     | 点击冷却期内跳过            | 该客户最近点击失败，仍在冷却中                   |
+
+#### 2.3.2 监控服务事件 (2026-04-09)
+
+独立于 MetricsLogger JSONL，以下数据写入 `monitoring.db` SQLite 数据库：
+
+| 表名               | 写入时机           | 主要字段                                                                                           |
+| ------------------ | ------------------ | -------------------------------------------------------------------------------------------------- |
+| `heartbeats`       | 每次 scan 循环开始 | `device_serial`, `scan_number`, `status`, `scan_duration_ms`, `customers_in_queue`                 |
+| `ai_health_checks` | 每 5 分钟          | `ai_server_url`, `status`, `response_time_ms`, `network`, `http_service`, `inference`, `diagnosis` |
+| `process_events`   | 进程启动/停止      | `device_serial`, `event_type`, `scan_count`, `uptime_seconds`, `exit_reason`                       |
+
+API 端点：`GET /api/monitoring/heartbeats`, `/heartbeats/latest`, `/ai-health`, `/process-events`。
+
 ---
 
 ## 3. 实现方案
