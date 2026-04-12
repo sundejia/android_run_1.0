@@ -204,6 +204,10 @@ class RealtimeReplyManager:
         # 构建命令
         script_path = PROJECT_ROOT / "wecom-desktop" / "backend" / "scripts" / "realtime_reply_process.py"
 
+        # Allocate unique DroidRun port for this device
+        from services.device_manager import PortAllocator
+        droidrun_port = PortAllocator().allocate(serial)
+
         cmd = [
             "uv",
             "run",
@@ -212,6 +216,8 @@ class RealtimeReplyManager:
             serial,
             "--scan-interval",
             str(scan_interval),
+            "--tcp-port",
+            str(droidrun_port),
         ]
 
         if use_ai_reply:
@@ -343,6 +349,13 @@ class RealtimeReplyManager:
                     job_manager.terminate_job(f"realtime_{serial}")
                 except Exception:
                     pass
+
+            # Release DroidRun port allocation
+            try:
+                from services.device_manager import PortAllocator
+                PortAllocator().release(serial)
+            except Exception:
+                pass
 
             # Clean up sidecar state to prevent stale skip flags on restart
             await self._cleanup_sidecar_state(serial)

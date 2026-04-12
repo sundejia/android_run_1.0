@@ -546,6 +546,7 @@ class ResponseDetector:
         device_serial: str | None = None,
         interactive_wait_timeout: int = 40,
         sidecar_client: Any | None = None,
+        droidrun_port: int | None = None,
     ) -> dict[str, Any]:
         """
         检测客户回复并自动回复
@@ -626,6 +627,7 @@ class ResponseDetector:
                     serial,
                     interactive_wait_timeout,
                     sidecar_client=sidecar_client,
+                    droidrun_port=droidrun_port,
                 )
 
                 result["devices_scanned"] += 1
@@ -665,6 +667,7 @@ class ResponseDetector:
         serial: str,
         interactive_wait_timeout: int = 40,
         sidecar_client: Any | None = None,
+        droidrun_port: int | None = None,
     ) -> dict[str, Any]:
         """
         扫描单个设备的红点用户
@@ -688,9 +691,20 @@ class ResponseDetector:
         self._logger.info(f"[{serial}] Starting response scan...")
 
         try:
-            # Initialize WeComService
+            # Initialize WeComService with per-device DroidRun port
             custom_scroll = dataclasses.replace(ScrollConfig(), max_scrolls=5, stable_threshold=2)
-            config = Config(scroll=custom_scroll, device_serial=serial)
+            config_kwargs: dict[str, Any] = {"scroll": custom_scroll, "device_serial": serial}
+            if droidrun_port is not None:
+                config_kwargs["droidrun_port"] = droidrun_port
+            else:
+                try:
+                    from services.device_manager import PortAllocator
+                    port = PortAllocator().get_allocation(serial)
+                    if port is not None:
+                        config_kwargs["droidrun_port"] = port
+                except Exception:
+                    pass
+            config = Config(**config_kwargs)
             wecom = WeComService(config)
 
             # Build MediaEventBus for this scan cycle (shared factory, same as full sync)
@@ -1373,10 +1387,12 @@ class ResponseDetector:
                 except Exception as ctx_error:
                     self._logger.debug(f"[{serial}] Failed to log conversation context: {ctx_error}")
 
-            # Step 7: Go back to list
-            self._logger.info(f"[{serial}]    Returning to list...")
+            # Step 7: Go back to list and ensure we're on private chats
+            self._logger.info(f"[{serial}]    Returning to private chats list...")
             await wecom.go_back()
             await asyncio.sleep(0.5)
+            if not await wecom.ensure_on_private_chats():
+                self._logger.warning(f"[{serial}]    Could not confirm return to private chats list")
 
         except SkipRequested:
             # Let caller handle skip once (including go_back + clear skip flag)
@@ -1389,6 +1405,7 @@ class ResponseDetector:
             try:
                 await wecom.go_back()
                 await asyncio.sleep(0.5)
+                await wecom.ensure_on_private_chats()
             except Exception:
                 pass
 

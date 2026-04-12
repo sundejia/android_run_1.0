@@ -58,3 +58,46 @@ async def test_group_chat_service_returns_false_on_workflow_failure(tmp_path):
 
     assert success is False
     assert await service.group_exists("device001", "张三", "张三-服务群") is False
+
+
+@pytest.mark.asyncio
+async def test_restore_navigation_delegates_to_wecom_service(tmp_path):
+    wecom = AsyncMock()
+    wecom.ensure_on_private_chats = AsyncMock(return_value=True)
+
+    service = GroupChatService(
+        wecom_service=wecom,
+        db_path=str(tmp_path / "group_chat.db"),
+    )
+
+    result = await service.restore_navigation()
+
+    assert result is True
+    wecom.ensure_on_private_chats.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_restore_navigation_returns_false_when_no_wecom_service(tmp_path):
+    service = GroupChatService(
+        wecom_service=None,
+        db_path=str(tmp_path / "group_chat.db"),
+    )
+
+    result = await service.restore_navigation()
+
+    assert result is False
+
+
+@pytest.mark.asyncio
+async def test_restore_navigation_handles_exception_gracefully(tmp_path):
+    wecom = AsyncMock()
+    wecom.ensure_on_private_chats = AsyncMock(side_effect=RuntimeError("ADB error"))
+
+    service = GroupChatService(
+        wecom_service=wecom,
+        db_path=str(tmp_path / "group_chat.db"),
+    )
+
+    result = await service.restore_navigation()
+
+    assert result is False

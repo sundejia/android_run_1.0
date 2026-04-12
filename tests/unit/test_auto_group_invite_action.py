@@ -296,3 +296,67 @@ class TestAutoGroupInviteExecute:
         assert call_kwargs["test_message_text"] == "联调消息"
         assert call_kwargs["post_confirm_wait_seconds"] == 2.5
         assert call_kwargs["duplicate_name_policy"] == "first"
+
+
+class TestAutoGroupInviteNavigationRecovery:
+    """Verify restore_navigation is always called after group creation."""
+
+    @pytest.mark.asyncio
+    async def test_restore_navigation_called_on_success(self):
+        service = AsyncMock()
+        service.create_group_chat = AsyncMock(return_value=True)
+        service.restore_navigation = AsyncMock(return_value=True)
+        action = AutoGroupInviteAction(group_chat_service=service)
+
+        event = _make_event()
+        settings = _default_settings()
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        service.restore_navigation.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_restore_navigation_called_on_failure(self):
+        service = AsyncMock()
+        service.create_group_chat = AsyncMock(return_value=False)
+        service.restore_navigation = AsyncMock(return_value=True)
+        action = AutoGroupInviteAction(group_chat_service=service)
+
+        event = _make_event()
+        settings = _default_settings()
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.ERROR
+        service.restore_navigation.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_restore_navigation_called_on_exception(self):
+        service = AsyncMock()
+        service.create_group_chat = AsyncMock(side_effect=RuntimeError("ADB error"))
+        service.restore_navigation = AsyncMock(return_value=True)
+        action = AutoGroupInviteAction(group_chat_service=service)
+
+        event = _make_event()
+        settings = _default_settings()
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.ERROR
+        service.restore_navigation.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_restore_navigation_failure_does_not_mask_result(self):
+        service = AsyncMock()
+        service.create_group_chat = AsyncMock(return_value=True)
+        service.restore_navigation = AsyncMock(side_effect=RuntimeError("nav failed"))
+        action = AutoGroupInviteAction(group_chat_service=service)
+
+        event = _make_event()
+        settings = _default_settings()
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        service.restore_navigation.assert_awaited_once()

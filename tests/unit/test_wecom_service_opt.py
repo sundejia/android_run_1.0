@@ -24,6 +24,8 @@ def mock_wecom_service():
     service.logger = MagicMock()
     service.adb = MagicMock()
     service.ui_parser = MagicMock()
+    service._screen_width = 1080
+    service._screen_height = 2340
 
     return service
 

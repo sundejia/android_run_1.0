@@ -175,6 +175,7 @@ async def run(args):
                 device_serial=args.serial,
                 interactive_wait_timeout=10,
                 sidecar_client=sidecar_client,
+                droidrun_port=args.tcp_port,
             )
 
             scan_duration_ms = (_time.monotonic() - scan_start) * 1000
@@ -246,6 +247,8 @@ def parse_args():
     parser.add_argument("--use-ai-reply", action="store_true", help="Use AI to generate replies")
 
     parser.add_argument("--send-via-sidecar", action="store_true", help="Send via Sidecar for human review")
+
+    parser.add_argument("--tcp-port", type=int, default=None, help="DroidRun TCP port for this device")
 
     parser.add_argument("--debug", action="store_true", help="Enable debug logging")
 
