@@ -1387,10 +1387,12 @@ class ResponseDetector:
                 except Exception as ctx_error:
                     self._logger.debug(f"[{serial}] Failed to log conversation context: {ctx_error}")
 
-            # Step 7: Go back to list
-            self._logger.info(f"[{serial}]    Returning to list...")
+            # Step 7: Go back to list and ensure we're on private chats
+            self._logger.info(f"[{serial}]    Returning to private chats list...")
             await wecom.go_back()
             await asyncio.sleep(0.5)
+            if not await wecom.ensure_on_private_chats():
+                self._logger.warning(f"[{serial}]    Could not confirm return to private chats list")
 
         except SkipRequested:
             # Let caller handle skip once (including go_back + clear skip flag)
@@ -1403,6 +1405,7 @@ class ResponseDetector:
             try:
                 await wecom.go_back()
                 await asyncio.sleep(0.5)
+                await wecom.ensure_on_private_chats()
             except Exception:
                 pass
 

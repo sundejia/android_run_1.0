@@ -1,7 +1,7 @@
 # Media Auto-Actions（客户发图/视频后的自动动作）
 
 > **状态**: 已实现  
-> **最后更新**: 2026-04-12（多分辨率适配：UI 像素检测改为比例计算；DroidRun 端口传递修复；完整 10 步 E2E 真机验证）
+> **最后更新**: 2026-04-12（多分辨率 + DroidRun 端口；**实时跟进下自动拉群后恢复「私聊」列表** — `restore_navigation` / 强化 `ensure_on_private_chats`；见 [Bug 记录](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)）
 
 ## 功能概述
 
@@ -82,6 +82,7 @@
 - **黑名单**：HTTP 前缀为 **`/api/blacklist/...`**。若客户在黑名单中，自动跟进会跳过该会话；联调时可 `POST /api/blacklist/remove`（或桌面黑名单页）放行后再测拉群。
 - **DroidRun Portal**：若曾用 `uiautomator dump` 等占用无障碍，Portal 可能报无障碍不可用；按 `docs/04-bugs-and-fixes/fixed/BUG-2025-12-13-droidrun-portal-connection-failure.md` 重新启用 Portal 无障碍服务。
 - **DroidRun 端口（多设备）**：实时跟进路径已修复端口传递链（`realtime_reply_manager` → `realtime_reply_process` → `response_detector`），每台设备通过 `PortAllocator` 分配独立端口，停止时释放。详见 [多分辨率拉群与端口修复](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)。
+- **拉群后消息列表（私聊 vs 全部）**：工作流结束后 UI 在新**群聊**中；若在实时红点流程内触发自动拉群，必须在返回扫列表前回到 **「私聊」** 筛选，否则 `_detect_first_page_unread` 会在「全部」上扫红点。实现上由 `AutoGroupInviteAction` 的 `finally` 调用 `GroupChatService.restore_navigation()` → `WeComService.ensure_on_private_chats()`，且 `ensure_on_private_chats` 在从会话 `go_back()` 后会再次校验并必要时 `switch_to_private_chats()`；`response_detector` 在处理完单用户后 Step 7 再次调用 `ensure_on_private_chats()` 兜底。详见 [Bug 记录](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)。
 - **拉群成功判定**：`GroupInviteWorkflowService` 在确认建群后依赖 `WeComService.confirm_group_creation` → `get_current_screen() == "chat"`。外部群/中文标题（如 `群聊(N)`）与仅含 `ListView` 的消息区已纳入 `_is_chat_screen` 启发式；详见 [实现说明：黑名单 shim 与联调](../implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md)。
 
 ## 黑名单扩展
@@ -102,7 +103,7 @@
 | 前端 API 客户端        | `wecom-desktop/src/views/mediaActions.spec.ts`                                                            |
 | 前端页面（组件）       | `wecom-desktop/src/views/MediaActionsView.spec.ts`                                                        |
 | 聊天信息菜单启发式     | `tests/unit/test_wecom_service_opt.py`（`TestGroupInviteMenuDetection`）                                  |
-| 完整真机拉群流程       | `tests/integration/test_group_invite_e2e.py`（10 步 E2E，720p + 1080p 验证通过）                         |
+| 完整真机拉群流程       | `tests/integration/test_group_invite_e2e.py`（10 步 E2E，720p + 1080p 验证通过）                          |
 
 运行后端单测目录时注意 pytest `testpaths`：需使用  
 `pytest wecom-desktop/backend/tests/test_media_actions_api.py --override-ini="testpaths=."`  
@@ -110,7 +111,8 @@
 
 ## 相关文档
 
-- [安卓拉群工作流实现说明](../implementation/2026-04-04-android-group-invite-workflow.md) — 模块划分、时序、配置与限制
+- [安卓拉群工作流实现说明](../implementation/2026-04-04-android-group-invite-workflow.md) — 模块划分、时序、配置与限制（含建群后 `restore_navigation`）
+- [自动拉群后私聊列表导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md) — 实时跟进场景根因与三层修复
 - [自定义建群后消息与聊天页菜单兼容](../implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) — 模板、API/UI 对齐、`test-trigger` 语义、真机验证说明
 - [黑名单 shim、同步媒体总线与 Windows 联调](../implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md)
 - [黑名单系统](../01-product/blacklist-system.md) — 数据模型与 `BlacklistWriter` / `BlacklistChecker`

@@ -122,6 +122,15 @@ class AutoGroupInviteAction(IMediaAction):
                 status=ActionStatus.ERROR,
                 message=str(exc),
             )
+        finally:
+            try:
+                restored = await self._service.restore_navigation()
+                if restored:
+                    logger.info("Navigation restored to private chats after auto-group-invite")
+                else:
+                    logger.warning("Could not restore navigation to private chats after auto-group-invite")
+            except Exception as nav_exc:
+                logger.warning("Error restoring navigation after auto-group-invite: %s", nav_exc)
 
     @staticmethod
     def _resolve_group_name(event: MediaEvent, gi_settings: dict) -> str:

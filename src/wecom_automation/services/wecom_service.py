@@ -3049,7 +3049,16 @@ class WeComService:
             self.logger.info("In chat screen, going back...")
             await self.go_back()
             await self.adb.wait(0.5)
-            return True
+            screen = await self.get_current_screen()
+            if screen == "private_chats":
+                return True
+            self.logger.info(f"Landed on '{screen}' after go_back, switching to private chats...")
+            try:
+                await self.switch_to_private_chats()
+                return True
+            except Exception as e:
+                self.logger.error(f"Failed to switch to private chats after go_back: {e}")
+                return False
 
         if screen in ("other", "unknown"):
             self.logger.info("In other screen, navigating to private chats...")

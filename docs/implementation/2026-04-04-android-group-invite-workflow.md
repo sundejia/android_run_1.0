@@ -1,7 +1,7 @@
 # Android 拉群工作流实现说明
 
 > **状态**: 已实现（安卓 UI 自动化）  
-> **最后更新**: 2026-04-12（多分辨率适配：像素硬编码→比例计算；DroidRun 端口传递修复；完整 10 步 E2E 测试验证）
+> **最后更新**: 2026-04-12（多分辨率适配 + DroidRun 端口；**实时跟进后回到私聊列表**：`ensure_on_private_chats` / `restore_navigation`；见 [私聊列表导航修复](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)）
 
 ## 背景与目标
 
@@ -40,7 +40,20 @@ sequenceDiagram
     end
     WF->>WS: send_message(测试文案)
     WS->>ADB: tap / input / get_ui_state
+    Note over Action,GCS: execute() finally
+    Action->>GCS: restore_navigation()
+    GCS->>WS: ensure_on_private_chats()
 ```
+
+## 实时跟进与消息列表（2026-04-12）
+
+自动拉群成功后 UI 停在新**群聊**页。若在实时红点流程中不恢复，后续一次 `go_back()` 可能落在 **「全部」** 而非 **「私聊」**，导致 `_detect_first_page_unread` 扫错列表。
+
+- **`GroupChatService.restore_navigation()`**：封装为对 `WeComService.ensure_on_private_chats()` 的调用。
+- **`AutoGroupInviteAction.execute()`**：在 `try`/`except` 之后的 **`finally`** 中始终调用 `restore_navigation()`（建群成功、失败或异常均执行）。
+- **`WeComService.ensure_on_private_chats()`**：从 `chat` 执行 `go_back()` 后重新识别屏幕；若非 `private_chats` 则调用 `switch_to_private_chats()`。
+
+详见 [Bug 记录：自动拉群后私聊列表](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)。
 
 ## 配置（`media_auto_actions.auto_group_invite`）
 
@@ -72,12 +85,12 @@ sequenceDiagram
 
 ## 测试
 
-| 文件                                               | 覆盖点                                                |
-| -------------------------------------------------- | ----------------------------------------------------- |
-| `tests/unit/test_group_invite_workflow.py`         | 工作流编排、成员去重、失败分支、重命名警告            |
-| `tests/unit/test_group_chat_service.py`            | `GroupChatService` 委托工作流与落库                   |
-| `tests/unit/test_auto_group_invite_action.py`      | 动作向 `create_group_chat` 传递扩展参数、消息模板渲染 |
-| `tests/unit/test_media_actions_settings_loader.py` | 新 JSON 字段默认与合并                                |
+| 文件                                               | 覆盖点                                                                                                                                     |
+| -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| `tests/unit/test_group_invite_workflow.py`         | 工作流编排、成员去重、失败分支、重命名警告                                                                                                 |
+| `tests/unit/test_group_chat_service.py`            | `GroupChatService` 委托工作流与落库；`restore_navigation` 委托与异常降级                                                                   |
+| `tests/unit/test_auto_group_invite_action.py`      | 动作向 `create_group_chat` 传递扩展参数、消息模板渲染；`finally` 中 `restore_navigation` 必调                                              |
+| `tests/unit/test_media_actions_settings_loader.py` | 新 JSON 字段默认与合并                                                                                                                     |
 | `tests/integration/test_group_invite_e2e.py`       | 完整 10 步真机流程（连接→私聊→客户→聊天信息→添加成员→搜索→选择→建群→返回），支持 `--member` 和 `--serial` 参数，已在两种分辨率设备验证通过 |
 
 ## 相关文档
@@ -85,6 +98,7 @@ sequenceDiagram
 - [Media Auto-Actions 功能说明](../features/media-auto-actions.md)
 - [自定义建群后消息与聊天页菜单兼容](2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md)
 - [多分辨率拉群与 DroidRun 端口修复](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)
+- [自动拉群后回到私聊列表](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)
 
 ## 维护备注
 

@@ -85,6 +85,18 @@ class IGroupChatService(ABC):
         ...
 
     @abstractmethod
+    async def restore_navigation(self) -> bool:
+        """Navigate back from a group chat to the private chats list.
+
+        Should be called after group creation completes to restore the UI
+        to the expected state for subsequent operations.
+
+        Returns:
+            True if successfully returned to the private chats list.
+        """
+        ...
+
+    @abstractmethod
     async def group_exists(
         self,
         device_serial: str,
@@ -283,6 +295,17 @@ class GroupChatService(IGroupChatService):
                 )
         except Exception as exc:
             logger.warning("Failed to record group creation: %s", exc)
+
+    async def restore_navigation(self) -> bool:
+        """Navigate from the newly created group chat back to private chats list."""
+        if self._wecom_service is None:
+            logger.debug("No WeComService available; cannot restore navigation")
+            return False
+        try:
+            return await self._wecom_service.ensure_on_private_chats()
+        except Exception as exc:
+            logger.warning("Failed to restore navigation to private chats: %s", exc)
+            return False
 
     async def group_exists(
         self,

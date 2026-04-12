@@ -36,12 +36,12 @@ Added `_screen_width` / `_screen_height` instance variables with `_update_screen
 
 Converted all hardcoded pixel bounds to ratio-based calculations:
 
-| Method | Before (px) | After (ratio) |
-|--------|-------------|---------------|
-| `_find_add_member_entry` fallback | `x2 <= 360` | `x2 <= sw * 0.52` |
-| `_is_image_like_click_target` | `x1 >= 480, y1 <= 260` | `x1 >= sw * 0.44, y1 <= sh * 0.12` |
-| `_find_search_button` fallback | `bounds[1] <= 160, bounds[0] >= 560` | `bounds[1] <= sh * 0.08, bounds[0] >= sw * 0.52` |
-| `_find_member_result_candidates` | `bounds[0] < 150` | `bounds[0] < sw * 0.14` |
+| Method                            | Before (px)                          | After (ratio)                                    |
+| --------------------------------- | ------------------------------------ | ------------------------------------------------ |
+| `_find_add_member_entry` fallback | `x2 <= 360`                          | `x2 <= sw * 0.52`                                |
+| `_is_image_like_click_target`     | `x1 >= 480, y1 <= 260`               | `x1 >= sw * 0.44, y1 <= sh * 0.12`               |
+| `_find_search_button` fallback    | `bounds[1] <= 160, bounds[0] >= 560` | `bounds[1] <= sh * 0.08, bounds[0] >= sw * 0.52` |
+| `_find_member_result_candidates`  | `bounds[0] < 150`                    | `bounds[0] < sw * 0.14`                          |
 
 ### 2. Per-Device DroidRun Port (3 files)
 
@@ -77,17 +77,21 @@ Extended from 8 steps (stopped at "find add-member") to 10 steps covering the fu
 
 Both devices pass 10/10 steps with the complete group invite flow:
 
-| Device | Resolution | Result |
-|--------|-----------|--------|
-| V2357A (10AEB80XHX006D4) | 720×1612 | **10/10 PASS** |
-| V2055A (9586492623004ZE) | 1080×2400 | **10/10 PASS** |
+| Device                   | Resolution | Result         |
+| ------------------------ | ---------- | -------------- |
+| V2357A (10AEB80XHX006D4) | 720×1612   | **10/10 PASS** |
+| V2055A (9586492623004ZE) | 1080×2400  | **10/10 PASS** |
 
 ## Files Changed
 
-| File | Change |
-|------|--------|
-| `src/wecom_automation/services/wecom_service.py` | Resolution-aware bounds, screen dimension caching, debug logging, Loguru format fix, `details` → `context` bug fix |
-| `wecom-desktop/backend/services/followup/response_detector.py` | Accept and propagate `droidrun_port` |
-| `wecom-desktop/backend/scripts/realtime_reply_process.py` | `--tcp-port` CLI argument |
-| `wecom-desktop/backend/services/realtime_reply_manager.py` | Port allocation/release via `PortAllocator` |
-| `tests/integration/test_group_invite_e2e.py` | Full 10-step flow with `--member` argument |
+| File                                                           | Change                                                                                                             |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `src/wecom_automation/services/wecom_service.py`               | Resolution-aware bounds, screen dimension caching, debug logging, Loguru format fix, `details` → `context` bug fix |
+| `wecom-desktop/backend/services/followup/response_detector.py` | Accept and propagate `droidrun_port`                                                                               |
+| `wecom-desktop/backend/scripts/realtime_reply_process.py`      | `--tcp-port` CLI argument                                                                                          |
+| `wecom-desktop/backend/services/realtime_reply_manager.py`     | Port allocation/release via `PortAllocator`                                                                        |
+| `tests/integration/test_group_invite_e2e.py`                   | Full 10-step flow with `--member` argument                                                                         |
+
+## Related (same feature area)
+
+- [Auto group invite: return realtime scan to Private Chats](2026-04-12-auto-group-invite-private-chats-navigation.md) — separate fix for message list filter after group creation inside realtime reply (not covered by resolution or port changes above).
