@@ -1,7 +1,7 @@
 # Media Auto-Actions（客户发图/视频后的自动动作）
 
 > **状态**: 已实现  
-> **最后更新**: 2026-04-05（自定义建群后消息模板、聊天页右上角菜单兼容、`test-trigger` 行为说明修正）
+> **最后更新**: 2026-04-12（多分辨率适配：UI 像素检测改为比例计算；DroidRun 端口传递修复；完整 10 步 E2E 真机验证）
 
 ## 功能概述
 
@@ -81,6 +81,7 @@
 - **实时会话**：`POST /api/realtime/device/{serial}/start` 启动设备实时跟进；日志中应出现 `Media auto-actions enabled`（来自 `response_detector` 挂载的 `MediaEventBus`）。
 - **黑名单**：HTTP 前缀为 **`/api/blacklist/...`**。若客户在黑名单中，自动跟进会跳过该会话；联调时可 `POST /api/blacklist/remove`（或桌面黑名单页）放行后再测拉群。
 - **DroidRun Portal**：若曾用 `uiautomator dump` 等占用无障碍，Portal 可能报无障碍不可用；按 `docs/04-bugs-and-fixes/fixed/BUG-2025-12-13-droidrun-portal-connection-failure.md` 重新启用 Portal 无障碍服务。
+- **DroidRun 端口（多设备）**：实时跟进路径已修复端口传递链（`realtime_reply_manager` → `realtime_reply_process` → `response_detector`），每台设备通过 `PortAllocator` 分配独立端口，停止时释放。详见 [多分辨率拉群与端口修复](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)。
 - **拉群成功判定**：`GroupInviteWorkflowService` 在确认建群后依赖 `WeComService.confirm_group_creation` → `get_current_screen() == "chat"`。外部群/中文标题（如 `群聊(N)`）与仅含 `ListView` 的消息区已纳入 `_is_chat_screen` 启发式；详见 [实现说明：黑名单 shim 与联调](../implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md)。
 
 ## 黑名单扩展
@@ -101,6 +102,7 @@
 | 前端 API 客户端        | `wecom-desktop/src/views/mediaActions.spec.ts`                                                            |
 | 前端页面（组件）       | `wecom-desktop/src/views/MediaActionsView.spec.ts`                                                        |
 | 聊天信息菜单启发式     | `tests/unit/test_wecom_service_opt.py`（`TestGroupInviteMenuDetection`）                                  |
+| 完整真机拉群流程       | `tests/integration/test_group_invite_e2e.py`（10 步 E2E，720p + 1080p 验证通过）                         |
 
 运行后端单测目录时注意 pytest `testpaths`：需使用  
 `pytest wecom-desktop/backend/tests/test_media_actions_api.py --override-ini="testpaths=."`  

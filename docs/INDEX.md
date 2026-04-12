@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-04-10 (SidecarSettings dataclass aligned with SIDECAR DB keys; safe `ai_server_url` in AI error paths)
+> Last Updated: 2026-04-12 (Multi-resolution group invite fix; DroidRun per-device port propagation; full 10-step E2E validation)
 
 ---
 
@@ -32,7 +32,8 @@
 | Feature                                                                                     | Status      | Date       | Description                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------- | ----------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [System Robustness Fixes](implementation/2026-04-09-system-robustness-fixes.md)             | ✅ Complete | 2026-04-09 | AI circuit breaker, failure metrics, process auto-restart, heartbeat monitoring API, AI health checks, night-mode Sidecar timeout; 2026-04-10 follow-up: `SidecarSettings` matches DB keys, AI error logging fix |
-| [Media Auto-Actions](features/media-auto-actions.md)                                        | ✅ Complete | 2026-04-05 | Auto-blacklist + Android group invite; configurable post-group message template + desktop preview; `test-trigger` does not run full UI invite without `WeComService`; chat header “more” menu compatibility      |
+| [Multi-Resolution Group Invite Fix](bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md) | ✅ Complete | 2026-04-12 | Resolution-aware UI bounds for group invite; DroidRun per-device port propagation; full 10-step E2E on 720p+1080p devices |
+| [Media Auto-Actions](features/media-auto-actions.md)                                        | ✅ Complete | 2026-04-05 | Auto-blacklist + Android group invite; multi-resolution bounds fix + DroidRun port propagation (2026-04-12) |
 | [Follow-up Message Deduplication](01-product/followup-deduplication-feature.md)             | ✅ Complete | 2026-02-06 | Prevent duplicate message templates per customer, requires 3+ templates                                                                                                                                          |
 | [UI Improvements - Dashboard, Realtime, Stickers](01-product/2026-02-05-ui-improvements.md) | ✅ Complete | 2026-02-05 | Unified dashboard card heights, Realtime Reply AI always enabled, fixed sticker display                                                                                                                          |
 | [Followup Attempt Intervals](01-product/2026-02-02-followup-attempt-intervals.md)           | ✅ Complete | 2026-02-02 | Customizable intervals between followup attempts (1st/2nd/3rd wait times)                                                                                                                                        |

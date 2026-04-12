@@ -243,10 +243,30 @@ class WeComService:
         # Optional cancel checker - async function that raises exception if cancelled
         self._cancel_checker: Callable[[], Awaitable[None]] | None = None
 
+        # Cached screen dimensions (lazily populated from UI tree root)
+        self._screen_width: int = 1080
+        self._screen_height: int = 2340
+
     @property
     def device_serial(self) -> str:
         """Get the device serial number."""
         return self.config.device_serial or "unknown"
+
+    def _update_screen_dimensions(self, elements: list[dict]) -> None:
+        """Detect and cache screen dimensions from the root element bounds."""
+        if not elements:
+            return
+        root = elements[0] if elements else None
+        if not root:
+            return
+        bounds = self._parse_element_bounds(root)
+        if bounds:
+            _, _, w, h = bounds
+            if w > 100 and h > 100:
+                if w != self._screen_width or h != self._screen_height:
+                    self.logger.info(f"Screen dimensions detected: {w}x{h}")
+                self._screen_width = w
+                self._screen_height = h
 
     def set_cancel_checker(self, checker: Callable[[], Awaitable[None]] | None) -> None:
         """Set a cancel checker callback that will be called during long operations."""
@@ -388,7 +408,7 @@ class WeComService:
                 raise NavigationError(
                     "Failed to confirm 'Private chats' selection",
                     target="Private chats",
-                    details={"filter_text": new_filter},
+                    context={"filter_text": new_filter},
                 )
             else:
                 raise NavigationError(
@@ -1612,7 +1632,7 @@ class WeComService:
                         target_silk_file,
                     )
                 else:
-                    self.logger.info("Found newly cached SILK (date+duration pick): %s", target_silk_file)
+                    self.logger.info(f"Found newly cached SILK (date+duration pick): {target_silk_file}")
             elif current_files_list:
                 target_silk_file = _select_silk_by_date_and_duration(
                     adb_cmd,
@@ -3170,6 +3190,7 @@ class WeComService:
         """Open the chat information screen from a chat conversation."""
         _ = device_serial
         ui_tree, elements = await self.adb.get_ui_state(force=True)
+        self._update_screen_dimensions(elements)
         menu_button = self._find_group_invite_menu_button(elements)
         if not menu_button and ui_tree:
             menu_button = self._find_group_invite_menu_button([ui_tree], is_flat_list=False)
@@ -3189,6 +3210,7 @@ class WeComService:
         """Tap the add-member entry from the chat info screen."""
         _ = device_serial
         ui_tree, elements = await self.adb.get_ui_state(force=True)
+        self._update_screen_dimensions(elements)
         add_button = self._find_add_member_entry(elements)
         if not add_button and ui_tree:
             add_button = self._find_add_member_entry([ui_tree], is_flat_list=False)
@@ -3213,7 +3235,7 @@ class WeComService:
         """Search for a member and select the first matching result."""
         _ = device_serial
         if duplicate_name_policy != "first":
-            self.logger.warning("Unsupported duplicate policy '%s', falling back to first", duplicate_name_policy)
+            self.logger.warning(f"Unsupported duplicate policy '{duplicate_name_policy}', falling back to first")
 
         input_ready = await self._ensure_member_search_input_ready()
         if not input_ready:
@@ -3225,6 +3247,7 @@ class WeComService:
         await self.adb.wait(self.config.timing.ui_stabilization_delay)
 
         ui_tree, elements = await self.adb.get_ui_state(force=True)
+        self._update_screen_dimensions(elements)
         search_input = self._find_search_input(elements)
         matches = self._find_member_result_candidates(elements, member_name, anchor=search_input)
         if not matches and ui_tree:
@@ -3233,11 +3256,11 @@ class WeComService:
             )
 
         if not matches:
-            self.logger.warning("Could not find search result for member '%s'", member_name)
+            self.logger.warning(f"Could not find search result for member '{member_name}'")
             return False
 
         if not await self._tap_element(matches[0]):
-            self.logger.warning("Could not tap member search result for '%s'", member_name)
+            self.logger.warning(f"Could not tap member search result for '{member_name}'")
             return False
 
         await self.adb.wait(self.config.timing.tap_delay)
@@ -3251,6 +3274,7 @@ class WeComService:
         """Confirm group creation and wait until chat view is ready."""
         _ = device_serial
         ui_tree, elements = await self.adb.get_ui_state(force=True)
+        self._update_screen_dimensions(elements)
         confirm_button = self._find_group_confirm_button(elements)
         if not confirm_button and ui_tree:
             confirm_button = self._find_group_confirm_button([ui_tree], is_flat_list=False)
@@ -3298,8 +3322,11 @@ class WeComService:
             is_flat_list=is_flat_list,
         )
         if matches:
+            self.logger.debug(f"Found {len(matches)} chat-info menu candidates by keywords")
             return self._pick_top_right_element(matches)
-        return self._pick_top_right_element(self._collect_header_action_candidates(elements, is_flat_list=is_flat_list))
+        candidates = self._collect_header_action_candidates(elements, is_flat_list=is_flat_list)
+        self.logger.debug(f"Keyword match failed; {len(candidates)} header-action fallback candidates")
+        return self._pick_top_right_element(candidates)
 
     def _find_add_member_entry(
         self,
@@ -3321,6 +3348,7 @@ class WeComService:
         # top member strip and pick the first image-only tile after the
         # customer's own avatar tile.
         fallback_candidates: list[dict] = []
+        sw, sh = self._screen_width, self._screen_height
 
         def collect_fallback_candidates(items: list[dict]) -> None:
             for element in items:
@@ -3339,12 +3367,12 @@ class WeComService:
                             width = x2 - x1
                             height = y2 - y1
                             if (
-                                150 <= x1
-                                and 180 <= y1
-                                and x2 <= 360
-                                and y2 <= 420
-                                and 80 <= width <= 220
-                                and 80 <= height <= 220
+                                x1 >= sw * 0.19
+                                and y1 >= sh * 0.10
+                                and x2 <= sw * 0.52
+                                and y2 <= sh * 0.28
+                                and sw * 0.08 <= width <= sw * 0.32
+                                and sh * 0.04 <= height <= sh * 0.15
                             ):
                                 fallback_candidates.append(element)
                 if not is_flat_list:
@@ -3353,8 +3381,13 @@ class WeComService:
         collect_fallback_candidates(elements)
 
         if fallback_candidates:
-            self.logger.info("Using image-only fallback for add-member entry")
+            self.logger.info(
+                f"Using image-only fallback for add-member entry ({len(fallback_candidates)} candidates, screen={sw}x{sh})"
+            )
             return self._pick_first_by_layout(fallback_candidates)
+        self.logger.warning(
+            f"No add-member entry found (keywords={len(matches)}, fallback={len(fallback_candidates)}, screen={sw}x{sh})"
+        )
         return None
 
     def _find_search_button(
@@ -3371,14 +3404,15 @@ class WeComService:
         )
         if matches:
             return self._pick_top_right_element(matches)
+        sw, sh = self._screen_width, self._screen_height
         header_candidates = [
             element
             for element in elements
             if isinstance(element, dict)
             and any(token in (element.get("className") or "").lower() for token in ("image", "button", "textview"))
             and (bounds := self._parse_element_bounds(element))
-            and bounds[1] <= 160
-            and bounds[0] >= 560
+            and bounds[1] <= sh * 0.08
+            and bounds[0] >= sw * 0.52
         ]
         if header_candidates:
             self.logger.info("Using top-right fallback for member search entry")
@@ -3398,7 +3432,9 @@ class WeComService:
             is_flat_list=is_flat_list,
         )
         if not matches:
+            self.logger.warning("No confirm/create-group button found by keywords")
             return None
+        self.logger.debug(f"Found {len(matches)} confirm button candidates")
         return self._pick_bottom_right_element(matches)
 
     async def _ensure_member_search_input_ready(self) -> bool:
@@ -3452,6 +3488,7 @@ class WeComService:
         matches: list[dict] = []
         anchor_bounds = self._parse_element_bounds(anchor)
         min_y = anchor_bounds[3] if anchor_bounds else 0
+        min_x = int(self._screen_width * 0.14)
 
         def append_matches(items: list[dict]) -> None:
             for element in items:
@@ -3470,7 +3507,7 @@ class WeComService:
                 bounds = self._parse_element_bounds(element)
                 if bounds and bounds[1] < min_y:
                     continue
-                if bounds and bounds[0] < 150:
+                if bounds and bounds[0] < min_x:
                     if not is_flat_list:
                         append_matches(element.get("children", []))
                     continue
@@ -3573,7 +3610,8 @@ class WeComService:
         if not bounds:
             return False
         x1, y1, x2, y2 = bounds
-        return y1 <= 260 and x1 >= 480 and x2 >= 560 and y2 <= 260
+        sw, sh = self._screen_width, self._screen_height
+        return y1 <= sh * 0.12 and x1 >= sw * 0.44 and x2 >= sw * 0.52 and y2 <= sh * 0.12
 
     # =========================================================================
     # Debug Helpers
