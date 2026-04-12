@@ -1,7 +1,8 @@
 # Android 拉群工作流实现说明
 
 > **状态**: 已实现（安卓 UI 自动化）  
-> **最后更新**: 2026-04-05（建群后消息模板在动作层解析；与 [2026-04-05 姊妹文档](2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) 对齐）
+> **最后更新**: 2026-04-12（与 [多机型拉群可靠性](2026-04-12-auto-group-invite-multi-device-reliability.md) 对齐：`WeComService` 分辨率缩放、重试与选择器扩展；`ui_parser` 弱化 resourceId 依赖）  
+> 历史：2026-04-05 建群后消息模板在动作层解析；与 [2026-04-05 姊妹文档](2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) 对齐
 
 ## 背景与目标
 
@@ -57,8 +58,9 @@ sequenceDiagram
 ## 已知限制
 
 1. **群名重命名**：`set_group_name` 为 best-effort 占位，不阻断建群成功；若需在 UI 上真正改名，需在 `WeComService` 中按版本补全。
-2. **控件差异**：选择器依赖文案、`contentDescription`、`resourceId` 启发式匹配；不同企业微信版本可能需要扩展 `group_invite/selectors.py` 或 `WeComService` 内匹配逻辑。
-3. **`device_serial` 参数**：工作流方法签名保留 `device_serial` 以便多设备扩展；当前实现与既有 `WeComService` 一致，主要使用配置中的设备连接。
+2. **控件差异**：选择器以 **文案 / contentDescription / resourceId pattern** 与 **几何启发式** 为主（见 [2026-04-12 多机型说明](2026-04-12-auto-group-invite-multi-device-reliability.md)）。仍建议在新 WeCom 版本上跑 `scripts/diagnose_group_invite.py` 后再按需扩展 `selectors.py` 或 `WeComService`。
+3. **列表客户名匹配**：`navigate_to_chat` → `_find_user_element` 使用 **与列表行 `text` 完全一致** 的匹配。若会话里只存了短名而 UI 显示带备注后缀，需在业务层传入与列表一致的展示名。
+4. **`device_serial` 参数**：工作流方法签名保留 `device_serial` 以便多设备扩展；当前实现与既有 `WeComService` 一致，主要使用配置中的设备连接。
 
 ## 测试
 
@@ -72,6 +74,7 @@ sequenceDiagram
 ## 相关文档
 
 - [Media Auto-Actions 功能说明](../features/media-auto-actions.md)
+- [多机型 / 多分辨率自动拉群可靠性](2026-04-12-auto-group-invite-multi-device-reliability.md)
 - [自定义建群后消息与聊天页菜单兼容](2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md)
 
 ## 维护备注

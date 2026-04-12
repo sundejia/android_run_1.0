@@ -33,6 +33,7 @@ from wecom_automation.core.models import (
     UserDetail,
 )
 from wecom_automation.services.adb_service import ADBService
+from wecom_automation.services.device_service import DeviceDiscoveryService
 from wecom_automation.services.group_invite import selectors as group_invite_selectors
 from wecom_automation.services.timestamp_parser import TimestampParser
 from wecom_automation.services.ui_parser import UIParserService, message_image_thumbnail_min_ok
@@ -227,6 +228,10 @@ class WeComService:
         result = await service.extract_private_chat_users()
     """
 
+    # Reference resolution for all hardcoded pixel values
+    _REF_WIDTH = 1080
+    _REF_HEIGHT = 2340
+
     def __init__(self, config: Config | None = None):
         """
         Initialize the WeCom service.
@@ -242,6 +247,82 @@ class WeComService:
 
         # Optional cancel checker - async function that raises exception if cancelled
         self._cancel_checker: Callable[[], Awaitable[None]] | None = None
+
+        # Screen resolution (populated lazily on first use)
+        self._screen_width: int | None = None
+        self._screen_height: int | None = None
+
+    async def _ensure_screen_resolution(self) -> None:
+        """Fetch and cache screen resolution from device if not already known.
+
+        Also updates ScrollConfig and ADBService swipe defaults to match
+        the actual device width so scroll center-X is correct on non-1080p
+        screens.
+        """
+        if self._screen_width is not None:
+            return
+        try:
+            discovery = DeviceDiscoveryService()
+            res_str, _ = await discovery._get_screen_info(self.device_serial)
+            if res_str:
+                parts = res_str.split("x")
+                if len(parts) == 2:
+                    self._screen_width = int(parts[0])
+                    self._screen_height = int(parts[1])
+                    self.logger.info(
+                        "Device screen resolution: %dx%d (scale: %.2f)",
+                        self._screen_width,
+                        self._screen_height,
+                        self._scale_x,
+                    )
+                    self._apply_resolution_to_scroll_config()
+                    return
+        except Exception as exc:
+            self.logger.debug("Could not detect screen resolution: %s", exc)
+        self._screen_width = self._REF_WIDTH
+        self._screen_height = self._REF_HEIGHT
+
+    def _apply_resolution_to_scroll_config(self) -> None:
+        """Replace the frozen ScrollConfig with one scaled to actual resolution."""
+        import dataclasses
+
+        sx = self._scale_x
+        sy = self._scale_y
+        old = self.config.scroll
+        new_scroll = dataclasses.replace(
+            old,
+            start_x=int(old.start_x * sx),
+            scroll_up_start_y=int(old.scroll_up_start_y * sy),
+            scroll_up_end_y=int(old.scroll_up_end_y * sy),
+            scroll_down_start_y=int(old.scroll_down_start_y * sy),
+            scroll_down_end_y=int(old.scroll_down_end_y * sy),
+        )
+        self.config = dataclasses.replace(self.config, scroll=new_scroll)
+        self.adb.config = self.config
+
+    @property
+    def _scale_x(self) -> float:
+        """Horizontal scale factor relative to 1080px reference."""
+        w = getattr(self, "_screen_width", None)
+        return (w or self._REF_WIDTH) / self._REF_WIDTH
+
+    @property
+    def _scale_y(self) -> float:
+        """Vertical scale factor relative to 2340px reference."""
+        h = getattr(self, "_screen_height", None)
+        return (h or self._REF_HEIGHT) / self._REF_HEIGHT
+
+    def _sx(self, px: int) -> int:
+        """Scale a horizontal pixel value to the actual screen resolution."""
+        return int(px * self._scale_x)
+
+    def _sy(self, px: int) -> int:
+        """Scale a vertical pixel value to the actual screen resolution."""
+        return int(px * self._scale_y)
+
+    def _scaled_coords(self, coords: tuple[int, int]) -> tuple[int, int]:
+        """Scale an (x, y) coordinate pair from 1080x2340 to actual resolution."""
+        return (self._sx(coords[0]), self._sy(coords[1]))
 
     @property
     def device_serial(self) -> str:
@@ -864,8 +945,7 @@ class WeComService:
                 # Check for skip request before scroll
                 await self._check_cancelled()
 
-                # Fast scroll up
-                await self.adb.swipe(540, 350, 540, 1300, 150)  # Quick swipe
+                await self.adb.swipe(self._sx(540), self._sy(350), self._sx(540), self._sy(1300), 150)
                 await self.adb.wait(0.25)  # Short wait
 
                 # Check for skip request after scroll (reduce response delay)
@@ -1118,8 +1198,7 @@ class WeComService:
                     self.logger.warning(f"  Hit safety limit ({max_scrolls} passes)")
                     break
 
-                # Scroll down with medium speed
-                await self.adb.swipe(540, 1100, 540, 500, 300)
+                await self.adb.swipe(self._sx(540), self._sy(1100), self._sx(540), self._sy(500), 300)
                 await self.adb.wait(0.6)
                 # Check for skip after scroll
                 await self._check_cancelled()
@@ -1280,7 +1359,7 @@ class WeComService:
                 # From the images: Save to phone appears to be around (396, 858) based on typical layout
                 # The button row is at y~830-860 area
                 # Try tapping where "Save to phone" typically is (4th button in row)
-                await self.adb.tap_coordinates(396, 858)
+                await self.adb.tap_coordinates(self._sx(396), self._sy(858))
 
             await self.adb.wait(2.0)  # Wait for save to start
 
@@ -2305,7 +2384,7 @@ class WeComService:
                         self.logger.info("Tapping send button (UI tree fallback)")
                         if await self._tap_element(
                             tree_send_button,
-                            fallback_coords=self.config.app.send_button_coordinates,
+                            fallback_coords=self._scaled_coords(self.config.app.send_button_coordinates),
                         ):
                             await self.adb.wait(self.config.timing.tap_delay)
                             self.logger.info("Message sent successfully")
@@ -2574,8 +2653,8 @@ class WeComService:
 
         _, top, _, bottom = bounds
         effective_bottom = max(viewport_bottom, bottom, 1)
-        threshold = max(600, int(effective_bottom * 0.55))
-        return top >= threshold or bottom >= max(900, int(effective_bottom * 0.7))
+        threshold = max(self._sy(600), int(effective_bottom * 0.55))
+        return top >= threshold or bottom >= max(self._sy(900), int(effective_bottom * 0.7))
 
     async def wait_for_new_messages(
         self,
@@ -3065,21 +3144,19 @@ class WeComService:
             if not back_button:
                 back_button = self._find_back_button(ui_tree)
 
+            scaled_back = self._scaled_coords(self.config.app.back_button_coordinates)
             if back_button:
                 self.logger.info("Attempting to tap detected back button")
                 tapped = await self._tap_element(
                     back_button,
-                    fallback_coords=self.config.app.back_button_coordinates,
+                    fallback_coords=scaled_back,
                 )
                 if not tapped:
                     self.logger.warning("Detected back button but could not tap - using fallback coordinates")
-                    await self.adb.tap_coordinates(*self.config.app.back_button_coordinates)
+                    await self.adb.tap_coordinates(*scaled_back)
             else:
-                # If we can't find the back button, tap the typical location
-                self.logger.warning(
-                    f"Could not find back button, tapping default location {self.config.app.back_button_coordinates}"
-                )
-                await self.adb.tap_coordinates(*self.config.app.back_button_coordinates)
+                self.logger.warning(f"Could not find back button, tapping default location {scaled_back}")
+                await self.adb.tap_coordinates(*scaled_back)
 
             await self.adb.wait(self.config.timing.ui_stabilization_delay)
 
@@ -3162,6 +3239,7 @@ class WeComService:
     async def navigate_to_chat(self, device_serial: str, customer_name: str) -> bool:
         """Open a customer's chat from the private-chats list."""
         _ = device_serial
+        await self._ensure_screen_resolution()
         if not await self.ensure_on_private_chats():
             return False
         return await self.click_user_in_list(customer_name)
@@ -3169,40 +3247,51 @@ class WeComService:
     async def open_chat_info(self, device_serial: str) -> bool:
         """Open the chat information screen from a chat conversation."""
         _ = device_serial
-        ui_tree, elements = await self.adb.get_ui_state(force=True)
-        menu_button = self._find_group_invite_menu_button(elements)
-        if not menu_button and ui_tree:
-            menu_button = self._find_group_invite_menu_button([ui_tree], is_flat_list=False)
+        for attempt in range(3):
+            ui_tree, elements = await self.adb.get_ui_state(force=True)
+            menu_button = self._find_group_invite_menu_button(elements)
+            if not menu_button and ui_tree:
+                menu_button = self._find_group_invite_menu_button([ui_tree], is_flat_list=False)
 
-        if not menu_button:
-            self.logger.warning("Could not find chat info menu button")
-            return False
-
-        if not await self._tap_element(menu_button):
-            self.logger.warning("Could not tap chat info menu button")
-            return False
-
-        await self.adb.wait(self.config.timing.tap_delay)
-        return True
+            if menu_button:
+                if await self._tap_element(menu_button):
+                    await self.adb.wait(self.config.timing.tap_delay)
+                    return True
+                self.logger.warning("Could not tap chat info menu button (attempt %d)", attempt + 1)
+            else:
+                self.logger.warning(
+                    "Could not find chat info menu button (attempt %d, %d elements, tree=%s)",
+                    attempt + 1,
+                    len(elements),
+                    "present" if ui_tree else "empty",
+                )
+            if attempt < 2:
+                await self.adb.wait(1.0)
+        return False
 
     async def tap_add_member_button(self, device_serial: str) -> bool:
         """Tap the add-member entry from the chat info screen."""
         _ = device_serial
-        ui_tree, elements = await self.adb.get_ui_state(force=True)
-        add_button = self._find_add_member_entry(elements)
-        if not add_button and ui_tree:
-            add_button = self._find_add_member_entry([ui_tree], is_flat_list=False)
+        for attempt in range(3):
+            ui_tree, elements = await self.adb.get_ui_state(force=True)
+            add_button = self._find_add_member_entry(elements)
+            if not add_button and ui_tree:
+                add_button = self._find_add_member_entry([ui_tree], is_flat_list=False)
 
-        if not add_button:
-            self.logger.warning("Could not find add-member entry")
-            return False
-
-        if not await self._tap_element(add_button):
-            self.logger.warning("Could not tap add-member entry")
-            return False
-
-        await self.adb.wait(self.config.timing.tap_delay)
-        return True
+            if add_button:
+                if await self._tap_element(add_button):
+                    await self.adb.wait(self.config.timing.tap_delay)
+                    return True
+                self.logger.warning("Could not tap add-member entry (attempt %d)", attempt + 1)
+            else:
+                self.logger.warning(
+                    "Could not find add-member entry (attempt %d, %d elements)",
+                    attempt + 1,
+                    len(elements),
+                )
+            if attempt < 2:
+                await self.adb.wait(1.0)
+        return False
 
     async def search_and_select_member(
         self,
@@ -3224,24 +3313,31 @@ class WeComService:
         await self.adb.input_text(member_name)
         await self.adb.wait(self.config.timing.ui_stabilization_delay)
 
-        ui_tree, elements = await self.adb.get_ui_state(force=True)
-        search_input = self._find_search_input(elements)
-        matches = self._find_member_result_candidates(elements, member_name, anchor=search_input)
-        if not matches and ui_tree:
-            matches = self._find_member_result_candidates(
-                [ui_tree], member_name, anchor=search_input, is_flat_list=False
-            )
+        for attempt in range(3):
+            ui_tree, elements = await self.adb.get_ui_state(force=True)
+            search_input = self._find_search_input(elements)
+            matches = self._find_member_result_candidates(elements, member_name, anchor=search_input)
+            if not matches and ui_tree:
+                matches = self._find_member_result_candidates(
+                    [ui_tree], member_name, anchor=search_input, is_flat_list=False
+                )
 
-        if not matches:
-            self.logger.warning("Could not find search result for member '%s'", member_name)
-            return False
+            if matches:
+                if await self._tap_element(matches[0]):
+                    await self.adb.wait(self.config.timing.tap_delay)
+                    return True
+                self.logger.warning("Could not tap member result for '%s' (attempt %d)", member_name, attempt + 1)
+            else:
+                self.logger.warning(
+                    "No search results for member '%s' (attempt %d, %d elements)",
+                    member_name,
+                    attempt + 1,
+                    len(elements),
+                )
+            if attempt < 2:
+                await self.adb.wait(1.0)
 
-        if not await self._tap_element(matches[0]):
-            self.logger.warning("Could not tap member search result for '%s'", member_name)
-            return False
-
-        await self.adb.wait(self.config.timing.tap_delay)
-        return True
+        return False
 
     async def confirm_group_creation(
         self,
@@ -3250,22 +3346,28 @@ class WeComService:
     ) -> bool:
         """Confirm group creation and wait until chat view is ready."""
         _ = device_serial
-        ui_tree, elements = await self.adb.get_ui_state(force=True)
-        confirm_button = self._find_group_confirm_button(elements)
-        if not confirm_button and ui_tree:
-            confirm_button = self._find_group_confirm_button([ui_tree], is_flat_list=False)
+        for attempt in range(3):
+            ui_tree, elements = await self.adb.get_ui_state(force=True)
+            confirm_button = self._find_group_confirm_button(elements)
+            if not confirm_button and ui_tree:
+                confirm_button = self._find_group_confirm_button([ui_tree], is_flat_list=False)
 
-        if not confirm_button:
-            self.logger.warning("Could not find confirm/create-group button")
-            return False
-
-        if not await self._tap_element(confirm_button):
-            self.logger.warning("Could not tap confirm/create-group button")
+            if confirm_button:
+                if await self._tap_element(confirm_button):
+                    break
+                self.logger.warning("Could not tap confirm/create-group button (attempt %d)", attempt + 1)
+            else:
+                self.logger.warning(
+                    "Could not find confirm/create-group button (attempt %d, %d elements)",
+                    attempt + 1,
+                    len(elements),
+                )
+            if attempt < 2:
+                await self.adb.wait(1.0)
+        else:
             return False
 
         await self.adb.wait(max(post_confirm_wait_seconds, self.config.timing.tap_delay))
-        # External-group creation can take noticeably longer than a normal chat
-        # transition before the destination chat screen becomes detectable.
         deadline = time.monotonic() + max(post_confirm_wait_seconds, 1.0) + 30.0
         while time.monotonic() < deadline:
             if await self.get_current_screen() == "chat":
@@ -3319,7 +3421,7 @@ class WeComService:
         # Some WeCom builds render the add-member affordance in the member grid
         # as a bare ImageView without text/resource hints. Fall back to the
         # top member strip and pick the first image-only tile after the
-        # customer's own avatar tile.
+        # customer's own avatar tile. Bounds scaled for device resolution.
         fallback_candidates: list[dict] = []
 
         def collect_fallback_candidates(items: list[dict]) -> None:
@@ -3339,12 +3441,12 @@ class WeComService:
                             width = x2 - x1
                             height = y2 - y1
                             if (
-                                150 <= x1
-                                and 180 <= y1
-                                and x2 <= 360
-                                and y2 <= 420
-                                and 80 <= width <= 220
-                                and 80 <= height <= 220
+                                self._sx(100) <= x1
+                                and self._sy(150) <= y1
+                                and x2 <= self._sx(500)
+                                and y2 <= self._sy(500)
+                                and self._sx(60) <= width <= self._sx(250)
+                                and self._sy(60) <= height <= self._sy(250)
                             ):
                                 fallback_candidates.append(element)
                 if not is_flat_list:
@@ -3377,8 +3479,8 @@ class WeComService:
             if isinstance(element, dict)
             and any(token in (element.get("className") or "").lower() for token in ("image", "button", "textview"))
             and (bounds := self._parse_element_bounds(element))
-            and bounds[1] <= 160
-            and bounds[0] >= 560
+            and bounds[1] <= self._sy(200)
+            and bounds[0] >= self._sx(480)
         ]
         if header_candidates:
             self.logger.info("Using top-right fallback for member search entry")
@@ -3470,7 +3572,7 @@ class WeComService:
                 bounds = self._parse_element_bounds(element)
                 if bounds and bounds[1] < min_y:
                     continue
-                if bounds and bounds[0] < 150:
+                if bounds and bounds[0] < self._sx(120):
                     if not is_flat_list:
                         append_matches(element.get("children", []))
                     continue
@@ -3573,7 +3675,7 @@ class WeComService:
         if not bounds:
             return False
         x1, y1, x2, y2 = bounds
-        return y1 <= 260 and x1 >= 480 and x2 >= 560 and y2 <= 260
+        return y1 <= self._sy(300) and x1 >= self._sx(400) and x2 >= self._sx(480) and y2 <= self._sy(300)
 
     # =========================================================================
     # Debug Helpers

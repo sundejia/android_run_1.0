@@ -1173,34 +1173,37 @@ class UIParserService:
         for node in all_nodes:
             rid = (node.get("resourceId") or "").lower()
             text = (node.get("text") or "").strip()
+            class_name = (node.get("className") or "").lower()
 
-            # Check for timestamp (ief in old WeCom, ih1 in newer WeCom)
-            if ("ief" in rid or "ih1" in rid) and text:
-                # Verify this looks like a timestamp, not a system message
-                if not self._is_system_message_text(text):
-                    timestamp = text
+            if not text:
+                if "imageview" in class_name:
+                    node_bounds = self._get_node_bounds(node)
+                    if node_bounds and self._is_avatar_by_bounds(node_bounds):
+                        has_avatar = True
+                if any(hint in rid for hint in self.ui_config.avatar_resource_id_hints):
+                    has_avatar = True
                 continue
 
-            # Check for avatar - indicates actual message row
+            if self._looks_like_timestamp_text(text) and not self._is_system_message_text(text):
+                timestamp = text
+                continue
+
             if any(hint in rid for hint in self.ui_config.avatar_resource_id_hints):
                 has_avatar = True
                 continue
 
-            # Check for message content
-            if any(hint in rid for hint in self.ui_config.snippet_resource_id_hints) and text:
+            if any(hint in rid for hint in self.ui_config.snippet_resource_id_hints):
                 has_content = True
                 continue
 
-            # Check for voice duration:
-            # - ies in old WeCom
-            # - ie5 in mid WeCom
-            # - ihf in newer WeCom
-            # - iht on currently observed devices
-            if ("ies" in rid or "ie5" in rid or "ihf" in rid or "iht" in rid) and text:
+            if self._looks_like_voice_duration(text):
                 has_content = True
                 continue
 
-        # It's a timestamp separator if it has timestamp but no content/avatar
+            if "textview" in class_name and len(text) > 1:
+                has_content = True
+                continue
+
         if timestamp and not has_content and not has_avatar:
             return timestamp
 
@@ -1268,25 +1271,52 @@ class UIParserService:
             rid = (node.get("resourceId") or "").lower()
             text = (node.get("text") or "").strip()
             node_bounds = self._get_node_bounds(node)
+            class_name = (node.get("className") or "").lower()
 
-            # Get X position for alignment detection
-            # Use CENTER X instead of left edge (x1) for accurate alignment detection
-            # This fixes the issue where kefu messages were misidentified as customer messages
-            # because text left edge can be on left side even for right-aligned bubbles
             node_x = 0
             node_center_x = 0
+            node_width = 0
+            node_height = 0
             if node_bounds:
                 match = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", node_bounds)
                 if match:
-                    x1, _, x2, _ = map(int, match.groups())
-                    node_x = x1  # Left edge (for avatar detection)
-                    node_center_x = (x1 + x2) // 2  # Center (for content alignment)
+                    x1, y1, x2, y2 = map(int, match.groups())
+                    node_x = x1
+                    node_center_x = (x1 + x2) // 2
+                    node_width = x2 - x1
+                    node_height = y2 - y1
 
-            # Timestamp (ief in old WeCom, ih1 in newer WeCom) - but can also be system messages!
-            if ("ief" in rid or "ih1" in rid) and text:
-                # Check if this is actually a system message
+            # --- Avatar detection (structural: small square ImageView) ---
+            if "imageview" in class_name and node_bounds:
+                if self._is_avatar_by_bounds(node_bounds):
+                    avatar_x = node_x
+                    continue
+            if any(hint in rid for hint in self.ui_config.avatar_resource_id_hints):
+                avatar_x = node_x
+                continue
+
+            if not text:
+                # --- Video thumbnail (large ImageView, not avatar) ---
+                if "imageview" in class_name and node_bounds:
+                    if node_width >= 100 and node_height >= 100:
+                        has_video_thumbnail = True
+                # --- Play button overlay (small centered ImageView/Button inside video) ---
+                if ("imageview" in class_name or "imagebutton" in class_name) and node_bounds:
+                    if 30 <= node_width <= 120 and 30 <= node_height <= 120:
+                        parent_has_large_image = has_video_thumbnail
+                        if parent_has_large_image:
+                            has_play_button = True
+                # --- Sticker (RelativeLayout, no children, mid-size) ---
+                if "relativelayout" in class_name:
+                    child_count = node.get("childCount", len(node.get("children", [])))
+                    if child_count == 0 and 80 <= node_width <= 400 and 80 <= node_height <= 400:
+                        has_sticker = True
+                        sticker_bounds = node_bounds
+                continue
+
+            # --- Timestamp (structural: looks like time text, centered) ---
+            if self._looks_like_timestamp_text(text):
                 if self._is_system_message_text(text):
-                    # This is a system message, not a timestamp
                     return ConversationMessage(
                         content=text,
                         timestamp=None,
@@ -1295,72 +1325,34 @@ class UIParserService:
                         raw_bounds=row_bounds,
                         _raw_index=index,
                     )
-                else:
-                    timestamp = text
+                timestamp = text
                 continue
 
-            # Avatar - used to determine self vs other
-            if any(hint in rid for hint in self.ui_config.avatar_resource_id_hints):
-                avatar_x = node_x  # Use left edge for avatar (small square element)
-                continue
-
-            # Voice duration:
-            # - ies in old WeCom
-            # - ie5 in mid WeCom
-            # - ihf in newer WeCom
-            # - iht on currently observed devices
-            if ("ies" in rid or "ie5" in rid or "ihf" in rid or "iht" in rid) and text:
+            # --- Voice duration (short text like '2"', '15"') ---
+            if self._looks_like_voice_duration(text):
                 voice_duration = text
                 message_type = "voice"
                 continue
 
-            # Voice transcription:
-            # - p05 in old WeCom
-            # - oyl in mid WeCom
-            # - p47 in newer WeCom
-            # - p4w on currently observed devices
-            if ("p05" in rid or "oyl" in rid or "p47" in rid or "p4w" in rid) and text:
+            # --- Video duration (MM:SS format, distinct from voice) ---
+            if re.match(r"^\d{1,2}:\d{2}(:\d{2})?$", text):
+                video_duration = text
+                continue
+
+            # --- Voice transcription (longer text near a voice element) ---
+            if voice_duration and not content and len(text) > 3:
                 voice_transcription = text
                 continue
 
-            # Text message content
-            if any(hint in rid for hint in self.ui_config.snippet_resource_id_hints) and text:
-                content = text
-                # Use CENTER X for content alignment detection
-                # This is critical: right-aligned bubbles have text starting from left
-                # but the bubble center is on the right side
-                content_x = node_center_x
-                continue
-
-            # Video duration:
-            # - e5v in old WeCom
-            # - e5l in newer WeCom
-            # - e8l on currently observed devices
-            # This appears in video messages, distinct from voice duration
-            if ("e5v" in rid or "e5l" in rid or "e8l" in rid) and text:
-                # Video duration format is typically "MM:SS" or "H:MM:SS"
-                if re.match(r"^\d{1,2}:\d{2}(:\d{2})?$", text):
-                    video_duration = text
-                continue
-
-            # Video thumbnail (k2j in old WeCom, k1r/k1s in new WeCom)
-            if "k2j" in rid or "k1r" in rid or "k1s" in rid:
-                has_video_thumbnail = True
-                continue
-
-            # Play button overlay (jqb in old WeCom, jpn in new WeCom) - indicates video
-            if "jqb" in rid or "jpn" in rid:
-                has_play_button = True
-                continue
-
-            # Sticker detection (igf in old WeCom, ijr in newer WeCom + RelativeLayout + childCount=0)
-            # Stickers have: className="RelativeLayout", childCount=0, large bounds (not a button)
-            if "igf" in rid or "ijr" in rid:
-                class_name = (node.get("className") or "").lower()
-                child_count = node.get("childCount", len(node.get("children", [])))
-                if "relativelayout" in class_name and child_count == 0:
-                    has_sticker = True
-                    sticker_bounds = node_bounds
+            # --- Text content (any substantial TextView text) ---
+            if "textview" in class_name and text and not self._is_system_message_text(text):
+                if any(hint in rid for hint in self.ui_config.snippet_resource_id_hints):
+                    content = text
+                    content_x = node_center_x
+                    continue
+                if len(text) > 1 and not content:
+                    content = text
+                    content_x = node_center_x
                     continue
 
         # Determine if self message based on avatar position and message bubble position
@@ -1446,18 +1438,13 @@ class UIParserService:
                     if not content:
                         content = "[图片]"
 
-        # Check for system messages (timestamp-only rows or centered text)
         if not content and not voice_duration and not image_info:
-            # This might be a timestamp-only row or system message
-            # Check for system message patterns
             for node in all_nodes:
                 text = (node.get("text") or "").strip()
-                rid = (node.get("resourceId") or "").lower()
-
-                # Skip timestamp which we already captured (ief in old, ih1 in newer WeCom)
-                if "ief" in rid or "ih1" in rid:
+                if not text:
                     continue
-
+                if self._looks_like_timestamp_text(text):
+                    continue
                 if text and self._is_system_message_text(text):
                     return ConversationMessage(
                         content=text,
@@ -1498,23 +1485,24 @@ class UIParserService:
         """
         Find a message image (not avatar) in the nodes.
 
-        Avatars have id 'im4' and are small (~114px).
-        Message images are larger and don't have avatar id.
+        Uses structural heuristics: avatars are small squares (~60-130px),
+        message images are larger. No resource-ID dependency.
         """
         for node in all_nodes:
             rid = (node.get("resourceId") or "").lower()
             class_name = (node.get("className") or "").lower()
             bounds = self._get_node_bounds(node)
 
-            # Skip avatars (im4/ilg in old WeCom, iov in newer WeCom)
-            if any(hint in rid for hint in self.ui_config.avatar_resource_id_hints):
-                continue
-
-            # Check if this is an ImageView
             if "imageview" not in class_name and "image" not in class_name:
                 continue
 
             if not bounds:
+                continue
+
+            if any(hint in rid for hint in self.ui_config.avatar_resource_id_hints):
+                continue
+
+            if self._is_avatar_by_bounds(bounds):
                 continue
 
             match = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds)
@@ -1533,6 +1521,53 @@ class UIParserService:
                 )
 
         return None
+
+    @staticmethod
+    def _looks_like_timestamp_text(text: str) -> bool:
+        """Check if text looks like a timestamp (time, date, relative time, day name)."""
+        if not text or len(text) > 50:
+            return False
+        t = text.strip()
+        if TIME_PATTERN.fullmatch(t):
+            return True
+        if re.match(r"^(?:AM|PM)\s*\d{1,2}:\d{2}$", t, re.IGNORECASE):
+            return True
+        if re.match(r"^\d{1,2}:\d{2}\s*(?:AM|PM)$", t, re.IGNORECASE):
+            return True
+        if RELATIVE_TIME_PATTERN.fullmatch(t):
+            return True
+        if RELATIVE_TIME_PATTERN_CN.fullmatch(t):
+            return True
+        if DATE_PATTERN.fullmatch(t):
+            return True
+        if t.lower() in ("yesterday", "昨天", "today", "今天", "前天"):
+            return True
+        if t.lower() in [d.lower() for d in DAY_NAMES]:
+            return True
+        if re.match(r"^\d{4}[/\-]\d{1,2}[/\-]\d{1,2}$", t):
+            return True
+        return False
+
+    @staticmethod
+    def _looks_like_voice_duration(text: str) -> bool:
+        """Check if text looks like a voice message duration (e.g. '2"', '15"', '1\'30"')."""
+        t = text.strip()
+        if re.match(r'^\d{1,3}"$', t):
+            return True
+        if re.match(r"^\d{1,3}'?\d*\"$", t):
+            return True
+        return False
+
+    @staticmethod
+    def _is_avatar_by_bounds(bounds_str: str) -> bool:
+        """Check if bounds describe an avatar-sized element (small square, ~60-130px)."""
+        m = re.match(r"\[(\d+),(\d+)\]\[(\d+),(\d+)\]", bounds_str)
+        if not m:
+            return False
+        x1, y1, x2, y2 = map(int, m.groups())
+        w = x2 - x1
+        h = y2 - y1
+        return 40 <= w <= 160 and 40 <= h <= 160 and abs(w - h) <= 30
 
     def _is_system_message_text(self, text: str) -> bool:
         """Check if text looks like a system message."""

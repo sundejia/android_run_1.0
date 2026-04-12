@@ -1,7 +1,7 @@
 # Media Auto-Actions（客户发图/视频后的自动动作）
 
 > **状态**: 已实现  
-> **最后更新**: 2026-04-05（自定义建群后消息模板、聊天页右上角菜单兼容、`test-trigger` 行为说明修正）
+> **最后更新**: 2026-04-12（多机型 / 多分辨率拉群可靠性：`ui_parser` 结构启发式、`WeComService` 分辨率缩放与重试、选择器扩展；真机验证与诊断脚本说明见 [实现说明](../implementation/2026-04-12-auto-group-invite-multi-device-reliability.md)）
 
 ## 功能概述
 
@@ -75,6 +75,16 @@
 
 **聊天页右上角菜单**：部分企业微信版本将「更多」渲染为无文案的可点击 `TextView` / `RelativeLayout`。`open_chat_info` 使用的 `_find_group_invite_menu_button` 已扩展树形递归与头部区域启发式（见 [实现说明](../implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md)）。
 
+### 多版本 / 多分辨率可靠性（2026-04-12）
+
+- **客户媒体识别**：`MessageProcessor` 依赖的 `UIParser` 对图片 / 视频等尽量使用 **bounds + className + 文案正则**，减少对易变 `resourceId` 的依赖；否则不同 WeCom 小版本会导致根本不触发 `MediaEvent`。
+- **拉群 UI**：`WeComService` 在组内关键步骤带 **重试与日志**；像素类坐标按 **1080×2340 基准** 对当前设备分辨率缩放；`group_invite/selectors.py` 持续扩展文案与 pattern。
+- **诊断**：`scripts/diagnose_group_invite.py` 对在线设备采集版本、分辨率与 UI 样本；默认写入 `diagnostic_reports/`（仓库 `.gitignore` 忽略除 `README.md` 外的生成文件，见该目录说明）。
+- **真机冒烟**（需 USB 调试与 DroidRun/Portal 可用）：  
+  - `python scripts/run_group_invite_quick.py --all` — 列表首条客户，打开资料页 → 加号入口 → 返回，不建群。  
+  - `python scripts/run_group_invite_full.py --serial <SERIAL> --member <姓名>` — 完整建群（会真实建群，仅用于受控环境）。  
+  - `python scripts/run_group_invite_e2e.py --customer <列表完整显示名> [--member …] [--dry-run]` — 按指定客户名逐步验证（`navigate_to_chat` 需与列表 **完全一致** 的 `text`）。
+
 ### Windows / 实时跟进联调要点
 
 - **依赖**：在仓库根目录执行 `uv sync --extra dev`；后端在 `wecom-desktop/backend` 用 `uv run uvicorn main:app --reload --port 8765`。不要用已删除的 `backend/requirements.txt`（见 `wecom-desktop/README.md`）。
@@ -101,6 +111,7 @@
 | 前端 API 客户端        | `wecom-desktop/src/views/mediaActions.spec.ts`                                                            |
 | 前端页面（组件）       | `wecom-desktop/src/views/MediaActionsView.spec.ts`                                                        |
 | 聊天信息菜单启发式     | `tests/unit/test_wecom_service_opt.py`（`TestGroupInviteMenuDetection`）                                  |
+| 多机型拉群与解析（回归） | 上述用例 + `test_ui_parser.py`、`test_wecom_service_screen_detection.py` 等；重大改动后建议再跑 `run_group_invite_quick.py --all` |
 
 运行后端单测目录时注意 pytest `testpaths`：需使用  
 `pytest wecom-desktop/backend/tests/test_media_actions_api.py --override-ini="testpaths=."`  
@@ -111,5 +122,6 @@
 - [安卓拉群工作流实现说明](../implementation/2026-04-04-android-group-invite-workflow.md) — 模块划分、时序、配置与限制
 - [自定义建群后消息与聊天页菜单兼容](../implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) — 模板、API/UI 对齐、`test-trigger` 语义、真机验证说明
 - [黑名单 shim、同步媒体总线与 Windows 联调](../implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md)
+- [多机型 / 多分辨率自动拉群可靠性](../implementation/2026-04-12-auto-group-invite-multi-device-reliability.md) — 诊断脚本、解析与 UI 改动摘要、真机验证说明
 - [黑名单系统](../01-product/blacklist-system.md) — 数据模型与 `BlacklistWriter` / `BlacklistChecker`
 - [测试目录约定](../07-appendix/test-organization.md)

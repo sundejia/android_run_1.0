@@ -19,8 +19,7 @@
     "paths": {
       "@/*": ["./src/*"],
       "@electron/*": ["./electron/*"]
-    },
-    "baseUrl": "."
+    }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue", "electron/**/*.ts"],
   "references": [{ "path": "./tsconfig.node.json" }]

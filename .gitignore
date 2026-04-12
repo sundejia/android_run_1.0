@@ -121,6 +121,10 @@ node_modules/
 /src/**/test_*.py
 /scripts/test_*.py
 
+# Device diagnostic dumps (regenerate with scripts/diagnose_group_invite.py)
+diagnostic_reports/*
+!diagnostic_reports/README.md
+
 # Admin actions data files
 settings/admin_actions.json
 settings/admin_actions.xlsx

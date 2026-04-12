@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-04-10 (SidecarSettings dataclass aligned with SIDECAR DB keys; safe `ai_server_url` in AI error paths)
+> Last Updated: 2026-04-12 (Auto group invite: multi-device UI reliability, diagnostic scripts, `run_group_invite_*` device smoke tools; see `implementation/2026-04-12-auto-group-invite-multi-device-reliability.md`)
 
 ---
 
@@ -32,7 +32,7 @@
 | Feature                                                                                     | Status      | Date       | Description                                                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------- | ----------- | ---------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [System Robustness Fixes](implementation/2026-04-09-system-robustness-fixes.md)             | ✅ Complete | 2026-04-09 | AI circuit breaker, failure metrics, process auto-restart, heartbeat monitoring API, AI health checks, night-mode Sidecar timeout; 2026-04-10 follow-up: `SidecarSettings` matches DB keys, AI error logging fix |
-| [Media Auto-Actions](features/media-auto-actions.md)                                        | ✅ Complete | 2026-04-05 | Auto-blacklist + Android group invite; configurable post-group message template + desktop preview; `test-trigger` does not run full UI invite without `WeComService`; chat header “more” menu compatibility      |
+| [Media Auto-Actions](features/media-auto-actions.md)                                        | ✅ Complete | 2026-04-12 | Auto-blacklist + Android group invite; 2026-04-12: `ui_parser` structural media detection, resolution-scaled `WeComService` + retries, expanded selectors; `scripts/diagnose_group_invite.py` + `scripts/run_group_invite_*.py` for diagnostics / device smoke; `test-trigger` still no real UI without `WeComService` |
 | [Follow-up Message Deduplication](01-product/followup-deduplication-feature.md)             | ✅ Complete | 2026-02-06 | Prevent duplicate message templates per customer, requires 3+ templates                                                                                                                                          |
 | [UI Improvements - Dashboard, Realtime, Stickers](01-product/2026-02-05-ui-improvements.md) | ✅ Complete | 2026-02-05 | Unified dashboard card heights, Realtime Reply AI always enabled, fixed sticker display                                                                                                                          |
 | [Followup Attempt Intervals](01-product/2026-02-02-followup-attempt-intervals.md)           | ✅ Complete | 2026-02-02 | Customizable intervals between followup attempts (1st/2nd/3rd wait times)                                                                                                                                        |
@@ -167,6 +167,7 @@ See [Current Architecture](03-impl-and-arch/) for high-level design.
 #### Features Implementation
 
 - [Android group invite workflow](implementation/2026-04-04-android-group-invite-workflow.md) - Modular `group_invite` service, `WeComService` UI steps, `GroupChatService` delegation
+- [Auto group invite multi-device reliability](implementation/2026-04-12-auto-group-invite-multi-device-reliability.md) - Diagnostics, parser/selector/scaling changes, real-device validation, `run_group_invite_*` scripts
 - [Media auto-actions: custom post-group message + chat header menu](implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) - `template_resolver`, API/UI alignment, `test-trigger` semantics, device validation notes
 - [Blacklist shim, sync media bus, Windows runbook](implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md) - Desktop `blacklist_service` shim, `test_sync_factory`, `_is_chat_screen` for external groups
 - [Multi-Device Sync Storage Isolation](implementation/2026-04-02-multi-device-sync-storage-isolation.md) - Default per-device media output roots for parallel sync
