@@ -18,7 +18,7 @@ Five days of production logs revealed critical gaps:
 | 5   | `_interactive_wait_loop` replies have zero metrics               | P2       | Follow-up round replies are invisible                                |
 | 6   | Process exit → 19.5 h downtime, no auto-restart                  | P0       | 4/5–4/6 full outage                                                  |
 | 7   | AI health only tested on-demand (when replying)                  | P1       | Failures go unnoticed until a customer message arrives               |
-| 8   | Sidecar timeout hardcoded at 300 s                               | P2       | Every nighttime reply delayed 5 min                                  |
+| 8   | Sidecar daytime timeout default was 300 s                        | P2       | Long idle waits when no operator at Sidecar UI                       |
 
 ---
 
@@ -116,8 +116,8 @@ Results stored in `ai_health_checks` table. If unhealthy, the circuit breaker is
 
 **Files:**
 
-- `wecom-desktop/backend/services/settings/defaults.py` — four new settings: `sidecar_timeout` (300), `night_mode_sidecar_timeout` (30), `night_mode_start_hour` (22), `night_mode_end_hour` (8).
-- `wecom-desktop/backend/services/followup/response_detector.py` — new `_get_sidecar_timeout()` method selects 30 s during 22:00–08:00, 300 s otherwise. Replaces hardcoded `timeout=300.0` in `_send_reply_wrapper`.
+- `wecom-desktop/backend/services/settings/defaults.py` — four new settings: `sidecar_timeout` (**60** as of 2026-04-15; was 300 at first ship), `night_mode_sidecar_timeout` (30), `night_mode_start_hour` (22), `night_mode_end_hour` (8).
+- `wecom-desktop/backend/services/followup/response_detector.py` — new `_get_sidecar_timeout()` method selects 30 s during 22:00–08:00, **daytime `sidecar_timeout` otherwise** (fallback **60** s). Replaces hardcoded `timeout=300.0` in `_send_reply_wrapper`.
 
 ---
 
@@ -172,3 +172,9 @@ Results stored in `ai_health_checks` table. If unhealthy, the circuit breaker is
 ## Test Validation
 
 Run `pytest tests/unit/ -v --tb=short` from the `android_run_test-main` package directory (see `.husky/pre-push`). After the 2026-04-10 follow-up, a dedicated test covers `SidecarSettings` construction with all SIDECAR keys; the full unit suite must pass before push.
+
+---
+
+## Update (2026-04-15) — Daytime Sidecar default 300 s → 60 s
+
+The seeded default and code fallbacks for **`sidecar_timeout`** were lowered from **300** to **60** seconds so unattended queues fail faster. Night mode defaults are unchanged. Full file list and rationale: [Sidecar review timeout defaults](../sidecar/sidecar-review-timeout-defaults.md).

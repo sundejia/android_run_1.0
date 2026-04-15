@@ -5,6 +5,8 @@
 > 严重性：P1（高）  
 > 相关：FollowUp Sidecar、补刀/回复发送流程
 
+> **Documentation note (2026-04-15):** Default daytime Sidecar review wait is now **60 s** (`sidecar_timeout`). This write-up still describes behaviour when callers used **300 s**; see [Sidecar review timeout defaults](../../sidecar/sidecar-review-timeout-defaults.md).
+
 ## 摘要
 
 在较旧或性能较差的设备上，出现两类现象：
@@ -25,19 +27,19 @@
 
 ### 流程简述
 
-1. 后端将消息加入队列并 `set_message_ready()`，开始 `wait_for_send(msg_id, timeout=300)`。
+1. 后端将消息加入队列并 `set_message_ready()`，开始 `wait_for_send(msg_id, timeout=...)`（当时多为 300；现为可配置，默认 60）。
 2. 前端每 `pollIntervalMs`（默认 10 秒）轮询 `GET /sidecar/{serial}/queue`。
 3. 当检测到 `status === 'ready'` 时，设置 `panel.pendingMessage`、`panel.currentQueuedMessage`，并满足条件时调用 `startCountdown(serial, true)`。
 4. 倒计时由 `SidecarView.vue` 的 `startCountdown` 启动，到期后调用 `sendNow` → `sendQueuedMessage`。
 
 ### 可能原因
 
-| 原因 | 说明 |
-|------|------|
-| **A. 轮询延迟** | 旧设备/网络下，前端轮询间隔或请求延迟大，用户看到 "Message ready" 时已接近后端 300s 超时，倒计时时间很短或几乎看不到。 |
+| 原因                  | 说明                                                                                                                                                                                                  |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **A. 轮询延迟**       | 旧设备/网络下，前端轮询间隔或请求延迟大，用户看到 "Message ready" 时已接近后端 300s 超时，倒计时时间很短或几乎看不到。                                                                                |
 | **B. 状态阻止倒计时** | `startCountdown` 仅在以下均为 false 时自动启动：`panel.sendingQueued`、`result.syncState?.paused`、`panel.manuallyPaused`、`panel.isEditing`，且 `panel.countdown === null`。任一为 true 则不会启动。 |
-| **C. 轮询被跳过** | `startPolling` 中若 `panel.sending === true` 则本次轮询直接 return，若该状态残留，会持续拿不到新 ready 消息或延迟很久。 |
-| **D. 渲染/性能** | 旧设备上 Vue 更新或 DOM 渲染慢，倒计时和输入框已更新但用户感知不到。 |
+| **C. 轮询被跳过**     | `startPolling` 中若 `panel.sending === true` 则本次轮询直接 return，若该状态残留，会持续拿不到新 ready 消息或延迟很久。                                                                               |
+| **D. 渲染/性能**      | 旧设备上 Vue 更新或 DOM 渲染慢，倒计时和输入框已更新但用户感知不到。                                                                                                                                  |
 
 ### 相关代码位置
 
@@ -64,7 +66,7 @@
 
 ### 根因：竞态条件（Race Condition）
 
-1. **后端**在 `response_detector.py` 中调用 `sidecar_client.wait_for_send(msg_id, timeout=300.0)`，对应后端路由 `POST /sidecar/{serial}/queue/wait/{message_id}`，该接口内部每 100ms 轮询消息状态，超时后返回 `{"success": false, "reason": "timeout"}`。
+1. **后端**在 `response_detector.py` 中调用 `sidecar_client.wait_for_send(msg_id, timeout=...)`（由 `_get_sidecar_timeout()` 或历史硬编码决定），对应后端路由 `POST /sidecar/{serial}/queue/wait/{message_id}`。实现上为事件驱动唤醒与有界轮询（非固定 100ms），超时后返回 `{"success": false, "reason": "timeout"}`。
 
 2. **前端**在某一时刻检测到 ready，启动 10 秒倒计时，到期后调用 `sendQueuedMessage` → 请求 `POST /sidecar/{serial}/queue/send/{message_id}`。该接口会：
    - 将消息状态设为 `SENDING`；
@@ -90,11 +92,11 @@
 
 ### 根因小结（Bug 列表）
 
-| # | 位置 | 描述 |
-|---|------|------|
-| Bug 1 | `response_detector.py` 2488–2492 行 | `reason === "timeout"` 未与 `"expired"` 统一处理，超时一律落入 else，必然进入直接发送。 |
+| #     | 位置                                                     | 描述                                                                                                          |
+| ----- | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Bug 1 | `response_detector.py` 2488–2492 行                      | `reason === "timeout"` 未与 `"expired"` 统一处理，超时一律落入 else，必然进入直接发送。                       |
 | Bug 2 | `sidecar.py` `wait_for_send` 超时分支（约 1273–1280 行） | 超时时仅对 `PENDING/READY` 标 `EXPIRED`；若为 `SENDING` 既不标 `EXPIRED` 也不等待发送结束，直接返回 timeout。 |
-| Bug 3 | `response_detector.py` 2492 之后 | else 分支未在「直接发送」前检查消息是否已在发送（`SENDING`）或已发送（`SENT`），导致重复发送。 |
+| Bug 3 | `response_detector.py` 2492 之后                         | else 分支未在「直接发送」前检查消息是否已在发送（`SENDING`）或已发送（`SENT`），导致重复发送。                |
 
 ### 相关代码位置
 

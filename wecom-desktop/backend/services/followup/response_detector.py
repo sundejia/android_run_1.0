@@ -481,12 +481,12 @@ class ResponseDetector:
             svc = get_settings_service()
             all_settings = svc.get_all_settings_flat()
 
-            day_timeout = float(all_settings.get("sidecar_timeout", 300))
+            day_timeout = float(all_settings.get("sidecar_timeout", 60))
             night_timeout = float(all_settings.get("night_mode_sidecar_timeout", 30))
             night_start = int(all_settings.get("night_mode_start_hour", 22))
             night_end = int(all_settings.get("night_mode_end_hour", 8))
         except Exception:
-            day_timeout, night_timeout, night_start, night_end = 300.0, 30.0, 22, 8
+            day_timeout, night_timeout, night_start, night_end = 60.0, 30.0, 22, 8
 
         hour = datetime.now().hour
         if night_start > night_end:

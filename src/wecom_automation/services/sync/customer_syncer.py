@@ -774,7 +774,7 @@ class CustomerSyncer:
 
             self._logger.info(f"Message queued (ID: {msg_id}), waiting for send...")
 
-            result = await self._sidecar_client.wait_for_send(msg_id, timeout=300.0)
+            result = await self._sidecar_client.wait_for_send(msg_id, timeout=60.0)
 
             reason = result.get("reason", "unknown")
             if result.get("success") or reason == "sent":

@@ -85,7 +85,7 @@ if msg.status == MessageStatus.SENT:
 **修改 3**: `customer_syncer.py:_send_via_sidecar` - 使用返回的消息
 
 ```python
-result = await self._sidecar_client.wait_for_send(msg_id, timeout=300.0)
+result = await self._sidecar_client.wait_for_send(msg_id, timeout=60.0)
 
 reason = result.get("reason", "unknown")
 if result.get("success") or reason == "sent":

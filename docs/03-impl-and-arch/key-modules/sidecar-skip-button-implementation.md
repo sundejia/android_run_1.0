@@ -85,8 +85,8 @@ async def _send_via_sidecar(self, message: str, context: MessageContext) -> bool
         msg_id = await self._sidecar_client.add_message(...)
         await self._sidecar_client.set_message_ready(msg_id)
 
-        # 等待消息发送决定（最长300秒）
-        result = await self._sidecar_client.wait_for_send(msg_id, timeout=300.0)
+        # 等待消息发送决定（时长为 sidecar_timeout，默认 60 秒）
+        result = await self._sidecar_client.wait_for_send(msg_id, timeout=60.0)
 
         reason = result.get("reason", "unknown")
         if result.get("success") or reason == "sent":
@@ -117,7 +117,7 @@ async def sync(self, user, options, kefu_id, device_serial):
 
 ```python
 @router.post("/{serial}/queue/wait/{message_id}")
-async def wait_for_send(serial: str, message_id: str, timeout: float = 300.0):
+async def wait_for_send(serial: str, message_id: str, timeout: float = 60.0):
     """等待消息发送，轮询检查状态"""
     while True:
         if elapsed >= timeout:

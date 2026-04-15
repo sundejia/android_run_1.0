@@ -208,7 +208,7 @@ class SidecarSettings:
     poll_interval: int = 10
     show_logs: bool = True
     max_panels: int = 3
-    sidecar_timeout: int = 300
+    sidecar_timeout: int = 60
     night_mode_sidecar_timeout: int = 30
     night_mode_start_hour: int = 22
     night_mode_end_hour: int = 8

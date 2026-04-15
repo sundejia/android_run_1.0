@@ -1,5 +1,7 @@
 # Sidecar 队列消息发送给错误用户分析
 
+> **Documentation note (2026-04-15):** Seeded default for `sidecar_timeout` is now **60 s** (was 300 s). The timeline below is a **historical** incident from 2026-02-05 when the longer wait applied. See [Sidecar review timeout defaults](../../sidecar/sidecar-review-timeout-defaults.md).
+
 ## 问题描述
 
 **问题发生时间**: 2026-02-05 19:11-19:24
@@ -218,7 +220,7 @@ async def send_message(self, text: str) -> tuple[bool, str]:
 
 ```python
 # wait_for_send 函数修改
-async def wait_for_send(serial: str, message_id: str, timeout: float = 300.0):
+async def wait_for_send(serial: str, message_id: str, timeout: float = 60.0):
     while True:
         elapsed = time.time() - start_time
         if elapsed >= timeout:

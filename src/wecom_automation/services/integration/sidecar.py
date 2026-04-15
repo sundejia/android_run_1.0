@@ -215,7 +215,7 @@ class SidecarQueueClient:
             self._logger.error(f"Error marking message ready: {e}")
             return False
 
-    async def wait_for_send(self, message_id: str, timeout: float = 300.0) -> dict:
+    async def wait_for_send(self, message_id: str, timeout: float = 60.0) -> dict:
         """
         等待消息发送完成
 

@@ -157,10 +157,12 @@ try:
 
 ### 方案 1: 在 wait_for_send 中检查 Skip Flag (推荐) ✅ 已应用
 
+_(2026-04-15: 路由默认 `timeout` 现为 **60.0** 秒；下文签名已与当前代码对齐。)_
+
 ```python
 # sidecar.py - 已修改
 @router.post("/{serial}/queue/wait/{message_id}")
-async def wait_for_send(serial: str, message_id: str, timeout: float = 300.0):
+async def wait_for_send(serial: str, message_id: str, timeout: float = 60.0):
     logger = logging.getLogger(__name__)
     while True:
         elapsed = time.time() - start_time
@@ -195,7 +197,7 @@ async def request_skip(serial: str):
     return {"success": True}
 
 # 修改 wait_for_send 使用 event
-async def wait_for_send(serial: str, message_id: str, timeout: float = 300.0):
+async def wait_for_send(serial: str, message_id: str, timeout: float = 60.0):
     event = _get_waiting_event(serial)
 
     while True:

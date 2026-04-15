@@ -11,13 +11,13 @@ def test_sidecar_settings_accepts_full_category_dict_from_defaults_shape():
         "poll_interval": 10,
         "show_logs": True,
         "max_panels": 3,
-        "sidecar_timeout": 300,
+        "sidecar_timeout": 60,
         "night_mode_sidecar_timeout": 30,
         "night_mode_start_hour": 22,
         "night_mode_end_hour": 8,
     }
     s = SidecarSettings(**data)
-    assert s.sidecar_timeout == 300
+    assert s.sidecar_timeout == 60
     assert s.night_mode_sidecar_timeout == 30
     assert s.night_mode_start_hour == 22
     assert s.night_mode_end_hour == 8

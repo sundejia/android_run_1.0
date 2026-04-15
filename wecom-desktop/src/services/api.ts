@@ -1266,7 +1266,7 @@ class ApiClient {
   async waitForSidecarSend(
     serial: string,
     messageId: string,
-    timeout: number = 300
+    timeout: number = 60
   ): Promise<WaitForSendResponse> {
     return this.request<WaitForSendResponse>(
       `/sidecar/${serial}/queue/wait/${messageId}?timeout=${timeout}`,

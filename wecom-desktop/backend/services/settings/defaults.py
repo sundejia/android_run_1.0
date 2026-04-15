@@ -137,7 +137,7 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     (SettingCategory.SIDECAR.value, "poll_interval", ValueType.INT.value, 10, "轮询间隔(秒)", False),
     (SettingCategory.SIDECAR.value, "show_logs", ValueType.BOOLEAN.value, True, "Sidecar 是否显示日志面板", False),
     (SettingCategory.SIDECAR.value, "max_panels", ValueType.INT.value, 3, "Sidecar 最大并排面板数量", False),
-    (SettingCategory.SIDECAR.value, "sidecar_timeout", ValueType.INT.value, 300, "Sidecar 审核超时(秒)", False),
+    (SettingCategory.SIDECAR.value, "sidecar_timeout", ValueType.INT.value, 60, "Sidecar 审核超时(秒)", False),
     (SettingCategory.SIDECAR.value, "night_mode_sidecar_timeout", ValueType.INT.value, 30, "夜间审核超时(秒)", False),
     (SettingCategory.SIDECAR.value, "night_mode_start_hour", ValueType.INT.value, 22, "夜间模式开始时间(时)", False),
     (SettingCategory.SIDECAR.value, "night_mode_end_hour", ValueType.INT.value, 8, "夜间模式结束时间(时)", False),

@@ -1515,7 +1515,7 @@ async def clear_queue(serial: str):
 
 
 @router.post("/{serial}/queue/wait/{message_id}")
-async def wait_for_send(serial: str, message_id: str, timeout: float = 300.0):
+async def wait_for_send(serial: str, message_id: str, timeout: float = 60.0):
     """
     Wait for a specific message to be sent.
     Uses simple polling to check message status.

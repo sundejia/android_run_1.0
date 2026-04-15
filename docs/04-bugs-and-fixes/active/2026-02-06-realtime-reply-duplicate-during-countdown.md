@@ -5,6 +5,8 @@
 > **严重程度**: P1 (High - 影响用户体验)
 > **状态**: 🔴 待修复
 
+> **Documentation note (2026-04-15):** Sidecar review wait defaults to **60 s** (`sidecar_timeout`). Diagrams and snippets below still say **300 s** where they described the older default; behaviour is the same except for duration. See [Sidecar review timeout defaults](../../sidecar/sidecar-review-timeout-defaults.md).
+
 ---
 
 ## 🔴 问题描述
@@ -54,7 +56,7 @@ sequenceDiagram
     Detector->>Sidecar: add_message(M1) → msg_id_1
     Detector->>Sidecar: set_message_ready(msg_id_1)
     Note over Sidecar: ⏱️ 10秒倒计时开始
-    Detector->>Sidecar: wait_for_send(msg_id_1, 300s)
+    Detector->>Sidecar: wait_for_send(msg_id_1, sidecarTimeout)
 
     Note over Customer,Device: 第二次检测 (T+5秒)
     Scanner->>Detector: detect_and_reply() 调用
@@ -101,8 +103,8 @@ if not await sidecar_client.set_message_ready(msg_id):
 else:
     self._logger.info(f"[{serial}] ⏱️ Countdown started, waiting for send...")
 
-    # Step 3: 等待用户审核/发送（最长300秒）
-    result = await sidecar_client.wait_for_send(msg_id, timeout=300.0)
+    # Step 3: 等待用户审核/发送（时长 sidecar_timeout，默认 60 秒）
+    result = await sidecar_client.wait_for_send(msg_id, timeout=sidecar_timeout)
 ```
 
 **问题**: 在 `wait_for_send()` 期间，消息的状态没有标记为"处理中"。
@@ -127,7 +129,7 @@ while True:
     await asyncio.sleep(args.scan_interval)  # 默认60秒
 ```
 
-**问题**: 如果 `scan_interval=60`，但 `detect_and_reply` 内部会等待300秒，会导致：
+**问题**: 如果 `scan_interval=60`，但 `detect_and_reply` 内部会阻塞等待 Sidecar 审核（时长为 `sidecar_timeout`，默认 60 秒），会导致：
 
 - 下一次扫描可能在当前扫描的 `wait_for_send()` 期间开始
 - 没有全局锁保护同一设备的并发扫描
@@ -522,7 +524,7 @@ class ResponseDetector:
                 await sidecar_client.set_message_ready(msg_id)
 
                 # 等待发送
-                result = await sidecar_client.wait_for_send(msg_id, timeout=300.0)
+                result = await sidecar_client.wait_for_send(msg_id, timeout=sidecar_timeout)
 
                 if result.get("success") or result.get("reason") == "sent":
                     # ✅ 标记为已发送
