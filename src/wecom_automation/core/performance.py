@@ -82,6 +82,18 @@ class PerformanceMetrics:
         self._sqlite_recent_slow_queries: deque[dict[str, Any]] = deque(maxlen=20)
         self._sqlite_max_query_ms = 0.0
         self._metrics_dir: Path | None = None
+        # Lifecycle telemetry — every [startup] / [shutdown] step is recorded
+        # here in the order it happened so the admin dashboard can render a
+        # readable boot timeline ("DB migrations OK", "monitoring tables
+        # ensured", "runtime hygiene cleaned 3 orphans", ...). The deque is
+        # capped because a long-running backend may go through many
+        # reload-driven restarts in a single process lifetime when uvicorn
+        # is configured for hot-reload.
+        self._lifecycle_events: deque[dict[str, Any]] = deque(maxlen=200)
+        # Latest runtime_hygiene summary so the dashboard can answer the
+        # question "did anything need cleaning at the last boot?" without
+        # having to scan the lifecycle event stream.
+        self._latest_hygiene: dict[str, Any] | None = None
 
     def set_metrics_dir(self, metrics_dir: Path) -> None:
         metrics_dir.mkdir(parents=True, exist_ok=True)
@@ -139,6 +151,58 @@ class PerformanceMetrics:
         with self._lock:
             self._sync_runs.append(item)
             self._append_jsonl_locked("sync-runs.jsonl", item)
+
+    def record_lifecycle_event(
+        self,
+        phase: str,
+        name: str,
+        *,
+        level: str = "INFO",
+        message: str | None = None,
+        **payload: Any,
+    ) -> None:
+        """Record a structured startup/shutdown step.
+
+        Args:
+            phase: ``"startup"`` or ``"shutdown"`` (free-form, but stick to
+                those two so the dashboard can group reliably).
+            name: Stable machine-readable identifier (e.g. ``"db_migrations"``,
+                ``"runtime_hygiene"``, ``"realtime_stop_all"``). Names are not
+                unique across the deque — a step that runs twice produces two
+                events.
+            level: ``"INFO" | "WARNING" | "ERROR"`` so the UI can colour-code.
+            message: Optional human-readable detail, mirrored from the legacy
+                ``print("[startup] ...")`` line.
+            **payload: Arbitrary structured fields — durations, counts, etc.
+                Anything JSON-serialisable is fine.
+
+        Records are persisted to ``lifecycle.jsonl`` so they survive a
+        backend restart, and the most recent ones are also kept in memory
+        for the snapshot endpoint."""
+        item: dict[str, Any] = {
+            "timestamp": _utc_now_iso(),
+            "phase": phase,
+            "name": name,
+            "level": level.upper(),
+        }
+        if message is not None:
+            item["message"] = message
+        if payload:
+            item["payload"] = payload
+        with self._lock:
+            self._lifecycle_events.append(item)
+            self._append_jsonl_locked("lifecycle.jsonl", item)
+
+    def record_hygiene_report(self, report: dict[str, Any]) -> None:
+        """Store the latest ``runtime_hygiene.startup_hygiene()`` summary.
+
+        Only the most recent report is kept in memory; the history lives in
+        ``lifecycle.jsonl`` via the matching ``record_lifecycle_event`` call
+        in ``main.py``."""
+        item = {"timestamp": _utc_now_iso(), "report": report}
+        with self._lock:
+            self._latest_hygiene = item
+            self._append_jsonl_locked("hygiene.jsonl", item)
 
     def record_sql_query(self, statement: str, duration_ms: float, *, params_count: int = 0) -> None:
         normalized = " ".join((statement or "").split())
@@ -206,6 +270,11 @@ class PerformanceMetrics:
                     "max_query_ms": round(self._sqlite_max_query_ms, 2),
                     "recent_slow_queries": list(self._sqlite_recent_slow_queries),
                 },
+                "lifecycle": {
+                    "events": list(self._lifecycle_events),
+                    "event_count": len(self._lifecycle_events),
+                },
+                "hygiene": self._latest_hygiene,
             }
 
     def _append_jsonl_locked(self, filename: str, payload: dict[str, Any]) -> None:
