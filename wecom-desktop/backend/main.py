@@ -138,6 +138,33 @@ def setup_backend_logging():
     print(f"[startup] Logging: console; per-device file logs/{hostname}-<serial>.log from sync/realtime subprocesses")
 
 
+def _emit(phase: str, name: str, message: str, *, level: str = "INFO", **payload) -> None:
+    """Print a [startup]/[shutdown] line AND record it in runtime_metrics.
+
+    This is a thin shim so we keep the operator-friendly stdout that
+    everyone is used to grepping while *also* feeding structured lifecycle
+    events into ``runtime_metrics``. The admin dashboard reads those events
+    via ``GET /settings/performance/profile`` (full snapshot) or
+    ``GET /api/monitoring/runtime-hygiene`` (lifecycle + hygiene only) so
+    operators can answer "what happened at the last boot" without SSH.
+
+    ``level`` maps to "[OK]" / "[WARN]" / "[FAIL]" prefixes that previous
+    revisions of this file used inline; passing it through here keeps the
+    output identical so log-scraping tooling does not break."""
+    prefix_map = {"INFO": "", "WARNING": "[WARN] ", "ERROR": "[FAIL] ", "OK": "[OK] "}
+    prefix = prefix_map.get(level.upper(), "")
+    print(f"[{phase}] {prefix}{message}")
+    try:
+        # Normalise OK -> INFO for telemetry; the prefix is purely cosmetic.
+        recorded_level = "INFO" if level.upper() == "OK" else level.upper()
+        runtime_metrics.record_lifecycle_event(
+            phase, name, level=recorded_level, message=message, **payload
+        )
+    except Exception:
+        # Telemetry must never block lifecycle progress.
+        pass
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
@@ -148,10 +175,10 @@ async def lifespan(app: FastAPI):
     """
     # ========== STARTUP ==========
     startup_started_at = time.perf_counter()
-    print("[startup] Setting up backend logging...")
+    _emit("startup", "logging", "Setting up backend logging...")
     setup_backend_logging()
 
-    print("[startup] Ensuring required directories exist...")
+    _emit("startup", "directories", "Ensuring required directories exist...")
     ensure_directories()
 
     # Run database migrations
@@ -160,45 +187,108 @@ async def lifespan(app: FastAPI):
         from wecom_automation.database.schema import run_migrations
 
         control_db_path = str(get_control_db_path())
-        print(f"[startup] Running control DB migrations: {control_db_path}")
+        _emit("startup", "db_migrations_control", f"Running control DB migrations: {control_db_path}")
         run_migrations(control_db_path)
 
         device_targets = list_device_conversation_targets()
         for target in device_targets:
-            print(f"[startup] Running device DB migrations: {target.device_serial} -> {target.db_path}")
+            _emit(
+                "startup",
+                "db_migrations_device",
+                f"Running device DB migrations: {target.device_serial} -> {target.db_path}",
+                serial=target.device_serial,
+            )
             run_migrations(str(target.db_path))
 
         migration_stats = migrate_media_action_state_to_control(control_db_path)
-        print(
-            "[startup] [OK] Media action state migration: "
-            f"blacklist inserted={migration_stats['blacklist_inserted']}, "
-            f"blacklist updated={migration_stats['blacklist_updated']}, "
-            f"groups inserted={migration_stats['groups_inserted']}, "
-            f"groups updated={migration_stats['groups_updated']}, "
-            f"sources={migration_stats['source_dbs_scanned']}"
+        _emit(
+            "startup",
+            "media_action_migration",
+            (
+                "Media action state migration: "
+                f"blacklist inserted={migration_stats['blacklist_inserted']}, "
+                f"blacklist updated={migration_stats['blacklist_updated']}, "
+                f"groups inserted={migration_stats['groups_inserted']}, "
+                f"groups updated={migration_stats['groups_updated']}, "
+                f"sources={migration_stats['source_dbs_scanned']}"
+            ),
+            level="OK",
+            **migration_stats,
         )
-        print("[startup] [OK] Database migrations completed")
+        _emit("startup", "db_migrations", "Database migrations completed", level="OK")
     except Exception as e:
-        print(f"[startup] [FAIL] Database migration failed: {e}")
+        _emit("startup", "db_migrations", f"Database migration failed: {e}", level="ERROR", error=str(e))
         try:
             from wecom_automation.database.schema import repair_blacklist_schema
 
             repairs = repair_blacklist_schema(str(get_control_db_path()))
             if repairs:
-                print(f"[startup] [OK] Applied blacklist fallback repairs: {', '.join(repairs)}")
+                _emit(
+                    "startup",
+                    "blacklist_repair",
+                    f"Applied blacklist fallback repairs: {', '.join(repairs)}",
+                    level="OK",
+                    repairs=list(repairs),
+                )
         except Exception as repair_error:
-            print(f"[startup] [FAIL] Blacklist fallback repair failed: {repair_error}")
+            _emit(
+                "startup",
+                "blacklist_repair",
+                f"Blacklist fallback repair failed: {repair_error}",
+                level="ERROR",
+                error=str(repair_error),
+            )
 
     # Ensure monitoring tables exist
     try:
         from services.heartbeat_service import ensure_tables as ensure_monitoring_tables
 
         ensure_monitoring_tables()
-        print("[startup] [OK] Monitoring tables ensured")
+        _emit("startup", "monitoring_tables", "Monitoring tables ensured", level="OK")
     except Exception as e:
-        print(f"[startup] [FAIL] Monitoring table setup failed: {e}")
+        _emit("startup", "monitoring_tables", f"Monitoring table setup failed: {e}", level="ERROR", error=str(e))
 
-    print("[startup] Follow-up system uses multi-device processes; no global startup needed.")
+    # Runtime hygiene: kill orphan realtime/droidrun/scrcpy subprocesses
+    # left by a previous crash, sweep stale wecom-upload-*.db tempfiles,
+    # and reset the local ADB daemon so we never inherit a wedged server.
+    # All steps are best-effort; failures are reported but never block start.
+    try:
+        from services.runtime_hygiene import startup_hygiene
+
+        hygiene_summary = await startup_hygiene()
+        orphan = hygiene_summary.get("orphans", {})
+        fs = hygiene_summary.get("fs", {})
+        adb = hygiene_summary.get("adb", {})
+        _emit(
+            "startup",
+            "runtime_hygiene",
+            (
+                "Runtime hygiene: "
+                f"orphans killed={orphan.get('killed_from_pidfiles', 0)}+"
+                f"{orphan.get('killed_from_scan', 0)}, "
+                f"temp files removed={fs.get('deleted_temp_files', 0)} "
+                f"({fs.get('freed_bytes', 0)} bytes), "
+                f"adb reset kill={adb.get('kill_ok')}/start={adb.get('start_ok')}"
+            ),
+            level="OK",
+            orphans_killed_pidfiles=orphan.get("killed_from_pidfiles", 0),
+            orphans_killed_scan=orphan.get("killed_from_scan", 0),
+            temp_files_removed=fs.get("deleted_temp_files", 0),
+            temp_bytes_freed=fs.get("freed_bytes", 0),
+            adb_kill_ok=adb.get("kill_ok"),
+            adb_start_ok=adb.get("start_ok"),
+        )
+        # Persist the full structured report separately so the dashboard can
+        # render the watched-directory sizes and the (capped) error list.
+        runtime_metrics.record_hygiene_report(hygiene_summary)
+    except Exception as e:
+        _emit("startup", "runtime_hygiene", f"Runtime hygiene failed: {e}", level="ERROR", error=str(e))
+
+    _emit(
+        "startup",
+        "followup_note",
+        "Follow-up system uses multi-device processes; no global startup needed.",
+    )
 
     # Start backup service for admin_actions.xlsx
     from services.backup_service import get_admin_actions_backup_service
@@ -206,25 +296,76 @@ async def lifespan(app: FastAPI):
 
     backup_service = get_admin_actions_backup_service()
     backup_service.start()
-    print(f"[startup] [OK] Backup service started (interval: {backup_service.interval_minutes} min)")
+    _emit(
+        "startup",
+        "backup_service",
+        f"Backup service started (interval: {backup_service.interval_minutes} min)",
+        level="OK",
+        interval_minutes=backup_service.interval_minutes,
+    )
 
     log_upload_service = get_log_upload_service()
     log_upload_service.start()
-    print("[startup] [OK] Log upload service started")
+    _emit("startup", "log_upload_service", "Log upload service started", level="OK")
     runtime_metrics.mark_startup_complete()
-    print(f"[startup] [OK] Runtime metrics ready ({round((time.perf_counter() - startup_started_at) * 1000, 2)} ms)")
+    _emit(
+        "startup",
+        "runtime_metrics_ready",
+        f"Runtime metrics ready ({round((time.perf_counter() - startup_started_at) * 1000, 2)} ms)",
+        level="OK",
+        startup_duration_ms=round((time.perf_counter() - startup_started_at) * 1000, 2),
+    )
 
     yield  # Application is running
 
     # ========== SHUTDOWN ==========
     await log_upload_service.stop()
-    print("[shutdown] Log upload service stopped")
+    _emit("shutdown", "log_upload_service", "Log upload service stopped")
 
     # Stop backup service
     await backup_service.stop()
-    print("[shutdown] Backup service stopped")
+    _emit("shutdown", "backup_service", "Backup service stopped")
 
-    print("[shutdown] Follow-up processes should be stopped via device manager if needed")
+    # Bring down all per-device realtime_reply subprocesses BEFORE clearing
+    # PID files. Previously this branch only printed a "should be stopped"
+    # comment, which is what caused orphan ``realtime_reply_process`` /
+    # ``droidrun`` / ``scrcpy`` processes to survive backend restarts and
+    # accumulate as silent leaks.
+    try:
+        from services.realtime_reply_manager import get_realtime_reply_manager
+
+        manager = get_realtime_reply_manager()
+        device_count = manager.get_active_realtime_count()
+        await manager.stop_all()
+        _emit(
+            "shutdown",
+            "realtime_stop_all",
+            "All realtime reply processes stopped",
+            level="OK",
+            stopped_count=device_count,
+        )
+    except Exception as e:
+        _emit(
+            "shutdown",
+            "realtime_stop_all",
+            f"Failed to stop realtime reply processes: {e}",
+            level="WARNING",
+            error=str(e),
+        )
+
+    try:
+        from services.runtime_hygiene import shutdown_hygiene
+
+        shutdown_hygiene()
+        _emit("shutdown", "runtime_hygiene", "Runtime hygiene cleared")
+    except Exception as e:
+        _emit(
+            "shutdown",
+            "runtime_hygiene",
+            f"Runtime hygiene shutdown failed: {e}",
+            level="WARNING",
+            error=str(e),
+        )
 
 
 # Create FastAPI app with lifespan handler
