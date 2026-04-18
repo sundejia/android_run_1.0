@@ -409,13 +409,43 @@ class SettingsService:
             return 1
         return parsed
 
+    def get_max_concurrent_realtime_devices(self) -> int:
+        """Maximum realtime_reply processes allowed to run concurrently.
+
+        Realtime reply processes share the single ADB host server and (when
+        running on the same machine) the local sidecar. Capping concurrency
+        avoids the "all devices launch WeCom + scroll-to-top in parallel"
+        thundering-herd that briefly starves every other device.
+        """
+        value = self.get(SettingCategory.REALTIME.value, "max_concurrent_devices", 4)
+        try:
+            parsed = max(1, int(value))
+        except (TypeError, ValueError):
+            parsed = 4
+        if self.is_low_spec_mode():
+            return 1
+        return parsed
+
+    def get_realtime_stagger_delay_seconds(self) -> int:
+        """Seconds to wait between successive realtime_reply spawns."""
+        value = self.get(SettingCategory.REALTIME.value, "stagger_delay_seconds", 10)
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return 10
+
     def get_effective_sidecar_poll_interval(self) -> int:
-        """Effective sidecar poll interval with low-spec safeguards."""
-        value = self.get(SettingCategory.SIDECAR.value, "poll_interval", 10)
+        """Effective sidecar poll interval with low-spec safeguards.
+
+        Default lowered to 2s so multi-device sidecars discover newly READY
+        messages quickly instead of clustering them onto a 10s polling tick
+        (which used to make several devices appear to send replies in lockstep).
+        """
+        value = self.get(SettingCategory.SIDECAR.value, "poll_interval", 2)
         try:
             parsed = max(0, int(value))
         except (TypeError, ValueError):
-            parsed = 10
+            parsed = 2
         if parsed == 0:
             return 0
         if self.is_low_spec_mode():

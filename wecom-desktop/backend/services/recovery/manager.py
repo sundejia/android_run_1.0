@@ -31,9 +31,10 @@ class RecoveryManager:
 
     @contextmanager
     def _connection(self):
-        """获取数据库连接上下文"""
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
+        """获取数据库连接上下文（带 busy_timeout/WAL 容错）"""
+        from services.conversation_storage import open_shared_sqlite
+
+        conn = open_shared_sqlite(str(self._db_path), row_factory=True)
         try:
             yield conn
         finally:

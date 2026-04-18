@@ -1,11 +1,44 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted, computed } from 'vue'
 import type { LogEntry } from '../stores/logs'
 
 const props = defineProps<{
   logs: LogEntry[]
   autoScroll?: boolean
 }>()
+
+// "AI Down" badge: scan the most recent ~80 log entries for tell-tale upstream
+// AI failures (server disconnect, HTTP error from the AI server, circuit
+// breaker tripped). When several recent entries match, surface a sticky
+// warning so an operator can see at a glance that the device isn't "stuck"
+// — it's the AI server that's failing.
+const AI_DOWN_PATTERNS = [
+  /ServerDisconnectedError/i,
+  /AI REQUEST ERROR/i,
+  /AI server returned [45]\d\d/i,
+  /CircuitBreaker.*open/i,
+  /ai_failures=[1-9]/i,
+] as const
+
+const RECENT_WINDOW = 80
+const AI_DOWN_THRESHOLD = 2
+
+const aiDown = computed(() => {
+  const recent = props.logs.slice(-RECENT_WINDOW)
+  let hits = 0
+  let lastHit: LogEntry | null = null
+  for (const entry of recent) {
+    const message = entry?.message ?? ''
+    if (AI_DOWN_PATTERNS.some((re) => re.test(message))) {
+      hits += 1
+      lastHit = entry
+      if (hits >= AI_DOWN_THRESHOLD) {
+        break
+      }
+    }
+  }
+  return hits >= AI_DOWN_THRESHOLD ? { active: true as const, lastHit } : { active: false as const, lastHit: null }
+})
 
 const containerRef = ref<HTMLElement | null>(null)
 
@@ -77,8 +110,20 @@ onMounted(async () => {
 <template>
   <div
     ref="containerRef"
-    class="h-full overflow-y-auto bg-wecom-darker font-mono text-sm"
+    class="h-full overflow-y-auto bg-wecom-darker font-mono text-sm relative"
   >
+    <!-- AI Down sticky banner -->
+    <div
+      v-if="aiDown.active"
+      class="sticky top-0 z-10 px-3 py-1.5 bg-yellow-500/15 border-b border-yellow-500/30 text-yellow-200 text-xs flex items-center gap-2"
+      title="Recent logs show repeated upstream AI failures. The device is alive — the AI server is the bottleneck."
+    >
+      <span class="px-1.5 py-0.5 rounded bg-yellow-500/30 font-semibold uppercase tracking-wide">AI Down</span>
+      <span class="opacity-90">
+        Upstream AI failing — replies will retry automatically.
+      </span>
+    </div>
+
     <!-- Empty state -->
     <div
       v-if="logs.length === 0"

@@ -55,6 +55,9 @@ class RealtimeSettings(BaseModel):
     scan_interval: int = Field(60, alias="scanInterval")
     use_ai_reply: bool = Field(True, alias="useAIReply")  # 始终启用
     send_via_sidecar: bool = Field(True, alias="sendViaSidecar")  # 始终启用
+    scroll_to_top_enabled: bool = Field(True, alias="scrollToTopEnabled")
+    launch_wecom_enabled: bool = Field(True, alias="launchWecomEnabled")
+    switch_to_private_chats_enabled: bool = Field(True, alias="switchToPrivateChatsEnabled")
 
 
 # ============================================
@@ -72,6 +75,15 @@ async def get_realtime_settings():
 
         # 从 realtime 分类读取配置
         scan_interval = service.get(SettingCategory.REALTIME.value, "scan_interval", 60)
+        scroll_to_top_enabled = bool(
+            service.get(SettingCategory.REALTIME.value, "scroll_to_top_enabled", True)
+        )
+        launch_wecom_enabled = bool(
+            service.get(SettingCategory.REALTIME.value, "launch_wecom_enabled", True)
+        )
+        switch_to_private_chats_enabled = bool(
+            service.get(SettingCategory.REALTIME.value, "switch_to_private_chats_enabled", True)
+        )
         # 强制这两个选项始终为 true (无法关闭)
         use_ai_reply = True
         send_via_sidecar = True
@@ -80,6 +92,9 @@ async def get_realtime_settings():
             scan_interval=scan_interval,
             use_ai_reply=use_ai_reply,
             send_via_sidecar=send_via_sidecar,
+            scroll_to_top_enabled=scroll_to_top_enabled,
+            launch_wecom_enabled=launch_wecom_enabled,
+            switch_to_private_chats_enabled=switch_to_private_chats_enabled,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load settings: {str(e)}")
@@ -98,6 +113,9 @@ async def update_realtime_settings(settings: RealtimeSettings):
             "scan_interval": settings.scan_interval,
             "use_ai_reply": True,  # 始终启用
             "send_via_sidecar": True,  # 始终启用
+            "scroll_to_top_enabled": bool(settings.scroll_to_top_enabled),
+            "launch_wecom_enabled": bool(settings.launch_wecom_enabled),
+            "switch_to_private_chats_enabled": bool(settings.switch_to_private_chats_enabled),
         }
 
         service.set_category(SettingCategory.REALTIME.value, updates, "api")
@@ -134,6 +152,30 @@ async def start_device(
     await ensure_device_kefu_persisted(serial, launch_wecom=False, allow_placeholder=True)
 
     manager = get_realtime_reply_manager()
+
+    # Pre-check the realtime concurrency cap so we can return a meaningful
+    # 429 to the UI before doing anything else. The manager re-checks
+    # internally to keep the contract authoritative.
+    try:
+        from services.settings import get_settings_service
+
+        _settings = get_settings_service()
+        _max_concurrent = _settings.get_max_concurrent_realtime_devices()
+    except Exception:
+        _max_concurrent = 4
+
+    _active = manager.get_active_realtime_count()
+    _existing_state = manager.get_state(serial)
+    _already_active_for_this_device = _existing_state and _existing_state.status.value in ("running", "starting")
+
+    if _active >= _max_concurrent and not _already_active_for_this_device:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Realtime concurrency limit reached ({_active}/{_max_concurrent}). "
+                "Stop another device or raise maxConcurrentRealtimeDevices."
+            ),
+        )
 
     success = await manager.start_realtime_reply(
         serial=serial, scan_interval=scan_interval, use_ai_reply=use_ai_reply, send_via_sidecar=send_via_sidecar

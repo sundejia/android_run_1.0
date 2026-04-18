@@ -176,12 +176,11 @@ async def get_action_logs(
 ):
     """Get media action execution logs."""
     try:
-        import sqlite3
+        from services.conversation_storage import open_shared_sqlite
         from wecom_automation.database.schema import get_db_path
 
         db_path = str(get_db_path())
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
+        conn = open_shared_sqlite(db_path, row_factory=True)
 
         query = "SELECT * FROM media_action_logs WHERE 1=1"
         params: list[Any] = []

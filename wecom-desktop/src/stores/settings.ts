@@ -208,7 +208,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   logMaxEntries: 1000,
   countdownSeconds: 0,
   sendViaSidecar: false,
-  sidecarPollInterval: 10,  // default 10 seconds
+  sidecarPollInterval: 2,  // default 2 seconds (lowered from 10 to avoid multi-device send clustering)
   sidecarShowLogs: true,  // default to show logs
   sidecarMaxPanels: 3,
   // AI Reply defaults

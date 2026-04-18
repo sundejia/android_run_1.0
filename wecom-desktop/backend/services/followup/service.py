@@ -15,7 +15,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from services.conversation_storage import get_control_db_path
+from services.conversation_storage import get_control_db_path, open_shared_sqlite
 from wecom_automation.database.repository import ConversationRepository as SyncConversationRepository
 
 from .repository import ConversationRepository
@@ -263,12 +263,8 @@ class FollowUpService:
     # ==================== Database Connection ====================
 
     def get_db_connection(self):
-        """获取数据库连接（向后兼容）"""
-        import sqlite3
-
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        """获取数据库连接（向后兼容，带 busy_timeout/WAL 容错）"""
+        return open_shared_sqlite(self._db_path, row_factory=True)
 
 
 # ==================== Singleton ====================

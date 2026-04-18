@@ -21,7 +21,7 @@ from typing import Any
 
 from droidrun import AdbTools
 
-from services.conversation_storage import get_control_db_path
+from services.conversation_storage import get_control_db_path, open_shared_sqlite
 
 from .attempts_repository import (
     AttemptStatus,
@@ -172,8 +172,7 @@ class FollowupQueueManager:
             LIMIT 1
         """
 
-        with sqlite3.connect(self._db_path) as conn:
-            conn.row_factory = sqlite3.Row
+        with open_shared_sqlite(self._db_path, row_factory=True) as conn:
             row = conn.execute(query, (self.device_serial, customer_name)).fetchone()
 
         if not row:

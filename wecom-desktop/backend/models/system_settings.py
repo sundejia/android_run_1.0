@@ -20,6 +20,25 @@ except ImportError:
         return get_project_root() / "wecom_conversations.db"
 
 
+def _connect_shared(db_path) -> sqlite3.Connection:
+    """Open the shared system-settings DB with busy_timeout/WAL fallbacks.
+
+    Uses a local helper rather than ``services.conversation_storage`` because
+    this module sits under ``models/`` and is imported very early; we keep
+    the dependency direction one-way.
+    """
+    conn = sqlite3.connect(str(db_path), timeout=10)
+    try:
+        conn.execute("PRAGMA journal_mode=WAL")
+    except sqlite3.DatabaseError:
+        pass
+    try:
+        conn.execute("PRAGMA busy_timeout=10000")
+    except sqlite3.DatabaseError:
+        pass
+    return conn
+
+
 class SystemSettingsModel:
     """System Settings Database Model"""
 
@@ -31,7 +50,7 @@ class SystemSettingsModel:
 
     def _ensure_table(self):
         """Ensure settings table exists"""
-        with sqlite3.connect(self._db_path) as conn:
+        with _connect_shared(self._db_path) as conn:
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS system_settings (
                     key TEXT PRIMARY KEY,
@@ -43,14 +62,14 @@ class SystemSettingsModel:
 
     def get(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """Get setting value"""
-        with sqlite3.connect(self._db_path) as conn:
+        with _connect_shared(self._db_path) as conn:
             cursor = conn.execute("SELECT value FROM system_settings WHERE key = ?", (key,))
             row = cursor.fetchone()
             return row[0] if row else default
 
     def set(self, key: str, value: str) -> bool:
         """Set value"""
-        with sqlite3.connect(self._db_path) as conn:
+        with _connect_shared(self._db_path) as conn:
             conn.execute(
                 """
                 INSERT OR REPLACE INTO system_settings (key, value, updated_at)

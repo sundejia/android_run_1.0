@@ -25,6 +25,58 @@ FEDERATED_DB_LABEL = "federated://device-dbs"
 LOCAL_ID_BITS = 40
 LOCAL_ID_MASK = (1 << LOCAL_ID_BITS) - 1
 
+# Default lock-wait window for cross-process SQLite contention. The shared
+# control DB is written by the desktop backend, the per-device realtime_reply
+# subprocesses, and several background services in parallel — without an
+# explicit busy timeout SQLite raises "database is locked" almost immediately
+# under contention. 10 seconds matches what `heartbeat_service` already uses.
+DEFAULT_SQLITE_TIMEOUT_SECONDS = 10
+DEFAULT_SQLITE_BUSY_TIMEOUT_MS = 10000
+
+
+def open_shared_sqlite(
+    db_path: str,
+    *,
+    timeout: float = DEFAULT_SQLITE_TIMEOUT_SECONDS,
+    busy_timeout_ms: int = DEFAULT_SQLITE_BUSY_TIMEOUT_MS,
+    enable_wal: bool = True,
+    row_factory: bool = False,
+    factory: type[sqlite3.Connection] | None = None,
+) -> sqlite3.Connection:
+    """Open a SQLite connection with sane multi-process defaults.
+
+    - Sets a generous ``timeout`` so writers wait for a held lock instead of
+      failing immediately when another process is mid-transaction.
+    - Enables ``journal_mode=WAL`` once per database so readers and a single
+      writer can proceed concurrently (the ``PRAGMA`` is persistent — repeating
+      it is cheap and safe).
+    - Sets ``busy_timeout`` at the connection level as a belt-and-braces
+      safeguard against drivers that ignore the constructor ``timeout``.
+
+    ``WAL`` mode requires the SQLite file to live on a local disk; for the
+    in-memory or read-only URI use cases (currently only inside log_upload),
+    the caller should pass ``enable_wal=False``.
+    """
+    if factory is not None:
+        conn = sqlite3.connect(db_path, timeout=timeout, factory=factory)
+    else:
+        conn = sqlite3.connect(db_path, timeout=timeout)
+    if row_factory:
+        conn.row_factory = sqlite3.Row
+    try:
+        if enable_wal:
+            try:
+                conn.execute("PRAGMA journal_mode=WAL")
+            except sqlite3.DatabaseError:
+                # Some environments (read-only, network FS) don't support WAL;
+                # tolerate that — busy_timeout is still useful.
+                pass
+        conn.execute(f"PRAGMA busy_timeout={int(busy_timeout_ms)}")
+    except sqlite3.DatabaseError:
+        # Never let a pragma failure prevent callers from using the connection.
+        pass
+    return conn
+
 
 @dataclass(frozen=True)
 class ConversationDbTarget:

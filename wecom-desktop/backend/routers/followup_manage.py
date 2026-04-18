@@ -246,9 +246,10 @@ def _ensure_followup_tables(conn):
 
 
 def get_db_connection():
-    """获取数据库连接"""
-    conn = sqlite3.connect(str(DB_PATH))
-    conn.row_factory = sqlite3.Row
+    """获取数据库连接（带 busy_timeout/WAL 容错，避免与多设备 realtime_reply 互踩）"""
+    from services.conversation_storage import open_shared_sqlite
+
+    conn = open_shared_sqlite(str(DB_PATH), row_factory=True)
     _ensure_followup_tables(conn)
     return conn
 

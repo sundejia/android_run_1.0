@@ -69,8 +69,9 @@ class LogUploadRepository:
 
     @contextmanager
     def _connection(self) -> Generator[sqlite3.Connection, None, None]:
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
+        from services.conversation_storage import open_shared_sqlite
+
+        conn = open_shared_sqlite(str(self._db_path), row_factory=True)
         conn.execute("PRAGMA foreign_keys = ON")
         try:
             yield conn

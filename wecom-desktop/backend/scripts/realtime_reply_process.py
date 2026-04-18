@@ -11,6 +11,7 @@ Usage:
 
 import argparse
 import asyncio
+import hashlib
 import sys
 from pathlib import Path
 
@@ -145,6 +146,18 @@ async def run(args):
         logger.warning(f"Failed to start AI health checker: {e}")
         _health_checker = None
 
+    # Per-serial jitter: deterministic offset (in seconds) derived from the
+    # device serial so multiple devices' scan loops don't lock onto the same
+    # tick. Without this, two devices started seconds apart drift toward the
+    # same scan instant over time, which then funnels both AI requests into
+    # the (single-worker) AI server simultaneously and makes downstream
+    # sidecar replies appear to "batch" together. Range is roughly +/- half
+    # of `scan_interval / 6`, capped between [-10s, +10s] so the worst-case
+    # jitter stays small relative to the configured interval.
+    _jitter_span = max(2, min(20, args.scan_interval // 3))
+    _jitter_seed = int(hashlib.md5(args.serial.encode("utf-8")).hexdigest(), 16)
+    _scan_jitter_seconds = (_jitter_seed % (_jitter_span + 1)) - (_jitter_span // 2)
+
     # Heartbeat / lifecycle tracking
     import time as _time
 
@@ -163,6 +176,11 @@ async def run(args):
 
     # 主循环
     scan_count = 0
+    # Per-loop running counters used for the periodic summary line so a single
+    # `grep "scan_summary"` on the device log gives an at-a-glance health view.
+    _summary_ai_failures = 0
+    _summary_replies_sent = 0
+    _summary_last_error: str | None = None
     while True:
         try:
             scan_count += 1
@@ -196,14 +214,45 @@ async def run(args):
 
             # 报告结果
             responses = result.get("responses_detected", 0)
+            replies_this_scan = int(result.get("replies_sent", 0) or 0)
+            ai_failures_this_scan = int(result.get("ai_failures", 0) or 0)
+            scan_error = result.get("last_error")
+
+            _summary_replies_sent += replies_this_scan
+            _summary_ai_failures += ai_failures_this_scan
+            if scan_error:
+                _summary_last_error = str(scan_error)[:120]
+
             if responses > 0:
                 logger.info(f"[Scan #{scan_count}] Processed {responses} response(s)")
             else:
                 logger.info(f"[Scan #{scan_count}] No unread messages")
 
-            # 等待下一个扫描周期
-            logger.info(f"Sleeping {args.scan_interval}s until next scan...")
-            await asyncio.sleep(args.scan_interval)
+            # Periodic summary: one line per scan that the UI / `grep` can use
+            # to spot stalled or AI-down devices without paging through verbose
+            # per-customer logs. Circuit-breaker state is included so an
+            # operator can immediately tell whether the local replies are
+            # paused because of upstream AI failure.
+            try:
+                _cb_state = detector._ai_circuit_breaker.state.value
+            except Exception:
+                _cb_state = "unknown"
+            logger.info(
+                f"[scan_summary] scan=#{scan_count} "
+                f"replies={_summary_replies_sent} "
+                f"ai_failures={_summary_ai_failures} "
+                f"cb={_cb_state} "
+                f"last_error={_summary_last_error or 'none'}"
+            )
+
+            # 等待下一个扫描周期 (+ per-serial jitter to avoid multi-device
+            # scan-loop lock-step; see _scan_jitter_seconds computation above).
+            _sleep_seconds = max(1, args.scan_interval + _scan_jitter_seconds)
+            logger.info(
+                f"Sleeping {_sleep_seconds}s until next scan "
+                f"(base={args.scan_interval}s, jitter={_scan_jitter_seconds:+d}s)..."
+            )
+            await asyncio.sleep(_sleep_seconds)
 
         except asyncio.CancelledError:
             logger.info("Follow-up process cancelled")

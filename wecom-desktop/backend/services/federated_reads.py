@@ -1102,10 +1102,9 @@ class FederatedReadService:
         }
 
     def ensure_streamer_tables(self):
-        import sqlite3
+        from services.conversation_storage import open_shared_sqlite
 
-        conn = sqlite3.connect(str(get_control_db_path()))
-        conn.row_factory = sqlite3.Row
+        conn = open_shared_sqlite(str(get_control_db_path()), row_factory=True)
         cursor = conn.cursor()
         cursor.execute(
             """

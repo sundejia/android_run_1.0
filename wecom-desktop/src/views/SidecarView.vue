@@ -1097,7 +1097,7 @@ async function recordAdminAction(
 }
 
 const pollIntervalMs = computed(() => {
-  const seconds = Number(settings.value.sidecarPollInterval ?? 10)
+  const seconds = Number(settings.value.sidecarPollInterval ?? 2)
   if (Number.isNaN(seconds) || seconds <= 0) return 0 // disabled
   return Math.min(20, Math.max(1, seconds)) * 1000
 })

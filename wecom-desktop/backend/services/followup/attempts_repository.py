@@ -11,7 +11,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Any
 
-from services.conversation_storage import get_control_db_path
+from services.conversation_storage import get_control_db_path, open_shared_sqlite
 
 logger = logging.getLogger("followup.attempts_repository")
 
@@ -59,10 +59,8 @@ class FollowupAttemptsRepository:
         self._ensure_tables()
 
     def _get_connection(self) -> sqlite3.Connection:
-        """获取数据库连接"""
-        conn = sqlite3.connect(self._db_path)
-        conn.row_factory = sqlite3.Row
-        return conn
+        """获取数据库连接（带 busy_timeout/WAL，避免多进程并发写入触发 database is locked）"""
+        return open_shared_sqlite(self._db_path, row_factory=True)
 
     def _ensure_tables(self):
         """确保表存在"""

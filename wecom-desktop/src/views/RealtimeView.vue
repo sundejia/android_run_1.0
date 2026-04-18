@@ -37,6 +37,9 @@ const settings = ref({
   scanInterval: 60,
   useAIReply: true, // Always enabled
   sendViaSidecar: true, // Always enabled
+  scrollToTopEnabled: true,
+  launchWecomEnabled: true,
+  switchToPrivateChatsEnabled: true,
 })
 
 const savingSettings = ref(false)
@@ -240,6 +243,9 @@ function resetSettings() {
     scanInterval: 60,
     useAIReply: true, // Always enabled
     sendViaSidecar: true, // Always enabled
+    scrollToTopEnabled: true,
+    launchWecomEnabled: true,
+    switchToPrivateChatsEnabled: true,
   }
   settingsError.value = ''
 }
@@ -613,6 +619,55 @@ function formatDate(dateStr: string) {
               <p class="text-xs text-wecom-muted mt-1">
                 {{ t('realtime.scan_interval_desc') }}
               </p>
+            </div>
+
+            <!-- Pre-scan step toggles (Step 1/2/3) -->
+            <div class="flex items-center justify-between">
+              <div class="pr-4">
+                <label class="text-sm text-wecom-text font-medium">{{
+                  t('realtime.launch_wecom_label')
+                }}</label>
+                <p class="text-xs text-wecom-muted mt-1">
+                  {{ t('realtime.launch_wecom_desc') }}
+                </p>
+              </div>
+              <input
+                v-model="settings.launchWecomEnabled"
+                type="checkbox"
+                class="w-12 h-6 rounded-full bg-wecom-surface border border-wecom-border cursor-pointer"
+              />
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div class="pr-4">
+                <label class="text-sm text-wecom-text font-medium">{{
+                  t('realtime.switch_to_private_chats_label')
+                }}</label>
+                <p class="text-xs text-wecom-muted mt-1">
+                  {{ t('realtime.switch_to_private_chats_desc') }}
+                </p>
+              </div>
+              <input
+                v-model="settings.switchToPrivateChatsEnabled"
+                type="checkbox"
+                class="w-12 h-6 rounded-full bg-wecom-surface border border-wecom-border cursor-pointer"
+              />
+            </div>
+
+            <div class="flex items-center justify-between">
+              <div class="pr-4">
+                <label class="text-sm text-wecom-text font-medium">{{
+                  t('realtime.scroll_to_top_label')
+                }}</label>
+                <p class="text-xs text-wecom-muted mt-1">
+                  {{ t('realtime.scroll_to_top_desc') }}
+                </p>
+              </div>
+              <input
+                v-model="settings.scrollToTopEnabled"
+                type="checkbox"
+                class="w-12 h-6 rounded-full bg-wecom-surface border border-wecom-border cursor-pointer"
+              />
             </div>
           </div>
         </div>
