@@ -161,6 +161,8 @@ class AIReplySettings:
     system_prompt: str = ""
     prompt_style_key: str = "none"
     reply_max_length: int = 50
+    max_retries: int = 3
+    retry_backoff_ms: int = 500
 
 
 @dataclass
@@ -205,7 +207,7 @@ class SidecarSettings:
 
     send_via_sidecar: bool = False
     countdown_seconds: int = 0
-    poll_interval: int = 10
+    poll_interval: int = 2
     show_logs: bool = True
     max_panels: int = 3
     sidecar_timeout: int = 60
@@ -221,6 +223,8 @@ class RealtimeSettings:
     scan_interval: int = 60  # 扫描间隔（秒）
     use_ai_reply: bool = True  # 是否使用 AI 回复 (始终启用)
     send_via_sidecar: bool = True  # 是否通过 Sidecar 发送 (始终启用)
+    max_concurrent_devices: int = 4  # 实时回复最大并发设备数
+    stagger_delay_seconds: int = 10  # 多设备启动错峰间隔（秒）
 
 
 @dataclass
@@ -317,6 +321,8 @@ class AllSettings:
             "systemPrompt": self.ai_reply.system_prompt,
             "promptStyleKey": self.ai_reply.prompt_style_key,
             "aiReplyMaxLength": self.ai_reply.reply_max_length,
+            "aiReplyMaxRetries": self.ai_reply.max_retries,
+            "aiReplyRetryBackoffMs": self.ai_reply.retry_backoff_ms,
             # AI Analysis
             "aiAnalysisEnabled": self.ai_analysis.enabled,
             "aiAnalysisProvider": self.ai_analysis.provider,
@@ -348,6 +354,8 @@ class AllSettings:
             "scanInterval": self.realtime.scan_interval,
             "realtimeUseAIReply": self.realtime.use_ai_reply,
             "realtimeSendViaSidecar": self.realtime.send_via_sidecar,
+            "maxConcurrentRealtimeDevices": self.realtime.max_concurrent_devices,
+            "realtimeStaggerDelaySeconds": self.realtime.stagger_delay_seconds,
             # Followup (补刀功能)
             "followupEnabled": self.followup.followup_enabled,
             "maxFollowupPerScan": self.followup.max_followups,

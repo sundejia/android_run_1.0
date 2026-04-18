@@ -95,6 +95,22 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     (SettingCategory.AI_REPLY.value, "system_prompt", ValueType.STRING.value, "", "系统提示词", False),
     (SettingCategory.AI_REPLY.value, "prompt_style_key", ValueType.STRING.value, "none", "提示词风格预设", False),
     (SettingCategory.AI_REPLY.value, "reply_max_length", ValueType.INT.value, 50, "AI 回复最大长度", False),
+    (
+        SettingCategory.AI_REPLY.value,
+        "max_retries",
+        ValueType.INT.value,
+        3,
+        "AI 请求最大重试次数（仅对连接断开/超时类瞬时错误重试）",
+        False,
+    ),
+    (
+        SettingCategory.AI_REPLY.value,
+        "retry_backoff_ms",
+        ValueType.INT.value,
+        500,
+        "AI 请求重试基础退避时间(毫秒)，每次按指数递增并加入随机抖动",
+        False,
+    ),
     # ============================================================================
     # AI Analysis Settings
     # ============================================================================
@@ -134,7 +150,7 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     # ============================================================================
     (SettingCategory.SIDECAR.value, "send_via_sidecar", ValueType.BOOLEAN.value, False, "通过 Sidecar 发送", False),
     (SettingCategory.SIDECAR.value, "countdown_seconds", ValueType.INT.value, 0, "倒计时秒数", False),
-    (SettingCategory.SIDECAR.value, "poll_interval", ValueType.INT.value, 10, "轮询间隔(秒)", False),
+    (SettingCategory.SIDECAR.value, "poll_interval", ValueType.INT.value, 2, "轮询间隔(秒)", False),
     (SettingCategory.SIDECAR.value, "show_logs", ValueType.BOOLEAN.value, True, "Sidecar 是否显示日志面板", False),
     (SettingCategory.SIDECAR.value, "max_panels", ValueType.INT.value, 3, "Sidecar 最大并排面板数量", False),
     (SettingCategory.SIDECAR.value, "sidecar_timeout", ValueType.INT.value, 60, "Sidecar 审核超时(秒)", False),
@@ -152,6 +168,22 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         ValueType.BOOLEAN.value,
         True,
         "通过 Sidecar 发送 (始终启用)",
+        False,
+    ),
+    (
+        SettingCategory.REALTIME.value,
+        "max_concurrent_devices",
+        ValueType.INT.value,
+        4,
+        "实时回复最大并发设备数",
+        False,
+    ),
+    (
+        SettingCategory.REALTIME.value,
+        "stagger_delay_seconds",
+        ValueType.INT.value,
+        10,
+        "实时回复设备启动错峰间隔(秒)，避免多设备同时撞 ADB",
         False,
     ),
     # ============================================================================
@@ -264,6 +296,8 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "systemPrompt": (SettingCategory.AI_REPLY.value, "system_prompt"),
     "promptStyleKey": (SettingCategory.AI_REPLY.value, "prompt_style_key"),
     "aiReplyMaxLength": (SettingCategory.AI_REPLY.value, "reply_max_length"),
+    "aiReplyMaxRetries": (SettingCategory.AI_REPLY.value, "max_retries"),
+    "aiReplyRetryBackoffMs": (SettingCategory.AI_REPLY.value, "retry_backoff_ms"),
     # AI Analysis
     "aiAnalysisEnabled": (SettingCategory.AI_ANALYSIS.value, "enabled"),
     "aiAnalysisProvider": (SettingCategory.AI_ANALYSIS.value, "provider"),
@@ -295,6 +329,8 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "scanInterval": (SettingCategory.REALTIME.value, "scan_interval"),
     "realtimeUseAIReply": (SettingCategory.REALTIME.value, "use_ai_reply"),
     "realtimeSendViaSidecar": (SettingCategory.REALTIME.value, "send_via_sidecar"),
+    "maxConcurrentRealtimeDevices": (SettingCategory.REALTIME.value, "max_concurrent_devices"),
+    "realtimeStaggerDelaySeconds": (SettingCategory.REALTIME.value, "stagger_delay_seconds"),
     # Followup (补刀功能)
     "followupEnabled": (SettingCategory.FOLLOWUP.value, "followup_enabled"),
     "maxFollowupPerScan": (SettingCategory.FOLLOWUP.value, "max_followups"),

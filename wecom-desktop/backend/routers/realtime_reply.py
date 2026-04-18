@@ -135,6 +135,30 @@ async def start_device(
 
     manager = get_realtime_reply_manager()
 
+    # Pre-check the realtime concurrency cap so we can return a meaningful
+    # 429 to the UI before doing anything else. The manager re-checks
+    # internally to keep the contract authoritative.
+    try:
+        from services.settings import get_settings_service
+
+        _settings = get_settings_service()
+        _max_concurrent = _settings.get_max_concurrent_realtime_devices()
+    except Exception:
+        _max_concurrent = 4
+
+    _active = manager.get_active_realtime_count()
+    _existing_state = manager.get_state(serial)
+    _already_active_for_this_device = _existing_state and _existing_state.status.value in ("running", "starting")
+
+    if _active >= _max_concurrent and not _already_active_for_this_device:
+        raise HTTPException(
+            status_code=429,
+            detail=(
+                f"Realtime concurrency limit reached ({_active}/{_max_concurrent}). "
+                "Stop another device or raise maxConcurrentRealtimeDevices."
+            ),
+        )
+
     success = await manager.start_realtime_reply(
         serial=serial, scan_interval=scan_interval, use_ai_reply=use_ai_reply, send_via_sidecar=send_via_sidecar
     )

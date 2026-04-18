@@ -2314,6 +2314,17 @@ class ResponseDetector:
                 ai_server_url = global_settings.get("ai_server_url", DEFAULT_AI_SERVER_URL)
 
             ai_timeout = global_settings.get("aiReplyTimeout", DEFAULT_AI_TIMEOUT)
+
+            # Retry configuration: only retried on transient transport-level errors
+            try:
+                ai_max_retries = max(1, int(global_settings.get("aiReplyMaxRetries", 3)))
+            except (TypeError, ValueError):
+                ai_max_retries = 3
+            try:
+                ai_retry_backoff_ms = max(0, int(global_settings.get("aiReplyRetryBackoffMs", 500)))
+            except (TypeError, ValueError):
+                ai_retry_backoff_ms = 500
+
             # Use combined system prompt (custom + preset style)
             from services.settings import get_settings_service
 
@@ -2469,85 +2480,144 @@ class ResponseDetector:
                 self._logger.info(f"[{device_serial}] [{idx + 1}] {role}: {type_indicator}{content_display}")
             self._logger.info(f"[{device_serial}] " + "=" * 60)
 
-            async with aiohttp.ClientSession() as session:
-                async with session.post(
-                    ai_server_url, json=payload, timeout=aiohttp.ClientTimeout(total=ai_timeout)
-                ) as response:
-                    # ===== AI Response Logging =====
-                    self._logger.info(f"[{device_serial}] " + "=" * 60)
-                    self._logger.info(f"[{device_serial}] AI RESPONSE for {user_name}")
-                    self._logger.info(f"[{device_serial}] " + "=" * 60)
-                    self._logger.info(f"[{device_serial}] HTTP Status: {response.status}")
+            # Transport-level transient errors that are safe to retry. We avoid
+            # retrying on HTTP 4xx/5xx because those usually indicate a real
+            # server-side issue rather than a dropped TCP connection.
+            _retryable_excs: tuple[type[BaseException], ...] = (
+                aiohttp.ServerDisconnectedError,
+                aiohttp.ClientConnectorError,
+                aiohttp.ClientOSError,
+                asyncio.TimeoutError,
+            )
 
-                    if response.status == 200:
-                        data = await response.json()
-                        ai_reply = data.get("output", data.get("response", ""))
+            import random as _random  # local alias to avoid shadowing module-level imports
 
-                        self._logger.info(f"[{device_serial}] Response Data: {data}")
-                        self._logger.info(f"[{device_serial}] ")
-                        self._logger.info(f"[{device_serial}] --- AI Reply ---")
-                        self._logger.info(f"[{device_serial}] {ai_reply}")
-                        self._logger.info(f"[{device_serial}] " + "=" * 60)
+            response = None  # populated by the inner block on the final attempt
+            data = None
+            ai_reply = None
+            response_status = None
+            response_text_for_logging = None
+            _retry_succeeded_after_failure = False
 
-                        # Check for human request command
-                        if ai_reply and "command back to user operation" in ai_reply.lower():
-                            self._logger.info(f"[{device_serial}] Human agent requested, stopping auto-reply")
-                            _gen_metrics.log_error(
-                                error_type="ai_human_transfer",
-                                error_message="AI requested transfer to human agent",
-                                customer_name=user_name,
-                                context={"serial": device_serial},
-                            )
-                            return None
-
-                        if ai_reply and len(ai_reply.strip()) > 0:
-                            # Clean up potential XML tags that AI might include
-                            import re
-
-                            cleaned_reply = ai_reply.strip()
-                            # Remove common XML wrapper tags that LLMs sometimes include
-                            xml_tags_to_remove = [
-                                r"</?response>",
-                                r"</?output>",
-                                r"</?reply>",
-                                r"</?answer>",
-                                r"</?message>",
-                            ]
-                            for pattern in xml_tags_to_remove:
-                                cleaned_reply = re.sub(pattern, "", cleaned_reply, flags=re.IGNORECASE)
-                            cleaned_reply = cleaned_reply.strip()
-
-                            if cleaned_reply != ai_reply.strip():
-                                self._logger.info(f"[{device_serial}] 🧹 Cleaned XML tags from AI reply")
-                                self._logger.debug(f"[{device_serial}]    Original: {ai_reply[:80]}...")
-                                self._logger.debug(f"[{device_serial}]    Cleaned: {cleaned_reply[:80]}...")
-
-                            self._logger.info(f"[{device_serial}] ✅ Generated reply: {cleaned_reply[:50]}...")
-                            return cleaned_reply
-                        else:
-                            self._logger.warning(f"[{device_serial}] AI returned empty reply")
-                            self._logger.info(f"[{device_serial}] " + "=" * 60)
-                            _gen_metrics.log_error(
-                                error_type="ai_empty_reply",
-                                error_message="AI returned an empty reply",
-                                customer_name=user_name,
-                                context={"serial": device_serial, "ai_server_url": ai_server_url},
-                            )
-                    else:
-                        response_text = await response.text()
-                        self._logger.warning(f"[{device_serial}] AI server returned {response.status}")
-                        self._logger.warning(f"[{device_serial}] Response body: {response_text}")
-                        self._logger.info(f"[{device_serial}] " + "=" * 60)
-                        _gen_metrics.log_error(
-                            error_type="ai_http_error",
-                            error_message=f"AI server returned HTTP {response.status}",
-                            customer_name=user_name,
-                            context={
-                                "serial": device_serial,
-                                "status_code": response.status,
-                                "ai_server_url": ai_server_url,
-                            },
+            for _attempt in range(ai_max_retries):
+                try:
+                    # force_close prevents stale keep-alive sockets from a remote
+                    # gateway that may silently drop idle connections (the most
+                    # common cause of ServerDisconnectedError in this code path).
+                    _connector = aiohttp.TCPConnector(force_close=True, limit=1)
+                    async with aiohttp.ClientSession(connector=_connector) as session:
+                        async with session.post(
+                            ai_server_url,
+                            json=payload,
+                            timeout=aiohttp.ClientTimeout(total=ai_timeout),
+                        ) as _resp:
+                            response_status = _resp.status
+                            if _resp.status == 200:
+                                data = await _resp.json()
+                            else:
+                                response_text_for_logging = await _resp.text()
+                    if _attempt > 0:
+                        _retry_succeeded_after_failure = True
+                        self._logger.info(
+                            f"[{device_serial}] ✅ AI request succeeded on retry "
+                            f"{_attempt + 1}/{ai_max_retries}"
                         )
+                    break
+                except _retryable_excs as _retry_exc:
+                    if _attempt < ai_max_retries - 1:
+                        _backoff_seconds = (ai_retry_backoff_ms / 1000.0) * (2 ** _attempt) + _random.uniform(
+                            0, 0.5
+                        )
+                        self._logger.warning(
+                            f"[{device_serial}] ⚠️ AI request transient failure "
+                            f"({type(_retry_exc).__name__}: {_retry_exc}) on attempt "
+                            f"{_attempt + 1}/{ai_max_retries}; retrying in "
+                            f"{_backoff_seconds:.2f}s..."
+                        )
+                        await asyncio.sleep(_backoff_seconds)
+                        continue
+                    # Final attempt: re-raise so the outer except handles
+                    # logging and circuit-breaker bookkeeping.
+                    raise
+
+            # ===== AI Response Logging =====
+            self._logger.info(f"[{device_serial}] " + "=" * 60)
+            self._logger.info(f"[{device_serial}] AI RESPONSE for {user_name}")
+            self._logger.info(f"[{device_serial}] " + "=" * 60)
+            self._logger.info(f"[{device_serial}] HTTP Status: {response_status}")
+            if _retry_succeeded_after_failure:
+                self._logger.info(
+                    f"[{device_serial}] (recovered after retry — connection self-healed)"
+                )
+
+            # Re-shape downstream code to consume the retry-loop result.
+            if response_status == 200:
+                ai_reply = data.get("output", data.get("response", "")) if data else ""
+
+                self._logger.info(f"[{device_serial}] Response Data: {data}")
+                self._logger.info(f"[{device_serial}] ")
+                self._logger.info(f"[{device_serial}] --- AI Reply ---")
+                self._logger.info(f"[{device_serial}] {ai_reply}")
+                self._logger.info(f"[{device_serial}] " + "=" * 60)
+
+                # Check for human request command
+                if ai_reply and "command back to user operation" in ai_reply.lower():
+                    self._logger.info(f"[{device_serial}] Human agent requested, stopping auto-reply")
+                    _gen_metrics.log_error(
+                        error_type="ai_human_transfer",
+                        error_message="AI requested transfer to human agent",
+                        customer_name=user_name,
+                        context={"serial": device_serial},
+                    )
+                    return None
+
+                if ai_reply and len(ai_reply.strip()) > 0:
+                    # Clean up potential XML tags that AI might include
+                    import re
+
+                    cleaned_reply = ai_reply.strip()
+                    # Remove common XML wrapper tags that LLMs sometimes include
+                    xml_tags_to_remove = [
+                        r"</?response>",
+                        r"</?output>",
+                        r"</?reply>",
+                        r"</?answer>",
+                        r"</?message>",
+                    ]
+                    for pattern in xml_tags_to_remove:
+                        cleaned_reply = re.sub(pattern, "", cleaned_reply, flags=re.IGNORECASE)
+                    cleaned_reply = cleaned_reply.strip()
+
+                    if cleaned_reply != ai_reply.strip():
+                        self._logger.info(f"[{device_serial}] 🧹 Cleaned XML tags from AI reply")
+                        self._logger.debug(f"[{device_serial}]    Original: {ai_reply[:80]}...")
+                        self._logger.debug(f"[{device_serial}]    Cleaned: {cleaned_reply[:80]}...")
+
+                    self._logger.info(f"[{device_serial}] ✅ Generated reply: {cleaned_reply[:50]}...")
+                    return cleaned_reply
+                else:
+                    self._logger.warning(f"[{device_serial}] AI returned empty reply")
+                    self._logger.info(f"[{device_serial}] " + "=" * 60)
+                    _gen_metrics.log_error(
+                        error_type="ai_empty_reply",
+                        error_message="AI returned an empty reply",
+                        customer_name=user_name,
+                        context={"serial": device_serial, "ai_server_url": ai_server_url},
+                    )
+            else:
+                self._logger.warning(f"[{device_serial}] AI server returned {response_status}")
+                self._logger.warning(f"[{device_serial}] Response body: {response_text_for_logging}")
+                self._logger.info(f"[{device_serial}] " + "=" * 60)
+                _gen_metrics.log_error(
+                    error_type="ai_http_error",
+                    error_message=f"AI server returned HTTP {response_status}",
+                    customer_name=user_name,
+                    context={
+                        "serial": device_serial,
+                        "status_code": response_status,
+                        "ai_server_url": ai_server_url,
+                    },
+                )
 
         except TimeoutError:
             self._logger.warning(f"[{device_serial}] " + "=" * 60)
@@ -2821,10 +2891,9 @@ class ResponseDetector:
 
         try:
             # 获取最近 24 小时内有消息的客户
-            import sqlite3
+            from services.conversation_storage import open_shared_sqlite
 
-            conn = sqlite3.connect(self._repository._db_path)
-            conn.row_factory = sqlite3.Row
+            conn = open_shared_sqlite(self._repository._db_path, row_factory=True)
 
             # 查询最近有消息的客户（最近 24 小时）
             cutoff_time = (datetime.now() - timedelta(hours=24)).isoformat()
@@ -2943,6 +3012,38 @@ class ResponseDetector:
         ):
             self._logger.warning(f"[{serial}] ⛔ Final blacklist check blocked reply for {user_name}")
             return False, None
+
+        # Cross-device dedup: if another device already enqueued the same
+        # (customer, message-hash) within the last 60s we skip silently. This
+        # prevents the "two phones reply to 孙德家 within a minute" scenario.
+        # Failure of the dedup repo never blocks a reply (fail-open).
+        try:
+            from .recent_replies_repository import (
+                get_recent_replies_repository,
+                hash_message,
+                make_customer_key,
+            )
+
+            _dedup_repo = get_recent_replies_repository()
+            _dedup_customer_key = make_customer_key(user_name, user_channel)
+            _dedup_message_hash = hash_message(message)
+            _existing = _dedup_repo.find_recent(_dedup_customer_key, _dedup_message_hash)
+            if _existing is not None and _existing.device_serial != serial:
+                self._logger.info(
+                    f"[{serial}] ⏭️  Skipped duplicate "
+                    f"(already sent by {_existing.device_serial} "
+                    f"{(int(__import__('time').time() - _existing.sent_at))}s ago)"
+                )
+                return False, None
+            # Reserve the slot eagerly so a parallel device sees us before it
+            # builds the same payload. If the actual send later fails we leave
+            # the row in place — the cost is one missed reply within 60s, which
+            # is preferable to two duplicate replies.
+            _dedup_repo.record(_dedup_customer_key, _dedup_message_hash, serial)
+        except Exception as _dedup_exc:  # noqa: BLE001 — dedup must never raise
+            self._logger.debug(
+                f"[{serial}] recent-replies dedup unavailable, proceeding without dedup: {_dedup_exc}"
+            )
 
         if sidecar_client:
             # 通过 Sidecar 队列发送（需要人工确认）
