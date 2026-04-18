@@ -10,6 +10,7 @@ import asyncio
 import os
 import platform
 import re
+import signal
 import subprocess
 import time as _time
 from collections.abc import Callable, Coroutine
@@ -82,6 +83,20 @@ class RealtimeReplyManager:
         self._restart_counts: dict[str, int] = {}
         self._auto_restart_enabled: dict[str, bool] = {}
         self._process_start_times: dict[str, float] = {}
+        # Tracks the last time *any* device was spawned. Used to enforce the
+        # configured stagger delay between successive realtime_reply spawns so
+        # we never have two devices running their initial ADB-heavy
+        # "launch WeCom + scroll to top" sequence at the same instant.
+        self._last_spawn_monotonic: float = 0.0
+        self._spawn_serializer = asyncio.Lock()
+
+    def get_active_realtime_count(self) -> int:
+        """Number of devices currently in starting/running state."""
+        return sum(
+            1
+            for state in self._states.values()
+            if state.status in (RealtimeReplyStatus.RUNNING, RealtimeReplyStatus.STARTING)
+        )
 
     # ==================== 状态查询 ====================
 
@@ -185,6 +200,31 @@ class RealtimeReplyManager:
                 await self._broadcast_log(serial, "WARNING", "Follow-up already running")
                 return False
 
+        # Concurrency cap (mirrors the sync path). The check is done *before*
+        # the stagger delay so callers learn immediately that the request was
+        # rejected rather than waiting for the delay.
+        try:
+            from services.settings import get_settings_service
+
+            _settings = get_settings_service()
+            _max_concurrent = _settings.get_max_concurrent_realtime_devices()
+            _stagger_delay = _settings.get_realtime_stagger_delay_seconds()
+        except Exception:
+            _max_concurrent = 4
+            _stagger_delay = 10
+
+        _active_count = self.get_active_realtime_count()
+        if _active_count >= _max_concurrent:
+            await self._broadcast_log(
+                serial,
+                "WARNING",
+                (
+                    f"Realtime concurrency limit reached "
+                    f"({_active_count}/{_max_concurrent}). Stop another device first."
+                ),
+            )
+            return False
+
         # Persist startup params for auto-restart
         self._startup_params[serial] = {
             "scan_interval": scan_interval,
@@ -234,14 +274,43 @@ class RealtimeReplyManager:
             env["PYTHONIOENCODING"] = "utf-8"
             env["PYTHONUTF8"] = "1"
 
-            # 创建子进程
-            process = await self._create_subprocess(cmd, env)
+            # Stagger spawns so we never have two devices doing the heavy
+            # initial ADB sequence (launch_wecom + scroll_to_top) at the same
+            # time. We hold a per-manager lock during the sleep so concurrent
+            # callers serialise properly even when triggered from the UI in
+            # rapid succession.
+            async with self._spawn_serializer:
+                if _stagger_delay > 0:
+                    elapsed_since_last = _time.monotonic() - self._last_spawn_monotonic
+                    wait_seconds = max(0.0, _stagger_delay - elapsed_since_last)
+                    if self._last_spawn_monotonic > 0 and wait_seconds > 0:
+                        await self._broadcast_log(
+                            serial,
+                            "INFO",
+                            f"Stagger: waiting {wait_seconds:.1f}s before spawn to avoid ADB contention",
+                        )
+                        await asyncio.sleep(wait_seconds)
+                self._last_spawn_monotonic = _time.monotonic()
+
+                # 创建子进程
+                process = await self._create_subprocess(cmd, env)
 
             self._processes[serial] = process
             self._process_start_times[serial] = _time.monotonic()
             self._states[serial].status = RealtimeReplyStatus.RUNNING
             self._states[serial].message = "Follow-up running"
             await self._broadcast_status(serial)
+
+            # Track the spawned PID in a runtime PID file so the next
+            # backend startup can detect us as an orphan if the parent
+            # crashes before we get a chance to clean up. Best-effort —
+            # failure here must not abort the launch.
+            try:
+                from services.runtime_hygiene import register_child_pid
+
+                register_child_pid("realtime", serial, process.pid)
+            except Exception:
+                pass
 
             # Windows: 创建 Job Object
             if platform.system() == "Windows":
@@ -320,12 +389,39 @@ class RealtimeReplyManager:
                 except Exception:
                     process.terminate()
             else:
-                process.terminate()
+                # The realtime_reply_process subprocess spawns its own children
+                # (DroidRun TCP client, occasional adb invocations, etc.).
+                # ``process.terminate()`` only signals the leader, leaving the
+                # grandchildren as orphans adopted by init. Because we set
+                # ``start_new_session=True`` on spawn, the leader's PID is also
+                # the process group ID, so SIGTERM-by-pgid brings the whole
+                # tree down at once.
+                try:
+                    pgid = os.getpgid(process.pid)
+                    os.killpg(pgid, signal.SIGTERM)
+                except (ProcessLookupError, PermissionError, OSError):
+                    # Either the process is already gone, or pgid lookup
+                    # failed (rare). Fall back to leader-only terminate.
+                    try:
+                        process.terminate()
+                    except ProcessLookupError:
+                        pass
 
             try:
                 await asyncio.wait_for(process.wait(), timeout=5.0)
             except TimeoutError:
-                process.kill()
+                # SIGTERM didn't take — escalate to SIGKILL, again on the
+                # whole group so we don't leak grandchildren on shutdown.
+                if platform.system() != "Windows":
+                    try:
+                        pgid = os.getpgid(process.pid)
+                        os.killpg(pgid, signal.SIGKILL)
+                    except (ProcessLookupError, PermissionError, OSError):
+                        pass
+                try:
+                    process.kill()
+                except ProcessLookupError:
+                    pass
                 await process.wait()
 
             if serial in self._read_tasks:
@@ -354,6 +450,16 @@ class RealtimeReplyManager:
             try:
                 from services.device_manager import PortAllocator
                 PortAllocator().release(serial)
+            except Exception:
+                pass
+
+            # Drop the PID file now that the process tree is confirmed
+            # gone — leaving it would cause the next backend startup to
+            # complain about a "missing" orphan.
+            try:
+                from services.runtime_hygiene import unregister_child_pid
+
+                unregister_child_pid("realtime", serial)
             except Exception:
                 pass
 
@@ -665,6 +771,16 @@ class RealtimeReplyManager:
             self._processes.pop(serial, None)
             self._read_tasks.pop(serial, None)
             self._process_start_times.pop(serial, None)
+            # If the subprocess exited on its own (crash, normal completion,
+            # auto-restart handoff) we still need to drop the PID file —
+            # otherwise the next startup will treat the dead PID as an
+            # orphan and emit a misleading "killing orphan" warning.
+            try:
+                from services.runtime_hygiene import unregister_child_pid
+
+                unregister_child_pid("realtime", serial)
+            except Exception:
+                pass
 
     async def _attempt_restart(self, serial: str) -> None:
         """Auto-restart a crashed process with exponential backoff."""
