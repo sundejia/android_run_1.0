@@ -198,6 +198,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[startup] [FAIL] Monitoring table setup failed: {e}")
 
+    # Runtime hygiene: kill orphan realtime/droidrun/scrcpy subprocesses
+    # left by a previous crash, sweep stale wecom-upload-*.db tempfiles,
+    # and reset the local ADB daemon so we never inherit a wedged server.
+    # All steps are best-effort; failures are reported but never block start.
+    try:
+        from services.runtime_hygiene import startup_hygiene
+
+        hygiene_summary = await startup_hygiene()
+        orphan = hygiene_summary.get("orphans", {})
+        fs = hygiene_summary.get("fs", {})
+        adb = hygiene_summary.get("adb", {})
+        print(
+            "[startup] [OK] Runtime hygiene: "
+            f"orphans killed={orphan.get('killed_from_pidfiles', 0)}+"
+            f"{orphan.get('killed_from_scan', 0)}, "
+            f"temp files removed={fs.get('deleted_temp_files', 0)} "
+            f"({fs.get('freed_bytes', 0)} bytes), "
+            f"adb reset kill={adb.get('kill_ok')}/start={adb.get('start_ok')}"
+        )
+    except Exception as e:
+        print(f"[startup] [FAIL] Runtime hygiene failed: {e}")
+
     print("[startup] Follow-up system uses multi-device processes; no global startup needed.")
 
     # Start backup service for admin_actions.xlsx
@@ -224,7 +246,26 @@ async def lifespan(app: FastAPI):
     await backup_service.stop()
     print("[shutdown] Backup service stopped")
 
-    print("[shutdown] Follow-up processes should be stopped via device manager if needed")
+    # Bring down all per-device realtime_reply subprocesses BEFORE clearing
+    # PID files. Previously this branch only printed a "should be stopped"
+    # comment, which is what caused orphan ``realtime_reply_process`` /
+    # ``droidrun`` / ``scrcpy`` processes to survive backend restarts and
+    # accumulate as silent leaks.
+    try:
+        from services.realtime_reply_manager import get_realtime_reply_manager
+
+        await get_realtime_reply_manager().stop_all()
+        print("[shutdown] All realtime reply processes stopped")
+    except Exception as e:
+        print(f"[shutdown] [WARN] Failed to stop realtime reply processes: {e}")
+
+    try:
+        from services.runtime_hygiene import shutdown_hygiene
+
+        shutdown_hygiene()
+        print("[shutdown] Runtime hygiene cleared")
+    except Exception as e:
+        print(f"[shutdown] [WARN] Runtime hygiene shutdown failed: {e}")
 
 
 # Create FastAPI app with lifespan handler
