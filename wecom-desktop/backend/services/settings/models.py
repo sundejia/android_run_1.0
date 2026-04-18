@@ -225,6 +225,9 @@ class RealtimeSettings:
     send_via_sidecar: bool = True  # 是否通过 Sidecar 发送 (始终启用)
     max_concurrent_devices: int = 4  # 实时回复最大并发设备数
     stagger_delay_seconds: int = 10  # 多设备启动错峰间隔（秒）
+    scroll_to_top_enabled: bool = True  # 扫描前是否滚动到列表顶部（关掉可省 ~20s/scan）
+    launch_wecom_enabled: bool = True  # 扫描前是否主动启动/前置企微（关掉可省 ~5s/scan）
+    switch_to_private_chats_enabled: bool = True  # 扫描前是否切到私聊 tab（关掉可省 ~4s/scan）
 
 
 @dataclass
@@ -356,6 +359,9 @@ class AllSettings:
             "realtimeSendViaSidecar": self.realtime.send_via_sidecar,
             "maxConcurrentRealtimeDevices": self.realtime.max_concurrent_devices,
             "realtimeStaggerDelaySeconds": self.realtime.stagger_delay_seconds,
+            "realtimeScrollToTopEnabled": self.realtime.scroll_to_top_enabled,
+            "realtimeLaunchWecomEnabled": self.realtime.launch_wecom_enabled,
+            "realtimeSwitchToPrivateChatsEnabled": self.realtime.switch_to_private_chats_enabled,
             # Followup (补刀功能)
             "followupEnabled": self.followup.followup_enabled,
             "maxFollowupPerScan": self.followup.max_followups,

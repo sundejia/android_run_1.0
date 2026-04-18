@@ -186,6 +186,30 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         "实时回复设备启动错峰间隔(秒)，避免多设备同时撞 ADB",
         False,
     ),
+    (
+        SettingCategory.REALTIME.value,
+        "scroll_to_top_enabled",
+        ValueType.BOOLEAN.value,
+        True,
+        "扫描前是否滚动到会话列表顶部（关闭可省 ~20s/scan，但可能错过滚动后才出现的红点）",
+        False,
+    ),
+    (
+        SettingCategory.REALTIME.value,
+        "launch_wecom_enabled",
+        ValueType.BOOLEAN.value,
+        True,
+        "扫描前是否主动启动/前置企微（关闭可省 ~5s/scan；仅当你保证企微始终前台时安全）",
+        False,
+    ),
+    (
+        SettingCategory.REALTIME.value,
+        "switch_to_private_chats_enabled",
+        ValueType.BOOLEAN.value,
+        True,
+        "扫描前是否切到“私聊”tab（关闭可省 ~4s/scan；仅当你保证已停留在私聊 tab 时安全）",
+        False,
+    ),
     # ============================================================================
     # Followup Settings (补刀功能专用配置)
     # ============================================================================
@@ -331,6 +355,9 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "realtimeSendViaSidecar": (SettingCategory.REALTIME.value, "send_via_sidecar"),
     "maxConcurrentRealtimeDevices": (SettingCategory.REALTIME.value, "max_concurrent_devices"),
     "realtimeStaggerDelaySeconds": (SettingCategory.REALTIME.value, "stagger_delay_seconds"),
+    "realtimeScrollToTopEnabled": (SettingCategory.REALTIME.value, "scroll_to_top_enabled"),
+    "realtimeLaunchWecomEnabled": (SettingCategory.REALTIME.value, "launch_wecom_enabled"),
+    "realtimeSwitchToPrivateChatsEnabled": (SettingCategory.REALTIME.value, "switch_to_private_chats_enabled"),
     # Followup (补刀功能)
     "followupEnabled": (SettingCategory.FOLLOWUP.value, "followup_enabled"),
     "maxFollowupPerScan": (SettingCategory.FOLLOWUP.value, "max_followups"),

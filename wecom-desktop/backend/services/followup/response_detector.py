@@ -748,20 +748,70 @@ class ResponseDetector:
                 if client:
                     self._logger.info(f"[{serial}] 🚀 Sidecar enabled for this scan")
 
-                # Step 1: Launch WeCom
-                self._logger.info(f"[{serial}] Step 1: Launching WeCom...")
-                await wecom.launch_wecom(wait_for_ready=True)
-                await asyncio.sleep(1)
+                # Pre-scan steps (Steps 1-3) are individually gated so operators
+                # can shave time per scan when they can guarantee the WeCom
+                # foreground state. All settings are read live each scan so
+                # toggling in the admin UI takes effect without process restart.
+                # Failure to read settings always falls back to True (safe
+                # default = current behaviour, never lose messages).
+                _pre_scan_toggles = {
+                    "launch_wecom_enabled": True,
+                    "switch_to_private_chats_enabled": True,
+                    "scroll_to_top_enabled": True,
+                }
+                try:
+                    from services.settings import get_settings_service, SettingCategory
 
-                # Step 2: Switch to Private Chats (updated from External)
-                self._logger.info(f"[{serial}] Step 2: Switching to Private Chats...")
-                await wecom.switch_to_private_chats()
-                await asyncio.sleep(0.5)
+                    _svc = get_settings_service()
+                    for _key in _pre_scan_toggles:
+                        _pre_scan_toggles[_key] = bool(
+                            _svc.get(SettingCategory.REALTIME.value, _key, True)
+                        )
+                except Exception as _toggle_err:
+                    self._logger.debug(
+                        f"[{serial}] Failed to read realtime pre-scan toggles, "
+                        f"defaulting all to True: {_toggle_err}"
+                    )
 
-                # Step 3: Scroll to top
-                self._logger.info(f"[{serial}] Step 3: Scrolling to top...")
-                await wecom.adb.scroll_to_top()
-                await asyncio.sleep(0.5)
+                # Step 1: Launch WeCom (gated by realtime.launch_wecom_enabled).
+                # Skipping saves ~5s/scan but assumes WeCom is already foreground.
+                if _pre_scan_toggles["launch_wecom_enabled"]:
+                    self._logger.info(f"[{serial}] Step 1: Launching WeCom...")
+                    await wecom.launch_wecom(wait_for_ready=True)
+                    await asyncio.sleep(1)
+                else:
+                    self._logger.info(
+                        f"[{serial}] Step 1: Skipping launch-wecom "
+                        f"(realtime.launch_wecom_enabled=False)"
+                    )
+
+                # Step 2: Switch to Private Chats (gated by
+                # realtime.switch_to_private_chats_enabled). Skipping saves
+                # ~4s/scan but assumes the device is already on the private-chats tab.
+                if _pre_scan_toggles["switch_to_private_chats_enabled"]:
+                    self._logger.info(f"[{serial}] Step 2: Switching to Private Chats...")
+                    await wecom.switch_to_private_chats()
+                    await asyncio.sleep(0.5)
+                else:
+                    self._logger.info(
+                        f"[{serial}] Step 2: Skipping switch-to-private-chats "
+                        f"(realtime.switch_to_private_chats_enabled=False)"
+                    )
+
+                # Step 3: Scroll to top (gated by realtime.scroll_to_top_enabled).
+                # The scroll is the single most expensive sub-step (~20s on a
+                # busy list because it has to swipe + wait for the UI to settle).
+                # Skipping is safe only when operators keep the conversation
+                # list pinned to the top.
+                if _pre_scan_toggles["scroll_to_top_enabled"]:
+                    self._logger.info(f"[{serial}] Step 3: Scrolling to top...")
+                    await wecom.adb.scroll_to_top()
+                    await asyncio.sleep(0.5)
+                else:
+                    self._logger.info(
+                        f"[{serial}] Step 3: Skipping scroll-to-top "
+                        f"(realtime.scroll_to_top_enabled=False)"
+                    )
 
                 # Step 4: Initial red dot detection
                 self._logger.info(f"[{serial}] Step 4: Detecting red dot users (first page only)...")
