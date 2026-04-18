@@ -100,6 +100,14 @@ class RealtimeReplyManager:
             return False
         return state.status in (RealtimeReplyStatus.RUNNING, RealtimeReplyStatus.STARTING)
 
+    def get_active_realtime_count(self) -> int:
+        """统计当前处于 running / starting 的设备数，用于并发上限校验"""
+        return sum(
+            1
+            for state in self._states.values()
+            if state.status in (RealtimeReplyStatus.RUNNING, RealtimeReplyStatus.STARTING)
+        )
+
     # ==================== 回调注册 ====================
 
     def register_log_callback(self, serial: str, callback: LogCallback):
