@@ -129,7 +129,7 @@ async def run(args):
         from services.settings.service import SettingsService
 
         _settings_svc = SettingsService(str(get_control_db_path()))
-        _all_settings = _settings_svc.get_all_settings_flat()
+        _all_settings = _settings_svc.get_flat_settings()
         _ai_url = _all_settings.get("aiServerUrl", "http://47.113.187.234:8000")
         if not _ai_url:
             _ai_url = "http://47.113.187.234:8000"

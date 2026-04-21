@@ -474,19 +474,48 @@ class ResponseDetector:
             del self._click_fail_cooldown[k]
 
     def _get_sidecar_timeout(self) -> float:
-        """Return the Sidecar review timeout, reduced during night hours."""
+        """Return the Sidecar review timeout, reduced during night hours.
+
+        Defaults are applied first so that hot-path callers always receive a
+        sane number even when settings cannot be loaded. We split the
+        exception handling on purpose:
+
+        * ``(ImportError, ValueError, TypeError, KeyError)`` are "expected"
+          transient/data shape errors (settings module not yet importable in
+          a subprocess, a stored value cannot be cast). Logged at DEBUG.
+        * Anything else is treated as a programming error (e.g. a typo'd
+          attribute on ``SettingsService`` like the historical
+          ``get_all_settings_flat()``). Logged at WARNING so that it shows
+          up in ``scripts/scan_followup_progress.py`` instead of silently
+          falling back to defaults forever.
+        """
+        day_timeout: float = 60.0
+        night_timeout: float = 30.0
+        night_start: int = 22
+        night_end: int = 8
         try:
             from services.settings import get_settings_service
 
             svc = get_settings_service()
-            all_settings = svc.get_all_settings_flat()
+            all_settings = svc.get_flat_settings()
 
-            day_timeout = float(all_settings.get("sidecar_timeout", 60))
-            night_timeout = float(all_settings.get("night_mode_sidecar_timeout", 30))
-            night_start = int(all_settings.get("night_mode_start_hour", 22))
-            night_end = int(all_settings.get("night_mode_end_hour", 8))
-        except Exception:
-            day_timeout, night_timeout, night_start, night_end = 60.0, 30.0, 22, 8
+            day_timeout = float(all_settings.get("sidecar_timeout", day_timeout))
+            night_timeout = float(
+                all_settings.get("night_mode_sidecar_timeout", night_timeout)
+            )
+            night_start = int(all_settings.get("night_mode_start_hour", night_start))
+            night_end = int(all_settings.get("night_mode_end_hour", night_end))
+        except (ImportError, ValueError, TypeError, KeyError) as exc:
+            self._logger.debug(
+                "Sidecar timeout settings unavailable, using defaults: %s", exc
+            )
+        except Exception as exc:
+            self._logger.warning(
+                "Sidecar timeout settings lookup failed unexpectedly "
+                "(%s: %s); using defaults",
+                type(exc).__name__,
+                exc,
+            )
 
         hour = datetime.now().hour
         if night_start > night_end:
