@@ -380,6 +380,54 @@ def test_sidecar_queue_send_cancels_blacklisted_message(temp_db):
     mock_session.send_message.assert_not_called()
 
 
+def test_sidecar_blacklist_gate_runs_off_event_loop(temp_db):
+    """Regression for B1: ``_ensure_contact_not_blacklisted`` must dispatch the
+    blocking ``BlacklistChecker.is_blacklisted`` SQLite query off the event
+    loop via ``asyncio.to_thread`` so concurrent device sends are not
+    serialized.
+
+    A simple structural assertion: the call site must be ``await
+    asyncio.to_thread(BlacklistChecker.is_blacklisted, ...)``. If anyone
+    reverts the wrap, this test will fail because the mock will be called
+    on the same thread as the test (i.e. the event loop thread).
+    """
+    import asyncio
+    import threading
+
+    main_thread_id = threading.get_ident()
+    captured: dict[str, object] = {"thread_ids": []}
+
+    def recording_check(*_args, **_kwargs) -> bool:
+        captured["thread_ids"].append(threading.get_ident())
+        return False
+
+    mock_session = MagicMock()
+    mock_session.snapshot = AsyncMock(return_value=MagicMock(conversation=None))
+
+    with patch(
+        "routers.sidecar.BlacklistChecker.is_blacklisted",
+        side_effect=recording_check,
+    ):
+        asyncio.run(
+            sidecar._ensure_contact_not_blacklisted(
+                "test-serial",
+                contact_name="SomeUser",
+                channel="@WeChat",
+                session=mock_session,
+            )
+        )
+
+    assert captured["thread_ids"], "is_blacklisted was never called"
+    # The blocking lookup must run on a worker thread, NOT the event loop
+    # thread. This pins the asyncio.to_thread wrap in place.
+    assert captured["thread_ids"][0] != main_thread_id, (
+        "BlacklistChecker.is_blacklisted ran on the event loop thread. "
+        "Regression: did someone remove the asyncio.to_thread wrap in "
+        "routers/sidecar.py:_ensure_contact_not_blacklisted? See: docs "
+        "handoff '不同设备不能同时运行' bug B1."
+    )
+
+
 def test_process_conversations_persists_attempts_to_control_db(temp_db):
     device_db = temp_db.parent / "device_followup.db"
     device_db.touch()

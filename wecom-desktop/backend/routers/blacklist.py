@@ -8,6 +8,7 @@ Provides endpoints for:
 - Getting customers with blacklist status
 """
 
+import asyncio
 import logging
 from typing import List, Optional, Set, Tuple
 from fastapi import APIRouter, HTTPException, Query
@@ -157,10 +158,10 @@ async def list_blacklist(
 
         # Use new method if show_all is True
         if show_all:
-            entries = writer.list_blacklist_with_status(device_serial)
+            entries = await asyncio.to_thread(writer.list_blacklist_with_status, device_serial)
         else:
             # Legacy method for backward compatibility (only returns is_blacklisted=1)
-            entries = writer.list_blacklist(device_serial)
+            entries = await asyncio.to_thread(writer.list_blacklist, device_serial)
 
         return [
             BlacklistEntry(
@@ -191,7 +192,9 @@ async def list_customers_with_status(
     """获取设备的所有用户及其黑名单状态"""
     try:
         writer = BlacklistWriter()
-        customers = writer.list_customers_with_status(device_serial, search, filter)
+        customers = await asyncio.to_thread(
+            writer.list_customers_with_status, device_serial, search, filter
+        )
 
         return [
             CustomerWithBlacklistStatus(
@@ -215,7 +218,8 @@ async def add_to_blacklist(request: BlacklistAddRequest) -> dict:
     """添加用户到黑名单"""
     try:
         writer = BlacklistWriter()
-        success = writer.add_to_blacklist(
+        success = await asyncio.to_thread(
+            writer.add_to_blacklist,
             device_serial=request.device_serial,
             customer_name=request.customer_name,
             customer_channel=request.customer_channel,
@@ -238,7 +242,8 @@ async def remove_from_blacklist(request: BlacklistRemoveRequest) -> dict:
     """从黑名单移除用户"""
     try:
         writer = BlacklistWriter()
-        success = writer.remove_from_blacklist(
+        success = await asyncio.to_thread(
+            writer.remove_from_blacklist,
             device_serial=request.device_serial,
             customer_name=request.customer_name,
             customer_channel=request.customer_channel,
@@ -262,7 +267,8 @@ async def check_blacklist(
 ) -> BlacklistCheckResponse:
     """检查用户是否在黑名单中（供运行时调用）"""
     try:
-        is_blacklisted = BlacklistChecker.is_blacklisted(
+        is_blacklisted = await asyncio.to_thread(
+            BlacklistChecker.is_blacklisted,
             device_serial=device_serial,
             customer_name=customer_name,
             customer_channel=customer_channel,
@@ -272,7 +278,9 @@ async def check_blacklist(
         reason = None
         if is_blacklisted:
             writer = BlacklistWriter()
-            reason = writer.get_blacklist_reason(device_serial, customer_name)
+            reason = await asyncio.to_thread(
+                writer.get_blacklist_reason, device_serial, customer_name
+            )
 
         return BlacklistCheckResponse(is_blacklisted=is_blacklisted, reason=reason)
 
@@ -292,7 +300,8 @@ async def toggle_blacklist(request: BlacklistToggleRequest) -> dict:
         writer = BlacklistWriter()
 
         # 检查当前状态
-        is_currently_blacklisted = BlacklistChecker.is_blacklisted(
+        is_currently_blacklisted = await asyncio.to_thread(
+            BlacklistChecker.is_blacklisted,
             device_serial=request.device_serial,
             customer_name=request.customer_name,
             customer_channel=request.customer_channel,
@@ -300,7 +309,8 @@ async def toggle_blacklist(request: BlacklistToggleRequest) -> dict:
 
         if is_currently_blacklisted:
             # 当前是黑名单，切换为放行
-            success = writer.remove_from_blacklist(
+            success = await asyncio.to_thread(
+                writer.remove_from_blacklist,
                 device_serial=request.device_serial,
                 customer_name=request.customer_name,
                 customer_channel=request.customer_channel,
@@ -311,7 +321,8 @@ async def toggle_blacklist(request: BlacklistToggleRequest) -> dict:
                 return {"success": False, "message": "Failed to remove from blacklist"}
         else:
             # 当前不是黑名单，切换为拉黑
-            success = writer.add_to_blacklist(
+            success = await asyncio.to_thread(
+                writer.add_to_blacklist,
                 device_serial=request.device_serial,
                 customer_name=request.customer_name,
                 customer_channel=request.customer_channel,
@@ -337,7 +348,8 @@ async def batch_add_to_blacklist(entries: List[BlacklistAddRequest]) -> BatchOpe
 
     for entry in entries:
         try:
-            success = writer.add_to_blacklist(
+            success = await asyncio.to_thread(
+                writer.add_to_blacklist,
                 device_serial=entry.device_serial,
                 customer_name=entry.customer_name,
                 customer_channel=entry.customer_channel,
@@ -369,7 +381,8 @@ async def batch_remove_from_blacklist(entries: List[BlacklistRemoveRequest]) -> 
 
     for entry in entries:
         try:
-            success = writer.remove_from_blacklist(
+            success = await asyncio.to_thread(
+                writer.remove_from_blacklist,
                 device_serial=entry.device_serial,
                 customer_name=entry.customer_name,
                 customer_channel=entry.customer_channel,
@@ -405,7 +418,8 @@ async def upsert_scanned_users(request: UpsertScannedUsersRequest) -> dict:
         # Convert Pydantic models to dicts
         users_list = [user.model_dump() for user in request.users]
 
-        result = writer.upsert_scanned_users(
+        result = await asyncio.to_thread(
+            writer.upsert_scanned_users,
             device_serial=request.device_serial,
             users_list=users_list,
         )
@@ -430,7 +444,9 @@ async def get_whitelist(device_serial: str) -> List[dict]:
     """
     try:
         writer = BlacklistWriter()
-        whitelist: Set[Tuple[str, Optional[str]]] = writer.get_whitelist(device_serial)
+        whitelist: Set[Tuple[str, Optional[str]]] = await asyncio.to_thread(
+            writer.get_whitelist, device_serial
+        )
 
         return [{"customer_name": name, "customer_channel": channel} for name, channel in whitelist]
     except Exception as e:
@@ -450,7 +466,8 @@ async def copy_blacklist_between_devices(request: BlacklistCopyRequest) -> Black
 
     try:
         writer = BlacklistWriter()
-        result = writer.copy_device_entries(
+        result = await asyncio.to_thread(
+            writer.copy_device_entries,
             source_device_serial=request.source_device_serial,
             target_device_serial=request.target_device_serial,
             include_allowed=request.include_allowed,
@@ -484,7 +501,9 @@ async def update_blacklist_status(request: BlacklistUpdateRequest) -> dict:
     """
     try:
         writer = BlacklistWriter()
-        success = writer.update_status(request.id, request.is_blacklisted)
+        success = await asyncio.to_thread(
+            writer.update_status, request.id, request.is_blacklisted
+        )
 
         if success:
             return {"success": True, "message": "Status updated"}
@@ -504,7 +523,9 @@ async def batch_update_blacklist_status(request: BatchUpdateStatusRequest) -> di
     """
     try:
         writer = BlacklistWriter()
-        result = writer.batch_update_status(request.ids, request.is_blacklisted)
+        result = await asyncio.to_thread(
+            writer.batch_update_status, request.ids, request.is_blacklisted
+        )
 
         return {
             "success": True,

@@ -4,6 +4,7 @@ Email notification router.
 Provides API endpoints for email configuration and testing.
 """
 
+import asyncio
 import json
 import smtplib
 from email.mime.text import MIMEText
@@ -265,8 +266,10 @@ async def handle_human_request(request: HumanRequestNotification):
 
     This endpoint is called when AI detects that a user wants to speak with a human agent.
     """
-    # Add to blacklist
-    added = _add_to_blacklist(
+    # Add to blacklist (sync DB work — dispatch off the event loop so other
+    # devices' sidecar/HTTP traffic isn't stalled by SQLite contention).
+    added = await asyncio.to_thread(
+        _add_to_blacklist,
         request.customer_name,
         request.channel,
         request.serial,
@@ -376,8 +379,10 @@ async def handle_voice_message(request: HumanRequestNotification):
 
     This endpoint is called when a customer sends a voice message.
     """
-    # Add to blacklist
-    added = _add_to_blacklist(
+    # Add to blacklist (sync DB work — dispatch off the event loop so other
+    # devices' sidecar/HTTP traffic isn't stalled by SQLite contention).
+    added = await asyncio.to_thread(
+        _add_to_blacklist,
         request.customer_name,
         request.channel,
         request.serial,

@@ -95,7 +95,7 @@ def create_sync_orchestrator(
     media_bus, media_settings = build_media_event_bus(
         db_path,
         settings_db_path=str(get_default_db_path()),
-        effects_db_path=str(get_default_db_path()),
+        effects_db_path=db_path,
         wecom_service=wecom,
     )
 
@@ -184,7 +184,7 @@ def create_customer_syncer(
     media_bus, media_settings = build_media_event_bus(
         str(resolved_db),
         settings_db_path=str(get_default_db_path()),
-        effects_db_path=str(get_default_db_path()),
+        effects_db_path=str(resolved_db),
         wecom_service=wecom,
     )
 

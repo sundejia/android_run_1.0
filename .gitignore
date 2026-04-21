@@ -147,3 +147,6 @@ followup_test/test_search_only.py
 
 # Git worktrees (isolated workspaces for parallel development)
 .worktrees/
+
+# Temporary local drafts / scratch docs (handoff notes, screenshots, etc.)
+_tmp_docs/

@@ -9,6 +9,7 @@ Provides endpoints for:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any, List, Optional
@@ -128,29 +129,36 @@ def _save_settings(settings: dict[str, Any]) -> dict[str, Any]:
 async def get_media_action_settings():
     """Get current media auto-action settings."""
     try:
-        settings = _get_settings()
+        settings = await asyncio.to_thread(_get_settings)
         return settings
     except Exception as exc:
         logger.error("Failed to get media action settings: %s", exc)
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+def _apply_media_action_settings_update_sync(
+    request: UpdateMediaActionSettingsRequest,
+) -> dict[str, Any]:
+    """Synchronous merge + save - runs in worker thread."""
+    current = _get_settings()
+
+    if request.enabled is not None:
+        current["enabled"] = request.enabled
+
+    if request.auto_blacklist is not None:
+        current["auto_blacklist"] = request.auto_blacklist.model_dump()
+
+    if request.auto_group_invite is not None:
+        current["auto_group_invite"] = request.auto_group_invite.model_dump()
+
+    return _save_settings(current)
+
+
 @router.put("/settings", response_model=MediaAutoActionSettings)
 async def update_media_action_settings(request: UpdateMediaActionSettingsRequest):
     """Update media auto-action settings (partial update supported)."""
     try:
-        current = _get_settings()
-
-        if request.enabled is not None:
-            current["enabled"] = request.enabled
-
-        if request.auto_blacklist is not None:
-            current["auto_blacklist"] = request.auto_blacklist.model_dump()
-
-        if request.auto_group_invite is not None:
-            current["auto_group_invite"] = request.auto_group_invite.model_dump()
-
-        saved = _save_settings(current)
+        saved = await asyncio.to_thread(_apply_media_action_settings_update_sync, request)
 
         from routers.global_websocket import get_global_ws_manager
 
@@ -167,6 +175,47 @@ async def update_media_action_settings(request: UpdateMediaActionSettingsRequest
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+def _get_action_logs_sync(
+    device_serial: Optional[str],
+    action_name: Optional[str],
+    limit: int,
+    offset: int,
+) -> dict[str, Any]:
+    """Synchronous body of ``get_action_logs`` - runs in worker thread."""
+    import sqlite3 as _sqlite3
+
+    from services.conversation_storage import open_shared_sqlite
+    from wecom_automation.database.schema import get_db_path
+
+    db_path = str(get_db_path())
+    conn = open_shared_sqlite(db_path, row_factory=True)
+
+    query = "SELECT * FROM media_action_logs WHERE 1=1"
+    params: list[Any] = []
+
+    if device_serial:
+        query += " AND device_serial = ?"
+        params.append(device_serial)
+    if action_name:
+        query += " AND action_name = ?"
+        params.append(action_name)
+
+    query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    params.extend([limit, offset])
+
+    try:
+        cursor = conn.execute(query, params)
+        rows = cursor.fetchall()
+        conn.close()
+        return {
+            "logs": [dict(row) for row in rows],
+            "total": len(rows),
+        }
+    except _sqlite3.OperationalError:
+        conn.close()
+        return {"logs": [], "total": 0}
+
+
 @router.get("/logs")
 async def get_action_logs(
     device_serial: Optional[str] = None,
@@ -176,37 +225,9 @@ async def get_action_logs(
 ):
     """Get media action execution logs."""
     try:
-        from services.conversation_storage import open_shared_sqlite
-        from wecom_automation.database.schema import get_db_path
-
-        db_path = str(get_db_path())
-        conn = open_shared_sqlite(db_path, row_factory=True)
-
-        query = "SELECT * FROM media_action_logs WHERE 1=1"
-        params: list[Any] = []
-
-        if device_serial:
-            query += " AND device_serial = ?"
-            params.append(device_serial)
-        if action_name:
-            query += " AND action_name = ?"
-            params.append(action_name)
-
-        query += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
-        params.extend([limit, offset])
-
-        try:
-            cursor = conn.execute(query, params)
-            rows = cursor.fetchall()
-            conn.close()
-            return {
-                "logs": [dict(row) for row in rows],
-                "total": len(rows),
-            }
-        except sqlite3.OperationalError:
-            conn.close()
-            return {"logs": [], "total": 0}
-
+        return await asyncio.to_thread(
+            _get_action_logs_sync, device_serial, action_name, limit, offset
+        )
     except Exception as exc:
         logger.error("Failed to get action logs: %s", exc)
         return {"logs": [], "total": 0}

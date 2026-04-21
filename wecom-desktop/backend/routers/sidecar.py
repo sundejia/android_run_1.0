@@ -7,7 +7,8 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 from enum import Enum
 from urllib.parse import quote
 
@@ -260,13 +261,15 @@ async def _ensure_contact_not_blacklisted(
     if not resolved_name:
         return
 
-    if BlacklistChecker.is_blacklisted(
+    is_blocked = await asyncio.to_thread(
+        BlacklistChecker.is_blacklisted,
         serial,
         resolved_name,
         resolved_channel,
-        use_cache=False,
-        fail_closed=True,
-    ):
+        False,
+        True,
+    )
+    if is_blocked:
         raise HTTPException(status_code=409, detail=f"Contact is blacklisted: {resolved_name}")
 
 
@@ -665,6 +668,78 @@ async def send_sidecar_message(serial: str, request: SendMessageRequest) -> Send
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
 
+def _save_sidecar_message_sync(
+    *,
+    resolved_path_str: str,
+    serial: str,
+    contact_name: Optional[str],
+    channel: Optional[str],
+    preferred_kefu_name: Optional[str],
+    message: str,
+    timestamp: datetime,
+    message_hash: str,
+) -> Optional[Dict[str, Any]]:
+    """Synchronous DB write helper for ``send_and_save_message``.
+
+    Runs the customer match + INSERT + commit inside a worker thread so the
+    FastAPI event loop is not blocked while one device is saving a sidecar
+    message.     Returns the matched customer info needed for ``notify_message_added``,
+    or ``None`` if no matching customer was found / DB does not exist.
+    """
+    if not Path(resolved_path_str).exists():
+        return None
+
+    conn = get_connection(resolved_path_str)
+    try:
+        cursor = conn.cursor()
+        matched_customers, _, _ = _find_matching_customers_for_device(
+            cursor,
+            serial=serial,
+            contact_name=contact_name,
+            channel=channel,
+            preferred_kefu_name=preferred_kefu_name,
+        )
+
+        if not matched_customers:
+            return None
+
+        primary_customer = matched_customers[0]
+        customer_id = primary_customer["id"]
+        saved_contact_name = primary_customer["name"]
+        saved_channel = primary_customer["channel"]
+
+        cursor.execute(
+            """
+            INSERT INTO messages (
+                customer_id,
+                content,
+                message_type,
+                is_from_kefu,
+                timestamp_raw,
+                timestamp_parsed,
+                message_hash,
+                created_at
+            ) VALUES (?, ?, 'text', 1, ?, ?, ?, ?)
+            """,
+            (
+                customer_id,
+                message,
+                timestamp.strftime("%H:%M"),
+                timestamp.isoformat(),
+                message_hash,
+                timestamp.isoformat(),
+            ),
+        )
+        conn.commit()
+        return {
+            "customer_id": customer_id,
+            "contact_name": saved_contact_name,
+            "channel": saved_channel,
+        }
+    finally:
+        conn.close()
+
+
 @router.post("/{serial}/send-and-save", response_model=SendAndSaveResponse)
 async def send_and_save_message(serial: str, request: SendAndSaveRequest) -> SendAndSaveResponse:
     """
@@ -676,8 +751,6 @@ async def send_and_save_message(serial: str, request: SendAndSaveRequest) -> Sen
 
     The message will be saved as a kefu (agent) message in the database.
     """
-    from datetime import datetime
-
     session = get_session(serial)
     message = request.message.strip()
 
@@ -721,76 +794,42 @@ async def send_and_save_message(serial: str, request: SendAndSaveRequest) -> Sen
 
         if contact_name or channel:
             resolved_path = get_db_path(None)
-            if resolved_path.exists():
-                conn = get_connection(str(resolved_path))
+            now = datetime.now()
+            hash_source = f"sidecar_{serial}_{now.isoformat()}_{uuid.uuid4()}"
+            message_hash = hashlib.sha256(hash_source.encode()).hexdigest()
+
+            saved_info = await asyncio.to_thread(
+                _save_sidecar_message_sync,
+                resolved_path_str=str(resolved_path),
+                serial=serial,
+                contact_name=contact_name,
+                channel=channel,
+                preferred_kefu_name=request.kefu_name,
+                message=message,
+                timestamp=now,
+                message_hash=message_hash,
+            )
+
+            if saved_info is not None:
+                message_saved = True
+
                 try:
-                    cursor = conn.cursor()
-                    matched_customers, _, _ = _find_matching_customers_for_device(
-                        cursor,
-                        serial=serial,
-                        contact_name=contact_name,
-                        channel=channel,
-                        preferred_kefu_name=request.kefu_name,
+                    from services.message_publisher import notify_message_added
+
+                    await notify_message_added(
+                        serial,
+                        saved_info["customer_id"],
+                        saved_info["contact_name"],
+                        saved_info["channel"],
+                        {
+                            "content": message,
+                            "is_from_kefu": True,
+                            "message_type": "text",
+                            "timestamp": now.isoformat(),
+                        },
                     )
-
-                    if matched_customers:
-                        primary_customer = matched_customers[0]
-                        customer_id = primary_customer["id"]
-                        saved_contact_name = primary_customer["name"]
-                        saved_channel = primary_customer["channel"]
-                        now = datetime.now()
-
-                        # Generate unique message hash for deduplication
-                        # Use UUID + timestamp to ensure uniqueness for sidecar messages
-                        hash_source = f"sidecar_{serial}_{now.isoformat()}_{uuid.uuid4()}"
-                        message_hash = hashlib.sha256(hash_source.encode()).hexdigest()
-
-                        # Insert the message with required message_hash
-                        cursor.execute(
-                            """
-                            INSERT INTO messages (
-                                customer_id,
-                                content,
-                                message_type,
-                                is_from_kefu,
-                                timestamp_raw,
-                                timestamp_parsed,
-                                message_hash,
-                                created_at
-                            ) VALUES (?, ?, 'text', 1, ?, ?, ?, ?)
-                            """,
-                            (
-                                customer_id,
-                                message,
-                                now.strftime("%H:%M"),
-                                now.isoformat(),
-                                message_hash,
-                                now.isoformat(),
-                            ),
-                        )
-                        conn.commit()
-                        message_saved = True
-
-                        # Notify frontend about the new message
-                        try:
-                            from services.message_publisher import notify_message_added
-
-                            await notify_message_added(
-                                serial,
-                                customer_id,
-                                saved_contact_name,
-                                saved_channel,
-                                {
-                                    "content": message,
-                                    "is_from_kefu": True,
-                                    "message_type": "text",
-                                    "timestamp": now.isoformat(),
-                                },
-                            )
-                        except Exception as e:
-                            print(f"Failed to publish message event: {e}")
-                finally:
-                    conn.close()
+                except Exception as e:
+                    print(f"Failed to publish message event: {e}")
     except Exception as e:
         # Log but don't fail - message was sent successfully
         print(f"Failed to save message to database: {e}")

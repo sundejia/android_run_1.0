@@ -9,6 +9,7 @@ Follow-up Management API Router
 - 候选客户管理（未来开发）
 """
 
+import asyncio
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -53,59 +54,69 @@ class FollowUpSettingsModel(BaseModel):
 # ============================================
 
 
+def _get_followup_settings_sync() -> FollowUpSettingsModel:
+    """Synchronous body of ``get_followup_settings`` - runs in worker thread."""
+    from services.settings import get_settings_service
+
+    service = get_settings_service()
+    followup = service.get_followup_settings()
+
+    return FollowUpSettingsModel(
+        followupEnabled=followup.followup_enabled,
+        maxFollowupPerScan=followup.max_followups,
+        useAIReply=followup.use_ai_reply,
+        enableOperatingHours=followup.enable_operating_hours,
+        startHour=followup.start_hour,
+        endHour=followup.end_hour,
+        followupMessageTemplates=followup.message_templates or [],
+        followupPrompt=getattr(followup, "followup_prompt", ""),
+        idleThresholdMinutes=getattr(followup, "idle_threshold_minutes", 30),
+        maxAttemptsPerCustomer=getattr(followup, "max_attempts_per_customer", 3),
+        attemptIntervals=getattr(followup, "attempt_intervals", [60, 120, 180]),
+        avoidDuplicateMessages=getattr(followup, "avoid_duplicate_messages", False),
+    )
+
+
 @router.get("/settings", response_model=FollowUpSettingsModel)
 async def get_followup_settings():
     """获取补刀功能设置"""
     try:
-        from services.settings import get_settings_service
-
-        service = get_settings_service()
-        followup = service.get_followup_settings()
-
-        return FollowUpSettingsModel(
-            followupEnabled=followup.followup_enabled,
-            maxFollowupPerScan=followup.max_followups,
-            useAIReply=followup.use_ai_reply,
-            enableOperatingHours=followup.enable_operating_hours,
-            startHour=followup.start_hour,
-            endHour=followup.end_hour,
-            followupMessageTemplates=followup.message_templates or [],
-            followupPrompt=getattr(followup, "followup_prompt", ""),
-            idleThresholdMinutes=getattr(followup, "idle_threshold_minutes", 30),
-            maxAttemptsPerCustomer=getattr(followup, "max_attempts_per_customer", 3),
-            attemptIntervals=getattr(followup, "attempt_intervals", [60, 120, 180]),
-            avoidDuplicateMessages=getattr(followup, "avoid_duplicate_messages", False),
-        )
+        return await asyncio.to_thread(_get_followup_settings_sync)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to load followup settings: {str(e)}")
+
+
+def _update_followup_settings_sync(settings: FollowUpSettingsModel) -> dict:
+    """Synchronous body of ``update_followup_settings`` - runs in worker thread."""
+    from services.settings import SettingCategory, get_settings_service
+
+    service = get_settings_service()
+
+    updates = {
+        "followup_enabled": settings.followupEnabled,
+        "max_followups": settings.maxFollowupPerScan,
+        "use_ai_reply": settings.useAIReply,
+        "enable_operating_hours": settings.enableOperatingHours,
+        "start_hour": settings.startHour,
+        "end_hour": settings.endHour,
+        "message_templates": settings.followupMessageTemplates,
+        "followup_prompt": settings.followupPrompt,
+        "idle_threshold_minutes": settings.idleThresholdMinutes,
+        "max_attempts_per_customer": settings.maxAttemptsPerCustomer,
+        "attempt_intervals": settings.attemptIntervals,
+        "avoid_duplicate_messages": settings.avoidDuplicateMessages,
+    }
+
+    service.set_category(SettingCategory.FOLLOWUP.value, updates, "api")
+
+    return {"success": True, "message": "Followup settings saved successfully"}
 
 
 @router.post("/settings")
 async def update_followup_settings(settings: FollowUpSettingsModel):
     """更新补刀功能设置"""
     try:
-        from services.settings import SettingCategory, get_settings_service
-
-        service = get_settings_service()
-
-        updates = {
-            "followup_enabled": settings.followupEnabled,
-            "max_followups": settings.maxFollowupPerScan,
-            "use_ai_reply": settings.useAIReply,
-            "enable_operating_hours": settings.enableOperatingHours,
-            "start_hour": settings.startHour,
-            "end_hour": settings.endHour,
-            "message_templates": settings.followupMessageTemplates,
-            "followup_prompt": settings.followupPrompt,
-            "idle_threshold_minutes": settings.idleThresholdMinutes,
-            "max_attempts_per_customer": settings.maxAttemptsPerCustomer,
-            "attempt_intervals": settings.attemptIntervals,
-            "avoid_duplicate_messages": settings.avoidDuplicateMessages,
-        }
-
-        service.set_category(SettingCategory.FOLLOWUP.value, updates, "api")
-
-        return {"success": True, "message": "Followup settings saved successfully"}
+        return await asyncio.to_thread(_update_followup_settings_sync, settings)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to save followup settings: {str(e)}")
 
@@ -268,14 +279,8 @@ def _normalize_attempt_status_filter(status: str) -> str:
 # ============================================
 
 
-@router.get("/analytics", response_model=FollowUpAnalytics)
-async def get_analytics():
-    """获取跟进系统统计分析
-
-    注意：使用正确的字段名匹配 attempts_repository.py 创建的表结构
-    - current_attempt 替代 attempt_number
-    - status='completed' 替代 responded=1
-    """
+def _get_analytics_sync() -> "FollowUpAnalytics":
+    """Synchronous body of ``get_analytics`` - runs in worker thread."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -409,26 +414,28 @@ async def get_analytics():
         conn.close()
 
 
-@router.get("/attempts", response_model=AttemptListResponse)
-async def get_attempts(
-    page: int = Query(1, ge=1),
-    pageSize: int = Query(20, ge=1, le=100),
-    status: str = Query("All"),
-    responded: str = Query("All"),
-    dateFrom: str | None = None,
-    dateTo: str | None = None,
-    userId: str | None = None,
-    device_serial: str | None = None,
-):
-    """获取跟进尝试记录列表（分页+过滤）
+@router.get("/analytics", response_model=FollowUpAnalytics)
+async def get_analytics():
+    """获取跟进系统统计分析
 
-    注意：此 API 从 followup_attempts 表读取数据，
-    该表由 attempts_repository.py 写入，字段映射如下：
-    - customer_name -> userId (直接存储客户名称)
-    - current_attempt -> attemptNumber
-    - status -> status (pending/completed/cancelled)
-    - last_kefu_message_id -> messagePreview (暂用消息ID作为预览)
+    注意：使用正确的字段名匹配 attempts_repository.py 创建的表结构
+    - current_attempt 替代 attempt_number
+    - status='completed' 替代 responded=1
     """
+    return await asyncio.to_thread(_get_analytics_sync)
+
+
+def _get_attempts_sync(
+    page: int,
+    pageSize: int,
+    status: str,
+    responded: str,
+    dateFrom: str | None,
+    dateTo: str | None,
+    userId: str | None,
+    device_serial: str | None,
+) -> "AttemptListResponse":
+    """Synchronous body of ``get_attempts`` - runs in worker thread."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -544,9 +551,41 @@ async def get_attempts(
         conn.close()
 
 
-@router.delete("/attempts")
-async def delete_all_attempts(device_serial: str | None = None):
-    """删除跟进尝试记录，可按设备删除"""
+@router.get("/attempts", response_model=AttemptListResponse)
+async def get_attempts(
+    page: int = Query(1, ge=1),
+    pageSize: int = Query(20, ge=1, le=100),
+    status: str = Query("All"),
+    responded: str = Query("All"),
+    dateFrom: str | None = None,
+    dateTo: str | None = None,
+    userId: str | None = None,
+    device_serial: str | None = None,
+):
+    """获取跟进尝试记录列表（分页+过滤）
+
+    注意：此 API 从 followup_attempts 表读取数据，
+    该表由 attempts_repository.py 写入，字段映射如下：
+    - customer_name -> userId (直接存储客户名称)
+    - current_attempt -> attemptNumber
+    - status -> status (pending/completed/cancelled)
+    - last_kefu_message_id -> messagePreview (暂用消息ID作为预览)
+    """
+    return await asyncio.to_thread(
+        _get_attempts_sync,
+        page,
+        pageSize,
+        status,
+        responded,
+        dateFrom,
+        dateTo,
+        userId,
+        device_serial,
+    )
+
+
+def _delete_all_attempts_sync(device_serial: str | None) -> dict:
+    """Synchronous helper for ``delete_all_attempts`` - runs in worker thread."""
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -563,9 +602,19 @@ async def delete_all_attempts(device_serial: str | None = None):
         conn.close()
 
 
-@router.delete("/attempts/{attempt_id}")
-async def delete_attempt(attempt_id: int):
-    """删除单条跟进尝试记录"""
+@router.delete("/attempts")
+async def delete_all_attempts(device_serial: str | None = None):
+    """删除跟进尝试记录，可按设备删除"""
+    return await asyncio.to_thread(_delete_all_attempts_sync, device_serial)
+
+
+def _delete_attempt_sync(attempt_id: int) -> dict:
+    """Synchronous helper for ``delete_attempt`` - runs in worker thread.
+
+    Returns ``{"not_found": True}`` to signal a 404 without raising
+    ``HTTPException`` from inside the worker thread (FastAPI must convert it
+    on the event loop).
+    """
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -574,18 +623,27 @@ async def delete_attempt(attempt_id: int):
         conn.commit()
 
         if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Attempt not found")
+            return {"not_found": True}
 
         return {"success": True, "message": "Attempt deleted successfully"}
     finally:
         conn.close()
 
 
-@router.get("/export")
-async def export_data(format: str = Query("csv"), device_serial: str | None = None):
-    """导出跟进数据为 CSV 或 Excel
+@router.delete("/attempts/{attempt_id}")
+async def delete_attempt(attempt_id: int):
+    """删除单条跟进尝试记录"""
+    result = await asyncio.to_thread(_delete_attempt_sync, attempt_id)
+    if result.get("not_found"):
+        raise HTTPException(status_code=404, detail="Attempt not found")
+    return result
 
-    使用正确的字段名匹配 attempts_repository.py 创建的表结构
+
+def _export_data_sync(format: str, device_serial: str | None):
+    """Synchronous body of ``export_data`` - runs in worker thread.
+
+    Returns either a ``Response`` (for csv/xlsx) or ``{"bad_format": format}``
+    so the async handler can raise ``HTTPException`` on the event loop.
     """
     conn = get_db_connection()
     cursor = conn.cursor()
@@ -672,9 +730,21 @@ async def export_data(format: str = Query("csv"), device_serial: str | None = No
                 headers={"Content-Disposition": "attachment; filename=followup_export.xlsx"},
             )
 
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {format}")
+        return {"bad_format": format}
     finally:
         conn.close()
+
+
+@router.get("/export")
+async def export_data(format: str = Query("csv"), device_serial: str | None = None):
+    """导出跟进数据为 CSV 或 Excel
+
+    使用正确的字段名匹配 attempts_repository.py 创建的表结构
+    """
+    result = await asyncio.to_thread(_export_data_sync, format, device_serial)
+    if isinstance(result, dict) and result.get("bad_format"):
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {result['bad_format']}")
+    return result
 
 
 # ============================================

@@ -3,7 +3,10 @@ from __future__ import annotations
 from types import SimpleNamespace
 
 
-def test_create_sync_orchestrator_uses_control_db_for_media_actions(monkeypatch, tmp_path):
+def test_create_sync_orchestrator_uses_per_device_db_for_media_action_effects(monkeypatch, tmp_path):
+    """Regression for multi-device sync halt: ``effects_db_path`` must point at
+    the per-device DB, not the shared control DB. See A2 in the
+    "不同设备不能同时运行" handoff."""
     import wecom_automation.services.sync.factory as factory
 
     control_db = tmp_path / "control.db"
@@ -52,14 +55,25 @@ def test_create_sync_orchestrator_uses_control_db_for_media_actions(monkeypatch,
     orchestrator = factory.create_sync_orchestrator(db_path=str(device_db))
 
     assert captured["db_path"] == str(device_db)
+    # settings_db_path stays on the shared control DB (read-only consumer)
     assert captured["settings_db_path"] == str(control_db)
-    assert captured["effects_db_path"] == str(control_db)
+    # effects_db_path must be the per-device DB so concurrent device subprocesses
+    # do not contend on the shared control DB during media auto-action writes.
+    assert captured["effects_db_path"] == str(device_db)
+    assert captured["effects_db_path"] != str(control_db), (
+        "Regression: media auto-action effects must be written to the "
+        "per-device database, not the shared control database. "
+        "See: docs handoff '不同设备不能同时运行' bug A2."
+    )
     assert isinstance(captured["wecom_service"], DummyWeComService)
     assert orchestrator.customer_syncer.message_processor.media_event_bus == "media-bus"
     assert orchestrator.customer_syncer.message_processor.media_action_settings == {"enabled": True}
 
 
-def test_create_customer_syncer_uses_control_db_for_media_actions(monkeypatch, tmp_path):
+def test_create_customer_syncer_uses_per_device_db_for_media_action_effects(monkeypatch, tmp_path):
+    """Regression for multi-device sync halt: ``effects_db_path`` must point at
+    the per-device DB, not the shared control DB. See A2 in the
+    "不同设备不能同时运行" handoff."""
     import wecom_automation.services.sync.factory as factory
 
     control_db = tmp_path / "control.db"
@@ -103,8 +117,17 @@ def test_create_customer_syncer_uses_control_db_for_media_actions(monkeypatch, t
     syncer = factory.create_customer_syncer(repository=repository)
 
     assert captured["db_path"] == str(device_db)
+    # settings_db_path stays on the shared control DB (read-only consumer)
     assert captured["settings_db_path"] == str(control_db)
-    assert captured["effects_db_path"] == str(control_db)
+    # effects_db_path must resolve to the per-device DB so concurrent device
+    # subprocesses do not contend on the shared control DB during media
+    # auto-action writes.
+    assert captured["effects_db_path"] == str(device_db)
+    assert captured["effects_db_path"] != str(control_db), (
+        "Regression: media auto-action effects must be written to the "
+        "per-device database, not the shared control database. "
+        "See: docs handoff '不同设备不能同时运行' bug A2."
+    )
     assert isinstance(captured["wecom_service"], DummyWeComService)
     assert syncer.message_processor.media_event_bus == "media-bus"
     assert syncer.message_processor.media_action_settings == {"enabled": True}
