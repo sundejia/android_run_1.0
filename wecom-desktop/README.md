@@ -92,7 +92,7 @@ Run the API with the same environment (from `backend/`):
 
 ```bash
 cd wecom-desktop/backend
-uv run uvicorn main:app --reload --port 8765
+uv run uvicorn main:app --reload --port 8765 --ws-ping-interval 20 --ws-ping-timeout 30
 ```
 
 If you use a project `.venv` only, activate it first, then `pip install -e ".[dev]"` from the repo root per the main [README.md](../README.md).
@@ -104,7 +104,7 @@ If you use a project `.venv` only, activate it first, then `pip install -e ".[de
 **Terminal 1 - Start the backend:**
 ```bash
 cd wecom-desktop/backend
-uvicorn main:app --reload --port 8765
+uvicorn main:app --reload --port 8765 --ws-ping-interval 20 --ws-ping-timeout 30
 ```
 
 **Terminal 2 - Start the Electron app:**
@@ -129,7 +129,7 @@ cd wecom-desktop
 What it does:
 - Stops anything on ports `5173` (frontend) and `8765` (backend)
 - Builds renderer/electron (`npm run build`) unless you pass `--skip-build`
-- Restarts backend (`uvicorn main:app --reload --port 8765`) and frontend (`npm run dev -- --host --port 5173`)
+- Restarts backend (`uvicorn main:app --reload --port 8765 --ws-ping-interval 20 --ws-ping-timeout 30`) and frontend (`npm run dev -- --host --port 5173`)
 - Writes logs to `wecom-desktop/logs/backend.dev.log` and `wecom-desktop/logs/frontend.dev.log`
 
 Use `./scripts/redeploy-dev.sh --skip-build` if you just want a fast restart without the build step.

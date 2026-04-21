@@ -9,7 +9,7 @@
     "dev:electron": "electron-vite dev",
     "build": "vue-tsc --noEmit && electron-vite build",
     "preview": "electron-vite preview",
-    "backend": "cd backend && uv run uvicorn main:app --reload --port 8765",
+    "backend": "cd backend && uv run uvicorn main:app --reload --port 8765 --ws-ping-interval 20 --ws-ping-timeout 30",
     "start": "concurrently \"npm run backend\" \"npm run dev:electron\"",
     "lint": "eslint --ext .vue,.ts,.tsx,.js src/",
     "lint:fix": "eslint --fix --ext .vue,.ts,.tsx,.js src/",

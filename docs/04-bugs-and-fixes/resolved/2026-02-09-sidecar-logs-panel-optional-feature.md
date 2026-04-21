@@ -134,6 +134,10 @@ watch(showLogs, (newVal) => {
 
 - None (new feature)
 
+## Addendum (2026-04-21)
+
+Optional log panel wiring（`connectLogStream` / `disconnectLogStream`）保持不变。针对「长时间运行后日志流断开且不再恢复」的问题，已在 `wecom-desktop/src/stores/logs.ts` 与 `backend/routers/logs.py` 中增加**自动重连**与**分层心跳**；说明见 [2026-04-21-sidecar-log-stream-disconnect.md](./2026-04-21-sidecar-log-stream-disconnect.md)。
+
 ## Future Enhancements
 
 Possible future improvements:

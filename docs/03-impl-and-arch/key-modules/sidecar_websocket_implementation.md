@@ -43,12 +43,13 @@
 
 系统中已有以下 WebSocket 端点可供参考：
 
-| 端点                                         | 文件                          | 用途         |
-| -------------------------------------------- | ----------------------------- | ------------ |
-| `/ws/logs/{serial}`                          | `backend/routers/logs.py`     | 日志实时流   |
-| `/ws/sync/{serial}`                          | `backend/routers/logs.py`     | 同步状态推送 |
-| `/a../03-impl-and-arch/ws/logs`              | `backend/routers/followup.py` | 跟进系统日志 |
-| ../03-impl-and-arch/key-modules/recovery/ws` | `backend/routers/recovery.py` | 恢复通知     |
+| 端点                                         | 文件                          | 用途 |
+| -------------------------------------------- | ----------------------------- | ---- |
+| `/ws/logs/{serial}`                          | `wecom-desktop/backend/routers/logs.py` | **统一**设备日志实时流：Sync 与 FollowUp / 实时回复共用此端点，用 JSON 字段 `source`（`sync` / `followup` / `system`）区分来源 |
+| `/ws/sync/{serial}`                          | 同上                          | 同步进度推送 |
+| `/api/recovery/ws`                           | `wecom-desktop/backend/routers/recovery.py` | Recovery 全局 WebSocket（前缀 `/api/recovery` + 路由 `/ws`） |
+
+> **勘误（2026-04-21）**：旧文档中「独立 `/ws/logs` 跟进端点 + `followup.py`」的描述已过期；跟进与同步日志已合并到上表第一行。详见 `docs/04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md` 与 `followup_log_integration_complete.md`。
 
 ### 现有 WebSocket 模式
 

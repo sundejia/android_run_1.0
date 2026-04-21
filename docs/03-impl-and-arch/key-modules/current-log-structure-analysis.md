@@ -203,6 +203,8 @@ HH:MM:SS | LEVEL | message
 
 - `ws://localhost:8765/ws/logs/{serial}`
 
+除 JSON 日志条目外，链路上还存在 **应用层文本心跳**：客户端周期性发送 `ping`，服务端回复 `pong`（二者均不入库到可见日志列表）。服务端在长时间无上行时可能向下游发送一次文本 `ping` 作为**写通道探活**；前端 store 将其视为保活信号刷新本地时间戳（不展示为日志）。传输层另由 uvicorn 配置 **WebSocket Ping 帧**（与 `main.py` / `npm run backend` 中的 `--ws-ping-interval` / `--ws-ping-timeout` 一致）。详见 `logging-system-architecture.md` 中「WebSocket 可靠性与保活」与 `docs/04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md`。
+
 推送给前端的消息结构为：
 
 ```json
@@ -234,6 +236,7 @@ HH:MM:SS | LEVEL | message
 
 - 每设备维护一组内存日志
 - 通过 `BroadcastChannel` 在多个窗口间同步
+- **被动断开**（网络抖动、后端 `--reload`、代理超时等）时 **自动重连**（指数退避，有上限）；用户主动 `disconnectLogStream` 或关闭日志面板时不重连
 - 使用随机 `id` 做去重管理
 - 每设备最多保留 `1000` 条
 - 支持按 `level`、`source`、关键字过滤

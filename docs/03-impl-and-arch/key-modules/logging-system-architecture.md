@@ -211,23 +211,31 @@ async def _read_output(self, serial: str, stream: asyncio.StreamReader, is_stder
 }
 ```
 
+### WebSocket 可靠性与保活（2026-04-21）
+
+长时间运行后若仅依赖「单向发数据」，中间 NAT / 代理 / 笔记本休眠容易让 TCP 进入**半开**状态，浏览器端表现为偶发 `onclose` 或长时间无数据。当前实现分三层：
+
+| 层级 | 位置 | 行为 |
+| ---- | ---- | ---- |
+| 传输层 | uvicorn | `ws_ping_interval=20`、`ws_ping_timeout=30`（`main.py` 与 `npm run backend` 脚本一致），使用 **RFC 6455 Ping/Pong 控制帧** 检测半开连接 |
+| 应用层 | `routers/logs.py` | 客户端定时发送文本 **`ping`** → 服务端回复 **`pong`**；其它上行文本忽略；90s 无上行时仅作兜底探活 |
+| 客户端 | `wecom-desktop/src/stores/logs.ts` | 约 25s 发送 `ping`；收到 `ping`/`pong` **不写入**可见日志；被动断开后**指数退避重连**（主动 `disconnectLogStream` 不重连） |
+
+服务端在 `broadcast_log` 发送失败时会 **close** 对应连接并从集合移除；`DeviceManager` / `RealtimeReplyManager` 在回调 `await` 抛错时会 **discard** 该回调，避免僵尸订阅拖慢扇出。
+
+详细故障分析与修复记录：`docs/04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md`。
+
 ## 前端 LogsPanel 接收
 
 ### WebSocket 连接
 
-```typescript
-// src/components/LogsPanel.vue
-const ws = new WebSocket(`ws://localhost:8765/ws/logs/${serial}`)
+实际连接与重连逻辑集中在 **Pinia** `wecom-desktop/src/stores/logs.ts`（`LogsView`、`SidecarView`、`DeviceDetailView` 等调用 `connectLogStream`）。组件内若仍有直连 `WebSocket` 的示例代码，应以 store 为准。
 
-ws.onmessage = (event) => {
-  const log = JSON.parse(event.data)
-  logs.value.push({
-    timestamp: log.timestamp,
-    level: log.level,
-    message: log.message,
-    source: log.source || 'unknown',
-  })
-}
+```typescript
+// 逻辑位于 src/stores/logs.ts（节选概念）
+const ws = new WebSocket(`ws://localhost:8765/ws/logs/${serial}`)
+// onopen: 启动定时 send('ping')；onmessage: JSON → addLog；'ping'|'pong' → 更新心跳时间戳不入库
+// onclose: 若非用户主动断开 → scheduleReconnect(serial)
 ```
 
 ### 显示样式
@@ -290,7 +298,7 @@ if hasattr(sys.stdout, 'reconfigure'):
 1. ✅ 子进程脚本是否输出到 `stdout`（而非 `stderr`）
 2. ✅ 日志格式是否匹配 `HH:MM:SS | LEVEL | message`
 3. ✅ DeviceManager 的 `_read_output` 是否正常运行
-4. ✅ WebSocket 连接是否建立（检查浏览器控制台）
+4. ✅ WebSocket 是否仍 **OPEN**（断开后 store 会自动重连；若反复失败请查后端 `websocket_logs closed … reason=` 与浏览器控制台）
 
 **调试方法：**
 

@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-04-15 (Sidecar daytime review timeout default **300 s → 60 s**; see `sidecar/sidecar-review-timeout-defaults.md`; night mode still 30 s)
+> Last Updated: 2026-04-21 (Sidecar / Logs **WebSocket 自动重连与分层保活**；见 `04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md`；Sidecar daytime review timeout 仍为 2026-04-15 调整)
 
 ---
 
@@ -31,6 +31,7 @@
 
 | Feature                                                                                                     | Status      | Date       | Description                                                                                                                                                                                                                                                                |
 | ----------------------------------------------------------------------------------------------------------- | ----------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [Sidecar log stream reconnect & heartbeat](04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md) | ✅ Complete | 2026-04-21 | Pinia `logs.ts` exponential reconnect; app-level ping/pong; uvicorn WS ping; dead log callback pruning; `/ws/sync` aligned; Vitest + pytest regressions |
 | [Sidecar review timeout defaults](sidecar/sidecar-review-timeout-defaults.md)                               | ✅ Complete | 2026-04-15 | Daytime `sidecar_timeout` default 60 s (was 300 s); night 30 s unchanged; API/client/router fallbacks aligned                                                                                                                                                              |
 | [System Robustness Fixes](implementation/2026-04-09-system-robustness-fixes.md)                             | ✅ Complete | 2026-04-09 | AI circuit breaker, failure metrics, process auto-restart, heartbeat monitoring API, AI health checks, night-mode Sidecar timeout; 2026-04-10 follow-up: `SidecarSettings` matches DB keys, AI error logging fix                                                           |
 | [Multi-Resolution Group Invite Fix](bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md) | ✅ Complete | 2026-04-12 | Resolution-aware UI bounds for group invite; DroidRun per-device port propagation; full 10-step E2E on 720p+1080p devices                                                                                                                                                  |
@@ -233,6 +234,10 @@ Currently being investigated or fixed.
 ### Fixed Bugs (Archive)
 
 Resolved issues organized by date.
+
+#### 2026-04
+
+- [Sidecar log stream disconnect (long runtime)](04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md) - Auto-reconnect, layered keepalive, docs and tests
 
 #### 2026-02
 

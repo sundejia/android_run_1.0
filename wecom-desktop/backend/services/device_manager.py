@@ -338,11 +338,17 @@ class DeviceManager:
         }
 
         if serial in self._log_callbacks:
+            broken: list = []
             for callback in list(self._log_callbacks[serial]):
                 try:
                     await callback(log_entry)
                 except Exception:
-                    pass
+                    broken.append(callback)
+            if broken:
+                bucket = self._log_callbacks.get(serial)
+                if bucket is not None:
+                    for cb in broken:
+                        bucket.discard(cb)
 
     async def _broadcast_status(self, serial: str):
         """Broadcast current sync status to all registered callbacks."""

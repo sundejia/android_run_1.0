@@ -104,7 +104,7 @@ npm install
 
 # Start backend (Terminal 1)
 cd backend
-uvicorn main:app --reload --port 8765
+uvicorn main:app --reload --port 8765 --ws-ping-interval 20 --ws-ping-timeout 30
 
 # Start Electron app (Terminal 2)
 cd ..
@@ -118,7 +118,7 @@ npm run build
 
 # Quick redeploy (stops → builds → restarts backend + frontend)
 # NOTE: redeploy-dev.sh is Linux-only. On Windows, manually restart backend/frontend.
-# PowerShell: Stop processes (Ctrl+C), then run: cd backend && uvicorn main:app --reload --port 8765
+# PowerShell: Stop processes (Ctrl+C), then run: cd backend && uvicorn main:app --reload --port 8765 --ws-ping-interval 20 --ws-ping-timeout 30
 ```
 
 ### Database Management
