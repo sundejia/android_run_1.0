@@ -199,6 +199,33 @@ class RealtimeReplyManager:
                 await self._broadcast_log(serial, "WARNING", "Follow-up already running")
                 return False
 
+        # Layer 1 safety net: clean up any orphan realtime-reply subprocess
+        # tree for this serial left over from a prior uvicorn --reload
+        # cycle. Without this, a new subprocess and the surviving orphan
+        # would fight over the same ADB/DroidRun channel for the same
+        # device, producing [Errno 22] swipe failures and the
+        # "alternating freeze" symptom across devices.
+        try:
+            from utils.orphan_process_cleaner import kill_realtime_reply_orphans
+
+            stats = await asyncio.to_thread(kill_realtime_reply_orphans, serial)
+            if stats.get("trees_killed"):
+                await self._broadcast_log(
+                    serial,
+                    "WARNING",
+                    (
+                        "Cleaned up "
+                        f"{stats['trees_killed']} orphan realtime-reply tree(s) "
+                        f"({stats['processes_killed']} procs) before start"
+                    ),
+                )
+        except Exception as e:
+            await self._broadcast_log(
+                serial,
+                "WARNING",
+                f"Orphan cleanup skipped: {e}",
+            )
+
         # Persist startup params for auto-restart
         self._startup_params[serial] = {
             "scan_interval": scan_interval,
@@ -220,6 +247,7 @@ class RealtimeReplyManager:
 
         # Allocate unique DroidRun port for this device
         from services.device_manager import PortAllocator
+
         droidrun_port = PortAllocator().allocate(serial)
 
         cmd = [
@@ -367,6 +395,7 @@ class RealtimeReplyManager:
             # Release DroidRun port allocation
             try:
                 from services.device_manager import PortAllocator
+
                 PortAllocator().release(serial)
             except Exception:
                 pass

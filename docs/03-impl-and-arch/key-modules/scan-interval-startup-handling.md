@@ -48,7 +48,7 @@ process = await self._create_subprocess(cmd, env)
 
 ### 3. 子进程：解析并使用
 
-- **位置**：项目根目录 `realtime_reply_process.py`
+- **位置**：`wecom-desktop/backend/scripts/realtime_reply_process.py`
 - **解析**：`parse_args()` 中定义 `--scan-interval`，存入 `args.scan_interval`（默认 60）
 
 ```python

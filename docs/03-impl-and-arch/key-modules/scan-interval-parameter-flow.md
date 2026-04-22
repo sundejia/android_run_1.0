@@ -31,9 +31,7 @@ SELECT value FROM settings WHERE category = 'followup' AND key = 'default_scan_i
 ```typescript
 async function fetchSettings() {
   try {
-    const response = await fetch(
-      'http://localhost:87../03-impl-and-arch/key-modules/realtime/settings'
-    )
+    const response = await fetch('http://localhost:8765/api/realtime/settings')
     if (response.ok) {
       const data = await response.json()
       settings.value = { ...settings.value, ...data }
@@ -44,7 +42,7 @@ async function fetchSettings() {
 }
 ```
 
-**后端端点：**../03-impl-and-arch/key-modules/realtime/settings` (GET)
+**后端端点：** `GET http://localhost:8765/api/realtime/settings`（路由前缀以 `realtime_reply` 路由器为准）
 
 ```python
 # wecom-desktop/backend/routers/realtime_reply.py:59-73
@@ -85,7 +83,7 @@ async function startDeviceFollowUp(serial: string) {
     })
 
     const response = await fetch(
-      `http://localhost:87../03-impl-and-arch/key-modules/realtime/device/${serial}/start?${params}`,
+      `http://localhost:8765/api/realtime/device/${serial}/start?${params}`,
       { method: 'POST' }
     )
     // ...
@@ -104,7 +102,7 @@ async function startDeviceFollowUp(serial: string) {
 
 **文件：** `wecom-desktop/backend/routers/realtime_reply.py:101-126`
 
-**端点：** `POS../03-impl-and-arch/key-modules/realtime/device/{serial}/start`
+**端点：** `POST /api/realtime/device/{serial}/start`
 
 ```python
 @router.post("/device/{serial}/start")
@@ -128,13 +126,13 @@ async def start_device(
 
 ### 5. Manager 构建子进程命令
 
-**文件：** `wecom-desktop/backend/services/realtime_reply_manager.py:183-197`
+**文件：** `wecom-desktop/backend/services/realtime_reply_manager.py`
 
-**函数：** `start_realtime_reply()`
+**函数：** `start_realtime_reply()`（还会在启动前清理同 serial 的孤儿 realtime 子进程，见 `orphan_process_cleaner`）
 
 ```python
-# 构建命令
-script_path = PROJECT_ROOT / "realtime_reply_process.py"
+# 构建命令（摘录）
+script_path = PROJECT_ROOT / "wecom-desktop" / "backend" / "scripts" / "realtime_reply_process.py"
 
 cmd = [
     "uv", "run",
@@ -154,7 +152,7 @@ if send_via_sidecar:
 
 ### 6. 子进程解析参数
 
-**文件：** `realtime_reply_process.py`
+**文件：** `wecom-desktop/backend/scripts/realtime_reply_process.py`
 
 **argparse 定义：**
 
@@ -190,17 +188,17 @@ await asyncio.sleep(args.scan_interval)  # ✅ 使用传入的扫描间隔
 ```
 数据库 (settings.followup.default_scan_interval)
     ↓
-后../03-impl-and-arch/key-modules/realtime/settings (GET)
+GET /api/realtime/settings
     ↓
 前端 settings.value.scanInterval
     ↓
 前端点击 Start 按钮
     ↓
-POS../03-impl-and-arch/key-modules/realtime/device/{serial}/start?scan_interval={value}
+POST /api/realtime/device/{serial}/start?scan_interval={value}
     ↓
 RealtimeReplyManager.start_realtime_reply(scan_interval)
     ↓
-子进程命令: uv run realtime_reply_process.py --scan-interval {value}
+子进程命令: uv run wecom-desktop/backend/scripts/realtime_reply_process.py --scan-interval {value}
     ↓
 args.scan_interval
     ↓
@@ -266,7 +264,8 @@ await asyncio.sleep(args.scan_interval)  ← 实际使用
 - **前端：** `wecom-desktop/src/views/RealtimeView.vue`
 - **后端路由：** `wecom-desktop/backend/routers/realtime_reply.py`
 - **Manager：** `wecom-desktop/backend/services/realtime_reply_manager.py`
-- **子进程：** `realtime_reply_process.py`
+- **子进程：** `wecom-desktop/backend/scripts/realtime_reply_process.py`
+- **孤儿进程清理：** `wecom-desktop/backend/utils/orphan_process_cleaner.py`
 - **设置服务：** `wecom-desktop/backend/services/settings.py`
 
 ---

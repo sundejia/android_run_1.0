@@ -364,6 +364,7 @@ Handlers are selected by `MessageProcessor` based on UI patterns (resource IDs, 
 - Manages per-device realtime reply subprocesses
 - Similar architecture to DeviceManager
 - Each device runs in isolated process with independent state
+- After uvicorn `--reload`, old subprocess trees can survive while the manager’s `_processes` dict resets; **`orphan_process_cleaner`** terminates matching `realtime_reply_process.py` trees before spawn (per serial) and on **`main.py` startup** (all), preventing duplicate controllers on one device (`docs/03-impl-and-arch/key-modules/realtime-reply-orphan-cleanup.md`)
 
 **Recording**:
 

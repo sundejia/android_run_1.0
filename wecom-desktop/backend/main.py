@@ -154,6 +154,28 @@ async def lifespan(app: FastAPI):
     print("[startup] Ensuring required directories exist...")
     ensure_directories()
 
+    # Layer 2 safety net: clean up realtime-reply subprocess trees left
+    # over from a previous uvicorn --reload cycle or an ungraceful
+    # shutdown. Because those subprocesses are launched with
+    # ``shell=True`` + ``CREATE_NEW_PROCESS_GROUP``, they survive worker
+    # restarts and would otherwise fight the fresh subprocess trees that
+    # this worker will spawn, causing [Errno 22] swipe failures and the
+    # "left/right log alternates freezing" symptom when multiple devices
+    # are active.
+    try:
+        from utils.orphan_process_cleaner import kill_realtime_reply_orphans
+
+        stats = kill_realtime_reply_orphans()
+        if stats.get("trees_killed"):
+            print(
+                f"[startup] [OK] Cleaned up {stats['trees_killed']} orphan "
+                f"realtime-reply tree(s) ({stats['processes_killed']} procs)"
+            )
+        else:
+            print("[startup] [OK] No orphan realtime-reply processes found")
+    except Exception as e:
+        print(f"[startup] [WARN] Orphan realtime-reply cleanup skipped: {e}")
+
     # Run database migrations
     try:
         from services.media_action_state_migration import migrate_media_action_state_to_control

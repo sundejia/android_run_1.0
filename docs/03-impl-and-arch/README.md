@@ -22,6 +22,7 @@ Deep dives into specific components and subsystems:
 - Settings management
 - AI reply integration
 - Follow-up message system
+- Realtime reply orphan subprocess cleanup (`key-modules/realtime-reply-orphan-cleanup.md`) — avoids duplicate `realtime_reply_process.py` trees after uvicorn reload
 
 Each module document includes:
 
