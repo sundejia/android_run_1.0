@@ -805,9 +805,15 @@ class ResponseDetector:
                 # Step 1: Launch WeCom (gated by realtime.launch_wecom_enabled).
                 # Skipping saves ~5s/scan but assumes WeCom is already foreground.
                 if _pre_scan_toggles["launch_wecom_enabled"]:
+                    _step_started = time.perf_counter()
+                    self._logger.info(f"[SCAN_STEP] serial={serial} step=launch_wecom event=start")
                     self._logger.info(f"[{serial}] Step 1: Launching WeCom...")
                     await wecom.launch_wecom(wait_for_ready=True)
                     await asyncio.sleep(1)
+                    self._logger.info(
+                        f"[SCAN_STEP] serial={serial} step=launch_wecom event=end "
+                        f"duration_ms={(time.perf_counter() - _step_started) * 1000:.1f}"
+                    )
                 else:
                     self._logger.info(
                         f"[{serial}] Step 1: Skipping launch-wecom "
@@ -818,9 +824,15 @@ class ResponseDetector:
                 # realtime.switch_to_private_chats_enabled). Skipping saves
                 # ~4s/scan but assumes the device is already on the private-chats tab.
                 if _pre_scan_toggles["switch_to_private_chats_enabled"]:
+                    _step_started = time.perf_counter()
+                    self._logger.info(f"[SCAN_STEP] serial={serial} step=switch_to_private_chats event=start")
                     self._logger.info(f"[{serial}] Step 2: Switching to Private Chats...")
                     await wecom.switch_to_private_chats()
                     await asyncio.sleep(0.5)
+                    self._logger.info(
+                        f"[SCAN_STEP] serial={serial} step=switch_to_private_chats event=end "
+                        f"duration_ms={(time.perf_counter() - _step_started) * 1000:.1f}"
+                    )
                 else:
                     self._logger.info(
                         f"[{serial}] Step 2: Skipping switch-to-private-chats "
@@ -833,9 +845,15 @@ class ResponseDetector:
                 # Skipping is safe only when operators keep the conversation
                 # list pinned to the top.
                 if _pre_scan_toggles["scroll_to_top_enabled"]:
+                    _step_started = time.perf_counter()
+                    self._logger.info(f"[SCAN_STEP] serial={serial} step=scroll_to_top event=start")
                     self._logger.info(f"[{serial}] Step 3: Scrolling to top...")
                     await wecom.adb.scroll_to_top()
                     await asyncio.sleep(0.5)
+                    self._logger.info(
+                        f"[SCAN_STEP] serial={serial} step=scroll_to_top event=end "
+                        f"duration_ms={(time.perf_counter() - _step_started) * 1000:.1f}"
+                    )
                 else:
                     self._logger.info(
                         f"[{serial}] Step 3: Skipping scroll-to-top "
@@ -843,8 +861,15 @@ class ResponseDetector:
                     )
 
                 # Step 4: Initial red dot detection
+                _step_started = time.perf_counter()
+                self._logger.info(f"[SCAN_STEP] serial={serial} step=detect_first_page_unread event=start")
                 self._logger.info(f"[{serial}] Step 4: Detecting red dot users (first page only)...")
                 initial_unread = await self._detect_first_page_unread(wecom, serial)
+                self._logger.info(
+                    f"[SCAN_STEP] serial={serial} step=detect_first_page_unread event=end "
+                    f"duration_ms={(time.perf_counter() - _step_started) * 1000:.1f} "
+                    f"users={len(initial_unread)}"
+                )
 
                 if not initial_unread:
                     self._logger.info(f"[{serial}] ✅ No red dot users found")

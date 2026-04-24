@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -138,6 +139,34 @@ class ADBService:
             },
             "other_swipe": {"count": 0, "params": []},  # For non-standard swipes
         }
+
+    def _trace_context(self, step: str, **fields: Any) -> str:
+        """Build a compact, grep-friendly trace context for ADB bottleneck debugging."""
+        serial = self.config.device_serial or "unknown"
+        parts = [
+            "[ADB_TRACE]",
+            f"serial={serial}",
+            f"pid={os.getpid()}",
+            f"step={step}",
+        ]
+        for key, value in fields.items():
+            parts.append(f"{key}={value}")
+        return " ".join(parts)
+
+    def _trace_start(self, step: str, **fields: Any) -> float:
+        self.logger.info(self._trace_context(step, event="start", **fields))
+        return time.perf_counter()
+
+    def _trace_end(self, step: str, started: float, **fields: Any) -> None:
+        duration_ms = (time.perf_counter() - started) * 1000
+        self.logger.info(
+            self._trace_context(
+                step,
+                event="end",
+                duration_ms=f"{duration_ms:.1f}",
+                **fields,
+            )
+        )
 
     @property
     def adb(self) -> AdbTools:
@@ -473,9 +502,13 @@ class ADBService:
         Also updates tree hash for change detection.
         """
         self.logger.debug("Refreshing UI state from device...")
-        started = time.perf_counter()
-        await self.adb.get_state()
-        runtime_metrics.record_adb_call("get_state", (time.perf_counter() - started) * 1000)
+        started = self._trace_start("get_state", caller="refresh_ui_state")
+        try:
+            await self.adb.get_state()
+            runtime_metrics.record_adb_call("get_state", (time.perf_counter() - started) * 1000)
+        except Exception as e:
+            self._trace_end("get_state", started, caller="refresh_ui_state", status="error", error=type(e).__name__)
+            raise
 
         # Save previous hash before updating
         self._last_tree_hash = self._cache.tree_hash
@@ -490,6 +523,14 @@ class ADBService:
             f"UI state refreshed: tree={'present' if self._cache.raw_tree else 'empty'}, "
             f"{len(self._cache.clickable_elements)} clickable elements, "
             f"{len(self._cache.text_index)} indexed texts"
+        )
+        self._trace_end(
+            "get_state",
+            started,
+            caller="refresh_ui_state",
+            status="ok",
+            tree="present" if self._cache.raw_tree else "empty",
+            clickables=len(self._cache.clickable_elements),
         )
 
     async def get_ui_state(self, force: bool = False) -> tuple[Any | None, list[dict[str, Any]]]:
@@ -544,12 +585,15 @@ class ADBService:
         try:
             # AdbTools initializes connection on first use
             # We verify by getting the UI state
-            started = time.perf_counter()
+            started = self._trace_start("get_state", caller="connect")
             await self.adb.get_state()
             runtime_metrics.record_adb_call("connect_get_state", (time.perf_counter() - started) * 1000)
+            self._trace_end("get_state", started, caller="connect", status="ok")
             self._connected = True
             self.logger.info("Connected to device successfully")
         except Exception as e:
+            if "started" in locals():
+                self._trace_end("get_state", started, caller="connect", status="error", error=type(e).__name__)
             self._connected = False
             raise DeviceConnectionError(
                 "Failed to connect to device",
@@ -569,12 +613,15 @@ class ADBService:
         """
         with log_operation(self.logger, "start_app", package=package_name):
             try:
-                started = time.perf_counter()
+                started = self._trace_start("start_app", package=package_name)
                 await self.adb.start_app(package_name)
                 runtime_metrics.record_adb_call("start_app", (time.perf_counter() - started) * 1000)
+                self._trace_end("start_app", started, package=package_name, status="ok")
                 self.invalidate_cache()  # UI changed after app launch
                 self.logger.info(f"App launched: {package_name}")
             except Exception as e:
+                if "started" in locals():
+                    self._trace_end("start_app", started, package=package_name, status="error", error=type(e).__name__)
                 raise WeComAutomationError(
                     f"Failed to start app: {package_name}",
                     original_error=e,
@@ -698,7 +745,12 @@ class ADBService:
         self._count_swipe(start_x, start_y, end_x, end_y, duration_ms)
 
         try:
-            started = time.perf_counter()
+            started = self._trace_start(
+                "swipe",
+                start=f"{start_x},{start_y}",
+                end=f"{end_x},{end_y}",
+                requested_duration_ms=duration_ms,
+            )
             await self.adb.swipe(
                 start_x=start_x,
                 start_y=start_y,
@@ -707,8 +759,26 @@ class ADBService:
                 duration_ms=duration_ms,
             )
             runtime_metrics.record_adb_call("swipe", (time.perf_counter() - started) * 1000)
+            self._trace_end(
+                "swipe",
+                started,
+                start=f"{start_x},{start_y}",
+                end=f"{end_x},{end_y}",
+                requested_duration_ms=duration_ms,
+                status="ok",
+            )
             self.invalidate_cache()  # UI changed after swipe
         except Exception as e:
+            if "started" in locals():
+                self._trace_end(
+                    "swipe",
+                    started,
+                    start=f"{start_x},{start_y}",
+                    end=f"{end_x},{end_y}",
+                    requested_duration_ms=duration_ms,
+                    status="error",
+                    error=type(e).__name__,
+                )
             self.logger.error(f"Swipe failed: {e}")
             raise WeComAutomationError(
                 "Swipe operation failed",
@@ -845,36 +915,71 @@ class ADBService:
         stable_threshold = self.config.scroll.scroll_to_top_stable_threshold
 
         self.logger.info(f"Scrolling to top (max_attempts={max_attempts}, stable_threshold={stable_threshold})...")
+        overall_started = self._trace_start(
+            "scroll_to_top",
+            max_attempts=max_attempts,
+            stable_threshold=stable_threshold,
+        )
 
         previous_hash: str | None = None
         stable_count = 0
 
-        for attempt in range(1, max_attempts + 1):
-            self.logger.debug(f"Scroll-to-top {attempt}/{max_attempts}")
-            await self.scroll_up()
-            await asyncio.sleep(self.config.timing.ui_stabilization_delay)
+        try:
+            for attempt in range(1, max_attempts + 1):
+                self.logger.debug(f"Scroll-to-top {attempt}/{max_attempts}")
+                attempt_started = self._trace_start("scroll_to_top.attempt", attempt=attempt, phase="swipe")
+                await self.scroll_up()
+                self._trace_end("scroll_to_top.attempt", attempt_started, attempt=attempt, phase="swipe", status="ok")
 
-            tree = await self.get_ui_tree()
-            if not tree:
-                continue
+                sleep_started = self._trace_start(
+                    "scroll_to_top.attempt",
+                    attempt=attempt,
+                    phase="stabilize_sleep",
+                    sleep_seconds=self.config.timing.ui_stabilization_delay,
+                )
+                await asyncio.sleep(self.config.timing.ui_stabilization_delay)
+                self._trace_end(
+                    "scroll_to_top.attempt",
+                    sleep_started,
+                    attempt=attempt,
+                    phase="stabilize_sleep",
+                    status="ok",
+                )
 
-            tree_hash = self.hash_ui_tree(tree)
-            if tree_hash == previous_hash:
-                stable_count += 1
-                self.logger.debug(f"UI unchanged for {stable_count} consecutive scrolls")
-                if stable_count >= stable_threshold:
-                    self.logger.info("UI stable after consecutive scrolls - assuming top reached")
-                    break
+                tree_started = self._trace_start("scroll_to_top.attempt", attempt=attempt, phase="get_ui_tree")
+                tree = await self.get_ui_tree()
+                self._trace_end(
+                    "scroll_to_top.attempt",
+                    tree_started,
+                    attempt=attempt,
+                    phase="get_ui_tree",
+                    status="ok",
+                    tree="present" if tree else "empty",
+                )
+                if not tree:
+                    continue
+
+                tree_hash = self.hash_ui_tree(tree)
+                if tree_hash == previous_hash:
+                    stable_count += 1
+                    self.logger.debug(f"UI unchanged for {stable_count} consecutive scrolls")
+                    if stable_count >= stable_threshold:
+                        self.logger.info("UI stable after consecutive scrolls - assuming top reached")
+                        break
+                else:
+                    stable_count = 0
+                    previous_hash = tree_hash
             else:
-                stable_count = 0
-                previous_hash = tree_hash
-        else:
-            self.logger.info("Reached maximum scroll-to-top attempts")
+                self.logger.info("Reached maximum scroll-to-top attempts")
+        except Exception as e:
+            self._trace_end("scroll_to_top", overall_started, status="error", error=type(e).__name__)
+            raise
 
         # Log scroll-to-top swipe statistics
         self.log_swipe_statistics("Scroll to top")
 
         self.logger.info("Scrolled to top")
+        self._trace_end("scroll_to_top", overall_started, status="ok", stable_count=stable_count)
 
     async def take_screenshot(self) -> tuple[str, bytes]:
         """
