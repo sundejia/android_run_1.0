@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, shallowRef, computed, type ShallowRef } from 'vue'
 
 export interface LogEntry {
   id: string
@@ -9,42 +9,71 @@ export interface LogEntry {
   source?: 'sync' | 'followup' | 'system'
 }
 
-// BroadcastChannel for syncing logs between windows
 const LOG_CHANNEL_NAME = 'wecom-logs-sync'
 
 interface LogSyncMessage {
-  type: 'add' | 'clear' | 'sync-request' | 'sync-response'
+  type: 'add' | 'add-batch' | 'clear' | 'sync-request' | 'sync-response'
   serial: string
   entry?: LogEntry
   entries?: LogEntry[]
 }
 
-// Reconnect / heartbeat tunables. The values must stay loosely coordinated
-// with the server-side inactivity ceiling in routers/logs.py.
 const RECONNECT_BASE_MS = 1000
 const RECONNECT_MAX_MS = 30_000
 const RECONNECT_MAX_ATTEMPTS = 20
 const HEARTBEAT_INTERVAL_MS = 25_000
 const HEARTBEAT_TIMEOUT_MS = 35_000
 
+// Broadcast flush cadence. Small enough to feel real-time; large enough to
+// coalesce a burst of WebSocket frames into a single cross-window message.
+const BROADCAST_FLUSH_MS = 80
+
 export const useLogStore = defineStore('logs', () => {
-  // State - logs per device
-  const deviceLogs = ref<Map<string, LogEntry[]>>(new Map())
+  // Per-serial reactive refs. Each device gets its own shallowRef<LogEntry[]>,
+  // so a log push on device A only re-renders panels subscribed to device A —
+  // not every LogStream instance on the page. This is the key fix for the
+  // "15 same-timestamp logs trickle in over 5 seconds" bug: previously, a
+  // single shared `ref<Map>` reallocation on every push forced all three
+  // SidecarView panels to recompute at once, collapsing throughput to ~3/s.
+  const deviceLogRefs = new Map<string, ShallowRef<LogEntry[]>>()
+
+  // Reactive counter bumped whenever a brand-new serial is seen, so the
+  // `devicesWithLogs` computed can re-evaluate without depending on a
+  // reactive Map.
+  const deviceSerialsVersion = ref(0)
+
   const websockets = ref<Map<string, WebSocket>>(new Map())
   const maxLogsPerDevice = 1000
-  const knownLogIds = ref<Set<string>>(new Set())
 
-  // Reconnect bookkeeping (intentionally non-reactive plain Maps/Sets)
+  // Non-reactive dedupe set. The ids are UUIDs created per entry and are only
+  // used for cross-window dedupe, never rendered, so there's no point paying
+  // Vue's reactivity tax on it.
+  const knownLogIds = new Set<string>()
+
+  // Reconnect bookkeeping (plain Maps/Sets, intentionally non-reactive).
   const reconnectAttempts = new Map<string, number>()
   const reconnectTimers = new Map<string, number>()
   const intentionallyClosed = new Set<string>()
   const heartbeatTimers = new Map<string, { ping: number; watchdog: number }>()
   const lastPongAt = new Map<string, number>()
 
-  // BroadcastChannel for cross-window sync
+  // Batched reactivity trigger. Every addLog mutates the underlying array
+  // in place (so synchronous reads like `getDeviceLogs()` return the fresh
+  // value immediately, which existing unit tests rely on) and then queues a
+  // microtask that swaps the ref to a new array reference — once per dirty
+  // serial per tick. This replaces the previous O(n_serials) `new Map(...)`
+  // reallocation that fired on every single log line.
+  const dirtySerials = new Set<string>()
+  let triggerScheduled = false
+
+  // Cross-window broadcast batching. A burst of WS frames on one serial
+  // should turn into a single `add-batch` message instead of N single-entry
+  // postMessage calls.
+  const pendingBroadcast = new Map<string, LogEntry[]>()
+  let broadcastTimer: number | null = null
+
   let logChannel: BroadcastChannel | null = null
 
-  // Initialize broadcast channel
   function initBroadcastChannel() {
     if (logChannel) return
 
@@ -54,23 +83,24 @@ export const useLogStore = defineStore('logs', () => {
         const msg = event.data
 
         if (msg.type === 'add' && msg.entry) {
-          // Add log from another window (without broadcasting again)
           addLogInternal(msg.serial, msg.entry, false)
+        } else if (msg.type === 'add-batch' && msg.entries) {
+          for (const entry of msg.entries) {
+            addLogInternal(msg.serial, entry, false)
+          }
         } else if (msg.type === 'clear') {
-          // Clear logs from another window
           clearLogsInternal(msg.serial, false)
         } else if (msg.type === 'sync-request') {
-          // Another window is requesting logs for a device
-          const logs = deviceLogs.value.get(msg.serial) || []
+          const r = deviceLogRefs.get(msg.serial)
+          const logs = r ? r.value : []
           if (logs.length > 0) {
             logChannel?.postMessage({
               type: 'sync-response',
               serial: msg.serial,
-              entries: logs,
+              entries: logs.slice(),
             } as LogSyncMessage)
           }
         } else if (msg.type === 'sync-response' && msg.entries) {
-          // Received logs from another window
           for (const entry of msg.entries) {
             addLogInternal(msg.serial, entry, false)
           }
@@ -81,7 +111,6 @@ export const useLogStore = defineStore('logs', () => {
     }
   }
 
-  // Request logs from other windows
   function requestLogsFromOtherWindows(serial: string) {
     initBroadcastChannel()
     logChannel?.postMessage({
@@ -90,64 +119,127 @@ export const useLogStore = defineStore('logs', () => {
     } as LogSyncMessage)
   }
 
-  // Get logs for a specific device
-  function getDeviceLogs(serial: string): LogEntry[] {
-    return deviceLogs.value.get(serial) || []
+  function ensureRef(serial: string): ShallowRef<LogEntry[]> {
+    let r = deviceLogRefs.get(serial)
+    if (!r) {
+      r = shallowRef<LogEntry[]>([])
+      deviceLogRefs.set(serial, r)
+      deviceSerialsVersion.value += 1
+    }
+    return r
   }
 
-  // Internal add log (with option to broadcast)
-  function addLogInternal(serial: string, entry: LogEntry, broadcast: boolean) {
-    // Skip if we already have this log
-    if (knownLogIds.value.has(entry.id)) {
+  function getDeviceLogs(serial: string): LogEntry[] {
+    return ensureRef(serial).value
+  }
+
+  function scheduleTrigger(serial: string) {
+    dirtySerials.add(serial)
+    if (triggerScheduled) return
+    triggerScheduled = true
+    // queueMicrotask runs before paint but after the current task. This
+    // coalesces multiple synchronous pushes (e.g., `sync-response` loops
+    // replaying another window's history) into one reactivity trigger per
+    // serial, without delaying visibility across event-loop tasks — which
+    // keeps the "WS message → log visible" pipeline feeling real-time.
+    queueMicrotask(flushTriggers)
+  }
+
+  function flushTriggers() {
+    triggerScheduled = false
+    if (dirtySerials.size === 0) return
+    const serials = Array.from(dirtySerials)
+    dirtySerials.clear()
+    for (const serial of serials) {
+      const r = deviceLogRefs.get(serial)
+      if (!r) continue
+      // Swap to a new array reference so child components that receive the
+      // array as a prop see `hasChanged(newValue, oldValue) === true` and
+      // re-run downstream computeds (e.g., LogStream's aiDown watcher).
+      // Contents are unchanged — we just committed in-place mutations.
+      r.value = r.value.slice()
+    }
+  }
+
+  function scheduleBroadcast(serial: string, entry: LogEntry) {
+    let queue = pendingBroadcast.get(serial)
+    if (!queue) {
+      queue = []
+      pendingBroadcast.set(serial, queue)
+    }
+    queue.push(entry)
+
+    if (broadcastTimer !== null) return
+    broadcastTimer = window.setTimeout(flushBroadcast, BROADCAST_FLUSH_MS)
+  }
+
+  function flushBroadcast() {
+    broadcastTimer = null
+    if (pendingBroadcast.size === 0) return
+    initBroadcastChannel()
+    if (!logChannel) {
+      pendingBroadcast.clear()
       return
     }
-    knownLogIds.value.add(entry.id)
-
-    if (!deviceLogs.value.has(serial)) {
-      deviceLogs.value.set(serial, [])
+    for (const [serial, entries] of pendingBroadcast) {
+      if (entries.length === 0) continue
+      if (entries.length === 1) {
+        logChannel.postMessage({
+          type: 'add',
+          serial,
+          entry: entries[0],
+        } as LogSyncMessage)
+      } else {
+        logChannel.postMessage({
+          type: 'add-batch',
+          serial,
+          entries: entries.slice(),
+        } as LogSyncMessage)
+      }
     }
+    pendingBroadcast.clear()
+  }
 
-    const logs = deviceLogs.value.get(serial)!
+  function addLogInternal(serial: string, entry: LogEntry, broadcast: boolean) {
+    if (knownLogIds.has(entry.id)) return
+    knownLogIds.add(entry.id)
+
+    const r = ensureRef(serial)
+    const logs = r.value
     logs.push(entry)
 
-    // Trim if exceeds max
     if (logs.length > maxLogsPerDevice) {
       const removed = logs.splice(0, logs.length - maxLogsPerDevice)
-      // Clean up known IDs for removed logs
       for (const log of removed) {
-        knownLogIds.value.delete(log.id)
+        knownLogIds.delete(log.id)
       }
     }
 
-    // Trigger reactivity
-    deviceLogs.value = new Map(deviceLogs.value)
+    scheduleTrigger(serial)
 
-    // Broadcast to other windows
     if (broadcast) {
-      initBroadcastChannel()
-      logChannel?.postMessage({
-        type: 'add',
-        serial,
-        entry,
-      } as LogSyncMessage)
+      scheduleBroadcast(serial, entry)
     }
   }
 
-  // Add a log entry for a device (public API)
   function addLog(serial: string, entry: LogEntry) {
     addLogInternal(serial, entry, true)
   }
 
-  // Internal clear logs (with option to broadcast)
   function clearLogsInternal(serial: string, broadcast: boolean) {
-    const logs = deviceLogs.value.get(serial) || []
-    // Clean up known IDs
-    for (const log of logs) {
-      knownLogIds.value.delete(log.id)
+    const r = deviceLogRefs.get(serial)
+    if (r) {
+      for (const log of r.value) {
+        knownLogIds.delete(log.id)
+      }
+      // Clearing replaces the array reference directly (synchronous trigger)
+      // so any pending microtask flush for this serial is harmless — the
+      // flush is a no-op reallocation on an empty array.
+      r.value = []
     }
-
-    deviceLogs.value.set(serial, [])
-    deviceLogs.value = new Map(deviceLogs.value)
+    // Cancel any pending broadcast entries for this serial; a `clear`
+    // message makes queued `add` entries stale.
+    pendingBroadcast.delete(serial)
 
     if (broadcast) {
       initBroadcastChannel()
@@ -158,7 +250,6 @@ export const useLogStore = defineStore('logs', () => {
     }
   }
 
-  // Clear logs for a device (public API)
   function clearLogs(serial: string) {
     clearLogsInternal(serial, true)
   }
@@ -242,17 +333,12 @@ export const useLogStore = defineStore('logs', () => {
     reconnectTimers.set(serial, timer)
   }
 
-  // Connect to WebSocket for log streaming
   function connectLogStream(serial: string) {
-    // Initialize broadcast channel and request logs from other windows
     initBroadcastChannel()
     requestLogsFromOtherWindows(serial)
 
-    // Re-entry from a scheduled reconnect (or a fresh user action) means the
-    // user wants to be connected; clear any stale "intentional close" flag.
     intentionallyClosed.delete(serial)
 
-    // Don't reconnect if already connected
     const existing = websockets.value.get(serial)
     if (
       existing &&
@@ -262,7 +348,6 @@ export const useLogStore = defineStore('logs', () => {
       return
     }
 
-    // Unified WebSocket URL for all devices (sync and followup)
     const wsUrl = `ws://localhost:8765/ws/logs/${serial}`
 
     const ws = new WebSocket(wsUrl)
@@ -283,7 +368,6 @@ export const useLogStore = defineStore('logs', () => {
 
     ws.onmessage = (event) => {
       const raw = event.data
-      // Heartbeat frames must never enter the visible log panel.
       if (raw === 'pong' || raw === 'ping') {
         lastPongAt.set(serial, Date.now())
         return
@@ -298,7 +382,6 @@ export const useLogStore = defineStore('logs', () => {
           source: data.source || 'sync',
         })
       } catch {
-        // Plain text message
         addLog(serial, {
           id: crypto.randomUUID(),
           timestamp: new Date().toISOString(),
@@ -311,9 +394,6 @@ export const useLogStore = defineStore('logs', () => {
 
     ws.onerror = (error) => {
       console.error(`[LogStream] Error for ${serial}:`, error)
-      // Do not surface a synthetic "connection error" entry: ws.onclose will
-      // always follow and is the single place that decides whether we tell
-      // the user we are reconnecting.
     }
 
     ws.onclose = (ev) => {
@@ -346,7 +426,6 @@ export const useLogStore = defineStore('logs', () => {
     websockets.value.set(serial, ws)
   }
 
-  // Disconnect log stream
   function disconnectLogStream(serial: string) {
     intentionallyClosed.add(serial)
     clearReconnectTimer(serial)
@@ -363,18 +442,20 @@ export const useLogStore = defineStore('logs', () => {
     }
   }
 
-  // Disconnect all streams
   function disconnectAll() {
     for (const serial of Array.from(websockets.value.keys())) {
       disconnectLogStream(serial)
     }
   }
 
-  // Get all device serials with logs
-  const devicesWithLogs = computed(() => Array.from(deviceLogs.value.keys()))
+  const devicesWithLogs = computed(() => {
+    // Subscribe to the serials-version counter so this recomputes whenever
+    // a brand-new serial is registered.
+    void deviceSerialsVersion.value
+    return Array.from(deviceLogRefs.keys())
+  })
 
   return {
-    deviceLogs,
     getDeviceLogs,
     addLog,
     clearLogs,

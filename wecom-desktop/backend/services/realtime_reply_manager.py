@@ -643,33 +643,48 @@ class RealtimeReplyManager:
             await self._broadcast_log(serial, "ERROR", f"Output read error: {e}")
 
     async def _parse_and_update_state(self, serial: str, message: str, level: str):
-        """解析日志更新状态"""
+        """解析日志更新状态
+
+        仅当 _状态确实发生变化_（计数器增长、用户可见的 message 变了、
+        或出现 ERROR）时才广播 status，避免每条日志都触发一次多余的 WS
+        帧。原先实现里每条日志都 `await self._broadcast_status(serial)`，
+        在三设备并行爆发日志时双倍了前端管道的 WS 压力，是 sidecar 日志
+        卡顿的次要原因之一（主因在前端响应式开销，见 stores/logs.ts）。
+        """
         state = self._states.get(serial)
         if not state:
             return
+
+        dirty = False
 
         # 更新检测数
         if "Found" in message and "unread" in message:
             match = re.search(r"Found\s+(\d+)\s+unread", message)
             if match:
                 state.responses_detected += int(match.group(1))
+                dirty = True
 
         # 更新发送数
         if "Reply sent" in message or "sent successfully" in message:
             state.replies_sent += 1
             state.last_scan_at = datetime.now()
+            dirty = True
 
-        # 更新状态消息
+        # 更新状态消息（仅当内容真的变化时才算 dirty）
         if level == "INFO" and "unread" in message.lower():
-            state.message = message
+            if state.message != message:
+                state.message = message
+                dirty = True
 
         # 记录错误
         if level == "ERROR":
             state.errors.append(message)
             if len(state.errors) > 50:
                 state.errors = state.errors[-50:]
+            dirty = True
 
-        await self._broadcast_status(serial)
+        if dirty:
+            await self._broadcast_status(serial)
 
     async def _wait_for_completion(self, serial: str, process, stdout_task, stderr_task):
         """等待进程完成, with auto-restart on unexpected exit."""

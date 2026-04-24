@@ -433,10 +433,27 @@ class DeviceManager:
             await self._broadcast_log(serial, "ERROR", f"Output read error: {e}")
 
     async def _parse_and_update_state(self, serial: str, message: str, level: str):
-        """Parse log messages to update sync state with monotonic progress."""
+        """Parse log messages to update sync state with monotonic progress.
+
+        Broadcasts status only when a _user-visible_ field actually changes
+        (status/progress/message/customers_synced/messages_added, or a new
+        error appended). The previous implementation broadcast on every
+        single stdout line, doubling the WS frame rate per log and
+        contributing to the sidecar log-pipeline backpressure observed
+        under multi-device bursts.
+        """
         state = self._sync_states.get(serial)
         if not state:
             return
+
+        # Snapshot the fields that appear in status_data (plus errors length)
+        # so we can decide at the end whether anything actually changed.
+        prev_status = state.status.value
+        prev_progress = state.progress
+        prev_message = state.message
+        prev_customers = state.customers_synced
+        prev_messages = state.messages_added
+        prev_errors_len = len(state.errors)
 
         # Initialize tracking attributes if not present
         if not hasattr(state, "_total_customers"):
@@ -660,8 +677,19 @@ class DeviceManager:
         if should_update_message:
             state.message = new_message
 
-        # Broadcast updated status
-        await self._broadcast_status(serial)
+        # Broadcast only when a field visible to clients actually changed.
+        # For the ~80-90% of log lines that don't map to any status field,
+        # this short-circuits an otherwise-wasted WS frame per line.
+        changed = (
+            prev_status != state.status.value
+            or prev_progress != state.progress
+            or prev_message != state.message
+            or prev_customers != state.customers_synced
+            or prev_messages != state.messages_added
+            or len(state.errors) > prev_errors_len
+        )
+        if changed:
+            await self._broadcast_status(serial)
 
     async def start_sync(
         self,

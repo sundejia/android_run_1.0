@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, nextTick, onMounted, computed } from 'vue'
+import { ref, shallowRef, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { LogEntry } from '../stores/logs'
 
 const props = defineProps<{
@@ -23,22 +23,90 @@ const AI_DOWN_PATTERNS = [
 const RECENT_WINDOW = 80
 const AI_DOWN_THRESHOLD = 2
 
-const aiDown = computed(() => {
-  const recent = props.logs.slice(-RECENT_WINDOW)
-  let hits = 0
-  let lastHit: LogEntry | null = null
-  for (const entry of recent) {
-    const message = entry?.message ?? ''
-    if (AI_DOWN_PATTERNS.some((re) => re.test(message))) {
-      hits += 1
-      lastHit = entry
-      if (hits >= AI_DOWN_THRESHOLD) {
-        break
-      }
+// Incremental "AI down" detector.
+// Previous implementation re-scanned the last 80 entries (5 regex × 80 =
+// 400 matches) inside a `computed` on every prop update. With 3 LogStream
+// panels open and rapid log bursts, that was 1200 regex/log — enough to
+// throttle the whole UI to ~3 log lines/s under load. Instead we now:
+//   1. Maintain a sliding record of indices where AI-down matched, using
+//      a single scan per newly-appended entry.
+//   2. Recount matches that fall inside the trailing RECENT_WINDOW in O(k)
+//      where k = hits, rather than O(80) regex evaluations.
+// The component is reset whenever `props.logs` reference changes to a
+// different array (e.g., clearLogs() replaces the ref with []).
+const aiDown = shallowRef<{ active: boolean; lastHit: LogEntry | null }>({
+  active: false,
+  lastHit: null,
+})
+
+// Indices (into the current logs array, by array position) where an
+// AI-down pattern was observed. Kept sorted ascending. When the logs
+// array is trimmed (>= maxLogsPerDevice), old indices become negative
+// after the shift and are dropped lazily.
+let hitIndices: number[] = []
+let lastProcessedLength = 0
+let lastArrayRef: LogEntry[] | null = null
+
+function resetDetector() {
+  hitIndices = []
+  lastProcessedLength = 0
+  aiDown.value = { active: false, lastHit: null }
+}
+
+function matchesAiDown(message: string): boolean {
+  for (const re of AI_DOWN_PATTERNS) {
+    if (re.test(message)) return true
+  }
+  return false
+}
+
+function updateAiDown(logs: LogEntry[]) {
+  // Detect "array identity replacement" (clearLogs or fresh mount) and
+  // reset. For the in-place push + slice-on-flush pattern used by logs.ts,
+  // the reference changes by one slice per flush and length grows, so we
+  // can't rely on identity to keep state. Instead we key on length going
+  // backwards as a cheap reset signal.
+  if (lastArrayRef === null || logs.length < lastProcessedLength) {
+    resetDetector()
+    lastArrayRef = logs
+  } else {
+    lastArrayRef = logs
+  }
+
+  // Scan only newly appended entries since the last update.
+  for (let i = lastProcessedLength; i < logs.length; i += 1) {
+    const entry = logs[i]
+    if (entry && matchesAiDown(entry.message ?? '')) {
+      hitIndices.push(i)
     }
   }
-  return hits >= AI_DOWN_THRESHOLD ? { active: true as const, lastHit } : { active: false as const, lastHit: null }
-})
+  lastProcessedLength = logs.length
+
+  // Drop hits that fell outside the trailing RECENT_WINDOW. Since
+  // hitIndices is sorted ascending we can snip the prefix in one pass.
+  const windowStart = Math.max(0, logs.length - RECENT_WINDOW)
+  let drop = 0
+  while (drop < hitIndices.length && hitIndices[drop] < windowStart) {
+    drop += 1
+  }
+  if (drop > 0) hitIndices = hitIndices.slice(drop)
+
+  if (hitIndices.length >= AI_DOWN_THRESHOLD) {
+    const lastIdx = hitIndices[hitIndices.length - 1]
+    aiDown.value = {
+      active: true,
+      lastHit: logs[lastIdx] ?? null,
+    }
+  } else {
+    aiDown.value = { active: false, lastHit: null }
+  }
+}
+
+watch(
+  () => props.logs,
+  (logs: LogEntry[]) => updateAiDown(logs),
+  { immediate: true },
+)
 
 const containerRef = ref<HTMLElement | null>(null)
 
@@ -70,7 +138,6 @@ const sourceBgs: Record<string, string> = {
   followup: 'bg-blue-500/10',
 }
 
-// Format timestamp
 function formatTime(timestamp: string): string {
   try {
     const date = new Date(timestamp)
@@ -85,24 +152,47 @@ function formatTime(timestamp: string): string {
   }
 }
 
-// Auto-scroll when new logs arrive
-// Watch the last log's ID instead of length to handle the case when
-// logs are trimmed (after reaching maxLogsPerDevice=1000, length stays constant)
+// rAF-throttled auto-scroll.
+// The previous implementation watched the last-log id and performed a
+// synchronous `scrollTop = scrollHeight` on every push. Reading
+// `scrollHeight` forces layout; combined with three panels × bursts of
+// logs, this was one of the hot paths starving the log pipeline.
+// Now we coalesce into one scroll per animation frame no matter how many
+// logs come in during that window.
+let rafHandle: number | null = null
+let pendingScroll = false
+
+function scheduleAutoScroll() {
+  if (!props.autoScroll) return
+  pendingScroll = true
+  if (rafHandle !== null) return
+  rafHandle = requestAnimationFrame(() => {
+    rafHandle = null
+    if (!pendingScroll) return
+    pendingScroll = false
+    const el = containerRef.value
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  })
+}
+
 watch(
-  () => props.logs[props.logs.length - 1]?.id,
-  async () => {
-    if (props.autoScroll && containerRef.value) {
-      await nextTick()
-      containerRef.value.scrollTop = containerRef.value.scrollHeight
-    }
-  }
+  () => props.logs.length,
+  (newLen: number, oldLen: number) => {
+    if (newLen !== oldLen) scheduleAutoScroll()
+  },
 )
 
-// Initial scroll to bottom
-onMounted(async () => {
+onMounted(() => {
   if (props.autoScroll && containerRef.value) {
-    await nextTick()
-    containerRef.value.scrollTop = containerRef.value.scrollHeight
+    scheduleAutoScroll()
+  }
+})
+
+onBeforeUnmount(() => {
+  if (rafHandle !== null) {
+    cancelAnimationFrame(rafHandle)
+    rafHandle = null
   }
 })
 </script>
@@ -148,7 +238,7 @@ onMounted(async () => {
         <span class="text-wecom-muted/60 shrink-0 w-20">
           {{ formatTime(log.timestamp) }}
         </span>
-        
+
         <!-- Level badge -->
         <span
           class="shrink-0 w-16 text-xs font-semibold"
@@ -182,15 +272,18 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-/* Ensure proper scrolling */
+/* Short, lightweight enter animation — the previous 0.15s slide compounded
+ * badly when many entries arrived in the same frame, because each required
+ * its own composite layer. 0.06s keeps the visual cue without pressuring
+ * the compositor. */
 :deep(.log-entry-enter-active) {
-  animation: slideIn 0.15s ease-out;
+  animation: slideIn 0.06s ease-out;
 }
 
 @keyframes slideIn {
   from {
     opacity: 0;
-    transform: translateY(-5px);
+    transform: translateY(-3px);
   }
   to {
     opacity: 1;
@@ -198,4 +291,3 @@ onMounted(async () => {
   }
 }
 </style>
-
