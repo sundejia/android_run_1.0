@@ -176,10 +176,17 @@ function scheduleAutoScroll() {
   })
 }
 
+// Watch the _last entry's id_ rather than `logs.length`, because once the
+// buffer saturates at maxLogsPerDevice (1000) the store splices one old
+// entry for every new one and the length stops changing — a `length`-only
+// watch then stops firing and the panel gets "stuck" at the bottom until
+// the user scrolls manually. The last-id signal still changes on every
+// append, and rAF coalescing inside scheduleAutoScroll keeps the actual
+// reflow rate capped at one per frame regardless of burst size.
 watch(
-  () => props.logs.length,
-  (newLen: number, oldLen: number) => {
-    if (newLen !== oldLen) scheduleAutoScroll()
+  () => props.logs[props.logs.length - 1]?.id,
+  (newId: string | undefined, oldId: string | undefined) => {
+    if (newId !== oldId) scheduleAutoScroll()
   },
 )
 
