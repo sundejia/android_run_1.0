@@ -3149,12 +3149,17 @@ class ResponseDetector:
                 f"[{serial}] recent-replies dedup unavailable, proceeding without dedup: {_dedup_exc}"
             )
 
+        # Track whether the message was successfully enqueued. If yes, almost
+        # every non-success outcome must NOT trigger a direct-send fallback,
+        # because the queue path may have already physically sent the message
+        # to the device. Only a clean PENDING/READY timeout (Layer 1 returns
+        # reason="timeout" only in that case) is safe for fallback.
+        msg_id: str | None = None
+        allow_direct_fallback = not bool(sidecar_client)
         if sidecar_client:
-            # 通过 Sidecar 队列发送（需要人工确认）
             try:
                 self._logger.info(f"[{serial}] 📡 Routing message to Sidecar queue for {user_name}")
 
-                # Step 1: 添加消息到队列
                 msg_id = await sidecar_client.add_message(
                     customer_name=user_name,
                     channel=user_channel,
@@ -3163,41 +3168,98 @@ class ResponseDetector:
 
                 if not msg_id:
                     self._logger.warning(f"[{serial}] Failed to add message to Sidecar queue")
-                    # 回退到直接发送
+                    # add_message failed before any send attempt — direct
+                    # fallback is the only way to deliver this reply.
+                    allow_direct_fallback = True
                 else:
                     self._logger.info(f"[{serial}] ✅ Message queued (ID: {msg_id})")
 
-                    # Step 2: 标记消息为就绪（启动10秒倒计时）
                     if not await sidecar_client.set_message_ready(msg_id):
-                        self._logger.warning(f"[{serial}] Failed to mark message as ready")
+                        self._logger.warning(
+                            f"[{serial}] Failed to mark message as ready; "
+                            f"NOT direct-sending (queue state unknown, would risk duplicate)"
+                        )
+                        return False, None
+
+                    self._logger.info(f"[{serial}] ⏱️ Countdown started, waiting for send...")
+
+                    sidecar_timeout = self._get_sidecar_timeout()
+                    result = await sidecar_client.wait_for_send(msg_id, timeout=sidecar_timeout)
+
+                    reason = result.get("reason", "unknown")
+                    if result.get("success") or reason == "sent":
+                        actual_message = result.get("message", message)
+                        self._logger.info(f"[{serial}] ✅ Reply sent (via Sidecar)")
+                        return True, actual_message
+                    if reason == "cancelled":
+                        self._logger.info(f"[{serial}] ⏭️ User skipped, message not sent")
+                        return False, None
+                    if reason == "expired":
+                        self._logger.info(f"[{serial}] ⏰ Message expired, skipping")
+                        return False, None
+                    if reason == "failed":
+                        self._logger.warning(
+                            f"[{serial}] Sidecar reported send failed; "
+                            f"NOT retrying via direct send to avoid duplicate"
+                        )
+                        return False, None
+                    if reason == "still_sending":
+                        # Layer 1 saw status=SENDING at the timeout boundary
+                        # and waited the grace window without reaching a
+                        # terminal state. The send may still complete on the
+                        # device; we MUST NOT fire a second send.
+                        self._logger.warning(
+                            f"[{serial}] Send still in flight after grace; "
+                            f"NOT triggering direct fallback (avoids duplicate)"
+                        )
+                        return False, None
+                    if reason == "not_found":
+                        self._logger.warning(
+                            f"[{serial}] Queue message {msg_id} disappeared; "
+                            f"NOT direct-sending (state unknown)"
+                        )
+                        return False, None
+                    if reason == "timeout":
+                        # Layer 1 returns "timeout" ONLY when status was still
+                        # PENDING/READY at the boundary, meaning no in-flight
+                        # send. It also marks the message EXPIRED, so the
+                        # frontend can no longer transition it to SENDING.
+                        # Direct send is safe here.
+                        self._logger.warning(
+                            f"[{serial}] User did not act in time; "
+                            f"falling back to direct send"
+                        )
+                        allow_direct_fallback = True
                     else:
-                        self._logger.info(f"[{serial}] ⏱️ Countdown started, waiting for send...")
-
-                        # Determine timeout: use night-mode value during off-hours
-                        sidecar_timeout = self._get_sidecar_timeout()
-
-                        # Step 3: 等待用户审核/发送
-                        result = await sidecar_client.wait_for_send(msg_id, timeout=sidecar_timeout)
-
-                        reason = result.get("reason", "unknown")
-                        if result.get("success") or reason == "sent":
-                            # 获取实际发送的消息（可能被用户编辑过）
-                            actual_message = result.get("message", message)
-                            self._logger.info(f"[{serial}] ✅ Reply sent (via Sidecar)")
-                            return True, actual_message
-                        elif reason == "cancelled":
-                            self._logger.info(f"[{serial}] ⏭️ User skipped, message not sent")
-                            return False, None
-                        elif reason == "expired":
-                            self._logger.info(f"[{serial}] ⏰ Message expired, skipping")
-                            return False, None
-                        else:
-                            self._logger.warning(f"[{serial}] Sidecar send failed: {reason}")
-                            # P0 修复: 超时后回退到直接发送前，记录 msg_id 用于后续清理
+                        self._logger.warning(
+                            f"[{serial}] Sidecar returned unknown reason '{reason}'; "
+                            f"NOT direct-sending (conservative)"
+                        )
+                        return False, None
 
             except Exception as e:
-                self._logger.warning(f"[{serial}] Error using Sidecar: {e}, falling back to direct send")
-                msg_id = None  # 确保 msg_id 被定义
+                if msg_id:
+                    # Already enqueued; queue state and device state are both
+                    # unknown after the exception. A direct send here could
+                    # land a second copy on the device.
+                    self._logger.warning(
+                        f"[{serial}] Error using Sidecar after enqueue: {e}; "
+                        f"NOT direct-sending to avoid duplicate"
+                    )
+                    return False, None
+                self._logger.warning(
+                    f"[{serial}] Error using Sidecar before enqueue: {e}, "
+                    f"falling back to direct send"
+                )
+                allow_direct_fallback = True
+
+        if not allow_direct_fallback:
+            # Defensive: code should never reach here without an explicit
+            # decision above. Refuse to send rather than risk a duplicate.
+            self._logger.error(
+                f"[{serial}] Unexpected fall-through to direct send block; refusing"
+            )
+            return False, None
 
         # 直接发送（无人工审核）- 使用 Sidecar 的 send API
         try:

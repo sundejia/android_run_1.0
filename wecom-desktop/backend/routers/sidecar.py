@@ -457,6 +457,11 @@ class SidecarSession:
         self._send_idle = asyncio.Event()
         self._send_idle.set()
         self._last_state: Optional[SidecarStateResponse] = None
+        # Layer 4 (last-resort dedup): if every upper layer ever fails to
+        # block a duplicate, refuse to drive the device twice with the same
+        # text within this window. ``hash -> last_success_timestamp``.
+        self._recent_sends: Dict[str, float] = {}
+        self._dedup_window_seconds: float = 30.0
 
     def _extract_basic_state(self, tree):
         """CPU-bound parsing of the UI tree, offloaded to a thread."""
@@ -535,13 +540,43 @@ class SidecarSession:
         return state
 
     async def send_message(self, text: str) -> bool:
-        """Send a message through the active conversation."""
+        """Send a message through the active conversation.
+
+        Includes a last-resort sliding-window dedup (Layer 4 of the
+        duplicate-send defense). If the exact same text was successfully
+        sent through this session within the dedup window, we report
+        success without driving the device a second time. Reaching this
+        branch means Layers 1-3 all failed to catch a duplicate, so we
+        log at ERROR so it surfaces in monitoring.
+        """
+        send_logger = logging.getLogger(__name__)
+        text_hash = hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()[:16]
+        now = time.time()
+
+        # Drop expired entries cheaply on each call.
+        self._recent_sends = {
+            h: ts for h, ts in self._recent_sends.items() if now - ts < self._dedup_window_seconds
+        }
+        prev_ts = self._recent_sends.get(text_hash)
+        if prev_ts is not None:
+            elapsed = now - prev_ts
+            send_logger.error(
+                f"[{self.serial}] DUPLICATE send blocked at session layer "
+                f"(identical text sent {elapsed:.1f}s ago, hash={text_hash}). "
+                f"This means upstream duplicate-send guards regressed; please investigate."
+            )
+            runtime_metrics.record_poll("backend.sidecar.session_dedup_blocked", 0)
+            # Idempotent: pretend success so callers do not retry.
+            return True
+
         self._send_idle.clear()
         try:
             async with self.lock:
                 await self.ensure_connected()
                 # send_message returns (success, actual_message_sent), we just need the success flag
                 success, _ = await self.service.send_message(text)
+                if success:
+                    self._recent_sends[text_hash] = time.time()
                 return success
         finally:
             self._send_idle.set()
@@ -1195,6 +1230,29 @@ def _get_waiting_event(serial: str) -> asyncio.Event:
     return _waiting_events[serial]
 
 
+def _get_grace_seconds() -> float:
+    """Read sidecar SENDING grace seconds from settings, defaulting to 30s.
+
+    When wait_for_send hits its hard timeout but the message is mid-flight
+    (status == SENDING), we keep polling for at most this many seconds before
+    giving up. Without this grace window a slow ADB chain can cross the 60s
+    timeout while the send is still in progress, the upstream caller then
+    interprets ``timeout`` as "nobody sent it" and triggers a duplicate
+    direct-send fallback. See plan: sidecar-duplicate-send-perfect-fix.
+    """
+    default = 30.0
+    try:
+        from services.settings import get_settings_service
+
+        svc = get_settings_service()
+        sidecar_settings = svc.get_sidecar_settings()
+        return float(getattr(sidecar_settings, "sidecar_grace_seconds", default))
+    except (ImportError, ValueError, TypeError, KeyError, AttributeError):
+        return default
+    except Exception:
+        return default
+
+
 @router.get("/{serial}/queue", response_model=QueueStateResponse)
 async def get_queue_state(serial: str) -> QueueStateResponse:
     """Get the current queue state for a device."""
@@ -1261,6 +1319,15 @@ async def send_queued_message(
     if not msg:
         raise HTTPException(status_code=404, detail="Message not found")
 
+    # Idempotency guards: if another caller (e.g. frontend auto-send and a
+    # double-click, or an unexpected retry) tries to send the same queued
+    # message, refuse to fire a second ADB send. This is Layer 3 of the
+    # duplicate-send defense: even if Layer 1+2 ever regress, the device
+    # is still protected here.
+    if msg.status == MessageStatus.SENDING:
+        raise HTTPException(status_code=409, detail="Message is already being sent")
+    if msg.status == MessageStatus.SENT:
+        return SendMessageResponse(success=True, detail="Message was already sent")
     if msg.status not in (MessageStatus.READY, MessageStatus.PENDING):
         raise HTTPException(status_code=400, detail=f"Message status is {msg.status}, cannot send")
 
@@ -1574,10 +1641,58 @@ async def wait_for_send(serial: str, message_id: str, timeout: float = 60.0):
         # Check timeout
         elapsed = time.time() - start_time
         if elapsed >= timeout:
-            # P0 修复: 超时后标记消息为 EXPIRED，防止后续误发
             queue = _get_queue(serial)
             msg = next((m for m in queue if m.id == message_id), None)
-            if msg and msg.status in (MessageStatus.PENDING, MessageStatus.READY):
+            if msg is None:
+                return {"success": False, "reason": "not_found"}
+
+            # If the send is mid-flight, do NOT report timeout yet. A slow
+            # ADB chain can cross the 60s boundary while send_message is
+            # still running. Returning "timeout" here previously caused the
+            # upstream realtime_reply path to fall back to a direct send,
+            # producing a duplicate message on the device. Instead, give the
+            # in-flight send a grace window to reach a terminal state.
+            if msg.status == MessageStatus.SENDING:
+                grace_seconds = _get_grace_seconds()
+                logger.warning(
+                    f"⏳ Message {message_id} hit hard timeout ({timeout:.0f}s) "
+                    f"but status is SENDING; entering grace ({grace_seconds:.0f}s) "
+                    f"to avoid duplicate-send race"
+                )
+                grace_start = time.time()
+                while time.time() - grace_start < grace_seconds:
+                    remaining_grace = grace_seconds - (time.time() - grace_start)
+                    runtime_metrics.record_poll(
+                        "backend.sidecar.wait_for_send.grace",
+                        min(remaining_grace, 2.0) * 1000,
+                    )
+                    try:
+                        await asyncio.wait_for(event.wait(), timeout=min(remaining_grace, 2.0))
+                    except asyncio.TimeoutError:
+                        pass
+                    if event.is_set():
+                        event.clear()
+
+                    msg = next((m for m in _get_queue(serial) if m.id == message_id), None)
+                    if msg is None:
+                        return {"success": False, "reason": "not_found"}
+                    if msg.status == MessageStatus.SENT:
+                        return {"success": True, "reason": "sent", "message": msg.message}
+                    if msg.status == MessageStatus.FAILED:
+                        return {"success": False, "reason": "failed", "error": msg.error}
+                    if msg.status == MessageStatus.CANCELLED:
+                        return {"success": False, "reason": "cancelled"}
+                    if msg.status == MessageStatus.EXPIRED:
+                        return {"success": False, "reason": "expired"}
+                    # Otherwise still SENDING: keep waiting
+
+                logger.warning(
+                    f"⏰ Message {message_id} still SENDING after grace; "
+                    f"returning still_sending (caller MUST NOT direct-send fallback)"
+                )
+                return {"success": False, "reason": "still_sending"}
+
+            if msg.status in (MessageStatus.PENDING, MessageStatus.READY):
                 msg.status = MessageStatus.EXPIRED
                 logger.info(f"⏰ Message {message_id} marked as EXPIRED due to timeout (was {msg.customerName})")
             return {"success": False, "reason": "timeout"}
