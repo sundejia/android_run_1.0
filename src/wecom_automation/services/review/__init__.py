@@ -2,10 +2,8 @@
 
 Bridges the image-rating-server's review verdict to the existing
 MediaEventBus / AutoGroupInviteAction pipeline.
-
-Public surface:
-- contracts: ReviewVerdict / WebhookEnvelope / approval rule (mirrors rating-server)
 """
+
 from wecom_automation.services.review.client import (
     ReviewClient,
     ReviewSubmissionError,
@@ -20,6 +18,11 @@ from wecom_automation.services.review.contracts import (
     is_approved,
     parse_envelope,
 )
+from wecom_automation.services.review.gate import ReviewGate, ReviewGateOutcome
+from wecom_automation.services.review.policy import (
+    PolicyEvaluator,
+    UnknownSkillVersionError,
+)
 from wecom_automation.services.review.storage import (
     AnalyticsEventRow,
     PendingReviewRow,
@@ -33,12 +36,16 @@ __all__ = [
     "DECISION_PASS",
     "IMAGE_REVIEW_COMPLETED_EVENT",
     "PendingReviewRow",
+    "PolicyEvaluator",
     "ReviewClient",
+    "ReviewGate",
+    "ReviewGateOutcome",
     "ReviewStorage",
     "ReviewSubmissionError",
     "ReviewSubmissionResult",
     "ReviewVerdict",
     "ReviewVerdictRow",
+    "UnknownSkillVersionError",
     "WebhookEnvelope",
     "is_approved",
     "parse_envelope",

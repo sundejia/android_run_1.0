@@ -13,6 +13,7 @@ from wecom_automation.core.config import Config, get_default_db_path, get_projec
 from wecom_automation.database.repository import ConversationRepository
 from wecom_automation.services.media_actions.factory import build_media_event_bus
 from wecom_automation.services.message.processor import create_message_processor
+from wecom_automation.services.review.runtime import build_review_components
 from wecom_automation.services.sync.checkpoint import CheckpointManager
 from wecom_automation.services.sync.customer_syncer import CustomerSyncer
 from wecom_automation.services.sync.orchestrator import SyncOrchestrator
@@ -99,6 +100,11 @@ def create_sync_orchestrator(
         wecom_service=wecom,
     )
 
+    review_storage, review_submitter, review_gate_on = build_review_components(
+        db_path=db_path,
+        media_settings=media_settings,
+    )
+
     # 消息处理器
     message_processor = create_message_processor(
         repository=repository,
@@ -109,6 +115,9 @@ def create_sync_orchestrator(
         logger=logger,
         media_event_bus=media_bus,
         media_action_settings=media_settings,
+        review_storage=review_storage,
+        review_submitter=review_submitter,
+        review_gate_enabled=review_gate_on,
     )
 
     # 头像管理器
@@ -188,6 +197,11 @@ def create_customer_syncer(
         wecom_service=wecom,
     )
 
+    review_storage, review_submitter, review_gate_on = build_review_components(
+        db_path=str(resolved_db),
+        media_settings=media_settings,
+    )
+
     # 消息处理器
     message_processor = create_message_processor(
         repository=repository,
@@ -198,6 +212,9 @@ def create_customer_syncer(
         logger=logger,
         media_event_bus=media_bus,
         media_action_settings=media_settings,
+        review_storage=review_storage,
+        review_submitter=review_submitter,
+        review_gate_enabled=review_gate_on,
     )
 
     return CustomerSyncer(

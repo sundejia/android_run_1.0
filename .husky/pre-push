@@ -26,16 +26,22 @@ fi
 
 # Run Python unit tests (fast tests only)
 echo "🧪 Running Python unit tests..."
-if command -v uv > /dev/null 2>&1; then
-  uv run --extra dev python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q']))"
-  PYTEST_EXIT=$?
-elif command -v python > /dev/null 2>&1; then
-  python -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q']))"
-  PYTEST_EXIT=$?
+# Prefer system Python on hosts where the project's binary deps (e.g. pilk)
+# can't be rebuilt cleanly inside a fresh uv venv (Windows without MSVC build
+# tools). uv is still the recommended path; we fall through to it only if a
+# system Python with pytest is unavailable.
+PYTEST_RUNNER=""
+if command -v python > /dev/null 2>&1 && python -c "import pytest" >/dev/null 2>&1; then
+  PYTEST_RUNNER="python"
+elif command -v uv > /dev/null 2>&1; then
+  PYTEST_RUNNER="uv run --extra dev python"
 else
-  echo "❌ Neither uv nor python found. Install uv (recommended) or Python with dev deps to run pre-push tests."
+  echo "❌ No usable Python+pytest found. Install pytest in your system Python or set up uv with the project's dev deps."
   exit 1
 fi
+
+$PYTEST_RUNNER -c "import pathlib, sys, pytest; root = pathlib.Path.cwd(); sys.path[:0] = [str(root / 'src'), str(root / 'wecom-desktop' / 'backend')]; raise SystemExit(pytest.main(['tests/unit', '-v', '--tb=short', '-q']))"
+PYTEST_EXIT=$?
 
 if [ $PYTEST_EXIT -ne 0 ]; then
   echo "❌ Python unit tests failed. Please fix failing tests before pushing."

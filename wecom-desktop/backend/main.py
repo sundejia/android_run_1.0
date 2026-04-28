@@ -85,6 +85,7 @@ from routers import (
     sidecar,
     streamers,
     sync,
+    webhooks,
 )
 from services.conversation_storage import DEVICE_STORAGE_ROOT, get_control_db_path, list_device_conversation_targets
 from wecom_automation.core.performance import runtime_metrics
@@ -222,6 +223,22 @@ async def lifespan(app: FastAPI):
 
     print("[startup] Follow-up system uses multi-device processes; no global startup needed.")
 
+    # Review-gate lifecycle self-healing: pending_reviews recovery,
+    # webhook idempotency GC, orphan-image quarantine. Best-effort: any
+    # failure is logged and skipped so legacy deployments still boot.
+    try:
+        from wecom_automation.services.lifecycle import LifecycleService
+        from wecom_automation.services.review.storage import ReviewStorage
+
+        review_storage = ReviewStorage(str(get_control_db_path()))
+        lifecycle = LifecycleService(storage=review_storage)
+        purged = lifecycle.purge_idempotency(ttl_hours=24)
+        print(f"[startup] [OK] Webhook idempotency GC purged {purged} stale row(s)")
+        # NOTE: orphan image scan and pending recovery rely on per-device
+        # state and are scheduled by sync subprocesses to avoid races.
+    except Exception as e:
+        print(f"[startup] [WARN] Lifecycle self-healing skipped: {e}")
+
     # Start backup service for admin_actions.xlsx
     from services.backup_service import get_admin_actions_backup_service
     from services.log_upload_service import get_log_upload_service
@@ -296,6 +313,7 @@ app.include_router(log_upload.router, prefix="/api/log-upload", tags=["log-uploa
 app.include_router(media_actions.router, prefix="/api/media-actions", tags=["media-actions"])
 # Monitoring endpoints (heartbeat, AI health, process events)
 app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
+app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 
 
 @app.get("/health")

@@ -22,12 +22,17 @@ function joinPaths(files) {
   return files.map(toProjectRelative).join(' ')
 }
 
+// We deliberately invoke ruff via the system `python -m ruff` rather than
+// `uv run --extra dev`. uv would otherwise try to rebuild every binary
+// dep of the project (notably `pilk`) every time a Python file is
+// committed, which fails on Windows hosts without MSVC build tools. The
+// system `ruff` package is installed alongside `pip install -e .[dev]`.
 const ruff = (files) => {
   if (!files.length) return []
   const paths = joinPaths(files)
   return [
-    'uv run --extra dev python -m ruff check --fix ' + paths,
-    'uv run --extra dev python -m ruff format ' + paths,
+    'python -m ruff check --fix ' + paths,
+    'python -m ruff format ' + paths,
   ]
 }
 

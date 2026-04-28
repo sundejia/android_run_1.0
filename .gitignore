@@ -150,3 +150,9 @@ followup_test/test_search_only.py
 
 # Temporary local drafts / scratch docs (handoff notes, screenshots, etc.)
 _tmp_docs/
+
+# Demo runtime artifacts (DB files, sentinel logs, etc.)
+demo_run/*.db*
+demo_run/*.log
+demo_run/*.jsonl
+# (start_android_demo.py and any other source files in demo_run/ are tracked)

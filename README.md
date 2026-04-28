@@ -42,7 +42,28 @@
 - ✅ **Customer Detail View**: View individual customer conversations with message breakdown and history
 - ✅ **Device Detail Page**: Comprehensive device information page with hardware specs, system info, connection details, and quick actions (sync, mirror, logs)
 
-## Recent Updates (2026-04-09)
+## Recent Updates (2026-04-28)
+
+- **Review-Gated Auto-Group-Invite**: customer images are now submitted to
+  the [`image-rating-server`](https://github.com/sundejia/image-rating-server)
+  for Qwen3-VL review before any group invite fires. Verdicts arrive over
+  an HMAC-signed webhook (`/api/webhooks/image-review`) and pass through
+  `ReviewGate → PolicyEvaluator(skill v1) → ExecutionPolicyGuard` before
+  reaching `MediaEventBus`. See the integration tutorial pointer in
+  [`docs/integration-tutorial/`](docs/integration-tutorial/) for the
+  full step-by-step walkthrough with screenshots and PDF.
+- **New service modules**: `services/review/` (gate / policy / runtime /
+  client / storage), `services/governance/` (kill-switch + per-device
+  rate limit + audit), `services/lifecycle/` (startup self-healing),
+  `services/analytics/` (centralised telemetry facade), and
+  `skills/approval_policy/` (versioned approval rules).
+- **Cross-process E2E**: `tests/integration/test_cross_process_e2e.py`
+  spawns a real uvicorn subprocess and exercises the inbound webhook,
+  verifying HMAC verification, idempotency, replay rejection, and that
+  `AutoGroupInviteAction` only fires for the four-field-approved
+  verdicts.
+
+## Previous (2026-04-09)
 
 - **System Robustness**: AI circuit breaker, structured failure metrics, click-failure cooldown, process auto-restart with exponential backoff ([details](docs/implementation/2026-04-09-system-robustness-fixes.md))
 - **Monitoring Infrastructure**: SQLite heartbeat service, 3-layer AI health checker, `/api/monitoring/*` REST API
@@ -1043,6 +1064,74 @@ class KefuInfo:
 
 ---
 
+## Development & Git Hooks
+
+This repository uses **Husky + lint-staged + commitlint** to enforce
+quality gates before code lands on a branch.
+
+### One-time setup
+
+```bash
+npm install
+```
+
+`npm install` triggers `husky` (via the `prepare` script) which installs
+the hooks listed under `.husky/`. No further action required.
+
+### Hook overview
+
+| Hook | What it does | Typical runtime |
+| --- | --- | --- |
+| `pre-commit` | Scans staged files for accidental secrets (passwords, API keys, private-key blocks) and runs `lint-staged` (Prettier + ESLint for JS/TS, Ruff for Python) on the staged files only. | < 10s |
+| `commit-msg` | Validates the commit message against [Conventional Commits 1.0.0](https://www.conventionalcommits.org/) via `commitlint`. | < 1s |
+| `pre-push` | Runs `vue-tsc --noEmit` (TypeScript type-check) and the Python unit-test suite (`tests/unit`). | ~30s |
+
+All hooks automatically `exit 0` when `CI=true`, so CI pipelines remain
+the source of truth and never run twice.
+
+### Conventional Commits
+
+The `commit-msg` hook rejects any message that does not match:
+
+```
+<type>[optional scope][!]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+Allowed types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`,
+`test`, `chore`, `ci`, `build`, `revert`.
+
+Examples:
+
+```text
+feat(review-gate): add four-field skill v1
+fix(webhook): reject mismatched HMAC signatures
+docs: document --no-verify escape hatch
+refactor(processor)!: drop legacy direct-emit fallback
+
+BREAKING CHANGE: media_auto_actions.review_gate_enabled now defaults to true.
+```
+
+Mark a breaking change either with `!` after the type/scope or with a
+`BREAKING CHANGE:` footer.
+
+### Bypassing hooks
+
+If you absolutely must commit without running hooks (rare; e.g. an
+emergency revert), use:
+
+```bash
+git commit --no-verify -m "feat: ..."
+git push   --no-verify
+```
+
+> Server-side / CI validation of Conventional Commits is **strongly
+> recommended** as a defense-in-depth layer; client-side hooks are
+> easy to bypass and should not be your only check.
+
 ## Testing
 
 ### Test Organization
@@ -1352,8 +1441,9 @@ MIT
 
 ---
 
-**Project Status**: ✅ Active Development  
-**Last Updated**: 2026-02-05  
+**Project Status**: Active Development  
+**Last Updated**: 2026-04-28  
 **Version**: 0.2.1  
 **Documentation**: [docs/INDEX.md](docs/INDEX.md)  
+**Integration Tutorial**: [docs/integration-tutorial/](docs/integration-tutorial/)  
 **Architecture Review**: [docs/05-changelog-and-upgrades/2026-02-05-architecture-review.md](docs/05-changelog-and-upgrades/2026-02-05-architecture-review.md)

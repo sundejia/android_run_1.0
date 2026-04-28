@@ -17,6 +17,19 @@
     "test:python": "pytest tests/ -v --tb=short",
     "test:unit": "pytest tests/unit -v --tb=short"
   },
+  "lint-staged": {
+    "wecom-desktop/src/**/*.{vue,ts,tsx,js,jsx}": [
+      "prettier --write",
+      "eslint --fix --max-warnings=0"
+    ],
+    "wecom-desktop/src/**/*.{json,css,scss,md}": [
+      "prettier --write"
+    ],
+    "{src,wecom-desktop/backend}/**/*.py": [
+      "ruff check --fix --force-exclude",
+      "ruff format --force-exclude"
+    ]
+  },
   "devDependencies": {
     "@commitlint/cli": "^19.8.1",
     "@commitlint/config-conventional": "^19.8.1",

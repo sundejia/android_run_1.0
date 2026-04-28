@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime
 from typing import Any
@@ -49,6 +50,9 @@ class MessageProcessor:
         handlers: list[IMessageHandler] | None = None,
         logger: logging.Logger | None = None,
         media_event_bus=None,
+        review_storage=None,
+        review_submitter=None,
+        review_gate_enabled: bool = False,
     ):
         """
         初始化消息处理器
@@ -64,6 +68,9 @@ class MessageProcessor:
         self._logger = logger or logging.getLogger(__name__)
         self._media_event_bus = media_event_bus
         self._media_action_settings: dict[str, Any] = {}
+        self._review_storage = review_storage
+        self._review_submitter = review_submitter
+        self._review_gate_enabled = bool(review_gate_enabled)
 
         # 时间戳解析器
         self._timestamp_parser = TimestampParser()
@@ -249,16 +256,135 @@ class MessageProcessor:
     async def _maybe_emit_media_event(
         self, message: Any, result: MessageProcessResult, context: MessageContext
     ) -> None:
-        """Emit a MediaEvent if the result is customer media and a bus is configured."""
+        """Route customer media through the review gate (M8) or legacy emit.
+
+        Image flow when review-gate is active:
+            1. Insert ``pending_reviews`` row keyed by message_id.
+            2. ``asyncio.create_task`` the configured ``review_submitter``
+               (fire-and-forget so the realtime pipeline never blocks).
+            3. Record a ``review.submitted`` analytics event.
+            The actual MediaEventBus emission happens later in ReviewGate
+            once the rating-server posts back a verdict.
+
+        Video flow:
+            * ``video_invite_policy == "skip"`` (default): record analytics
+              event and stop. No group invite is triggered for raw video.
+            * ``video_invite_policy == "always"``: emit on the bus directly
+              (legacy behaviour) so existing operators can opt in.
+
+        Falls back to the legacy direct emit when the review gate is
+        disabled or the required components were not injected.
+        """
         if self._media_event_bus is None:
             return
-
         if result.message_type not in ("image", "video"):
             return
-
         if self._is_from_kefu(message):
             return
 
+        gate_active = (
+            self._review_gate_enabled and self._review_storage is not None and self._review_submitter is not None
+        )
+
+        if result.message_type == "video":
+            await self._handle_video_event(result, context, gate_active)
+            return
+
+        if gate_active:
+            image_path = (result.extra or {}).get("path")
+            if image_path:
+                await self._submit_for_review(result, context, image_path)
+                return
+            self._logger.warning(
+                "Image without saved path; falling back to legacy direct emit (message_id=%s)",
+                result.message_id,
+            )
+
+        await self._emit_legacy(result, context)
+
+    async def _handle_video_event(
+        self, result: MessageProcessResult, context: MessageContext, gate_active: bool
+    ) -> None:
+        invite_settings = self._media_action_settings.get("auto_group_invite", {}) or {}
+        policy = invite_settings.get("video_invite_policy", "skip")
+        if not gate_active:
+            # No gate configured at all → preserve legacy behaviour.
+            await self._emit_legacy(result, context)
+            return
+        if policy == "always":
+            await self._emit_legacy(result, context)
+            return
+        # Default = skip: log analytics so operators can audit.
+        if self._review_storage is not None and result.message_id is not None:
+            try:
+                self._review_storage.record_event(
+                    "video.invite.skipped",
+                    trace_id=str(result.message_id),
+                    payload={
+                        "customer_id": context.customer_id,
+                        "customer_name": context.customer_name,
+                        "device_serial": context.device_serial,
+                        "policy": policy,
+                    },
+                )
+            except Exception as exc:
+                self._logger.warning("video skip analytics recording failed: %s", exc)
+
+    async def _submit_for_review(self, result: MessageProcessResult, context: MessageContext, image_path: str) -> None:
+        from wecom_automation.services.review.storage import PendingReviewRow
+
+        message_id = result.message_id
+        if message_id is None:
+            self._logger.warning("Image without message_id; cannot submit for review")
+            return
+        try:
+            self._review_storage.insert_pending_review(
+                PendingReviewRow(
+                    message_id=int(message_id),
+                    customer_id=context.customer_id,
+                    customer_name=context.customer_name,
+                    device_serial=context.device_serial,
+                    channel=context.channel,
+                    kefu_name=context.kefu_name,
+                    image_path=image_path,
+                )
+            )
+        except Exception as exc:
+            self._logger.error("insert_pending_review failed: %s", exc)
+            await self._emit_legacy(result, context)
+            return
+
+        try:
+            self._review_storage.record_event(
+                "review.submitted",
+                trace_id=str(message_id),
+                payload={
+                    "customer_id": context.customer_id,
+                    "customer_name": context.customer_name,
+                    "image_path": image_path,
+                },
+            )
+        except Exception as exc:
+            self._logger.warning("review.submitted analytics recording failed: %s", exc)
+
+        async def _safe_submit() -> None:
+            try:
+                await self._review_submitter(int(message_id), image_path)
+            except Exception as exc:
+                self._logger.error("review submission failed for message_id=%s: %s", message_id, exc)
+                try:
+                    self._review_storage.mark_pending_status(int(message_id), "submit_failed", last_error=str(exc))
+                except Exception:
+                    pass
+
+        try:
+            asyncio.get_running_loop().create_task(_safe_submit())
+        except RuntimeError:
+            # No running loop (sync context — should not happen in production
+            # but keeps unit tests robust): run inline.
+            await _safe_submit()
+
+    async def _emit_legacy(self, result: MessageProcessResult, context: MessageContext) -> None:
         try:
             from wecom_automation.services.media_actions.interfaces import MediaEvent
 
@@ -321,6 +447,9 @@ def create_message_processor(
     logger: logging.Logger | None = None,
     media_event_bus=None,
     media_action_settings: dict[str, Any] | None = None,
+    review_storage=None,
+    review_submitter=None,
+    review_gate_enabled: bool = False,
 ) -> MessageProcessor:
     """
     创建消息处理器并注册所有默认处理器
@@ -346,7 +475,14 @@ def create_message_processor(
     from wecom_automation.services.message.handlers.video import VideoMessageHandler
     from wecom_automation.services.message.handlers.voice import VoiceMessageHandler
 
-    processor = MessageProcessor(repository, logger=logger, media_event_bus=media_event_bus)
+    processor = MessageProcessor(
+        repository,
+        logger=logger,
+        media_event_bus=media_event_bus,
+        review_storage=review_storage,
+        review_submitter=review_submitter,
+        review_gate_enabled=review_gate_enabled,
+    )
     if media_action_settings is not None:
         processor.set_media_action_settings(media_action_settings)
 
