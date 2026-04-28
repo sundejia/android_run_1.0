@@ -20,7 +20,7 @@ from wecom_automation.core.config import (
 from wecom_automation.core.performance import InstrumentedConnection
 
 # Database version for migrations
-DATABASE_VERSION = 13
+DATABASE_VERSION = 14
 
 # Re-export for backward compatibility
 # Note: DEFAULT_DB_PATH is now a Path object, not string
@@ -227,6 +227,64 @@ CREATE INDEX IF NOT EXISTS idx_images_message_id ON images(message_id);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_images_message_id_unique ON images(message_id);
 CREATE INDEX IF NOT EXISTS idx_videos_message_id ON videos(message_id);
 CREATE INDEX IF NOT EXISTS idx_voices_message_id ON voices(message_id);
+
+-- Pending image-review submissions: tracks every customer image we sent to
+-- the image-rating-server and are waiting for a verdict on. Survives restarts
+-- so we can recover after a crash.
+CREATE TABLE IF NOT EXISTS pending_reviews (
+    message_id INTEGER PRIMARY KEY,
+    customer_id INTEGER,
+    customer_name TEXT,
+    device_serial TEXT,
+    channel TEXT,
+    kefu_name TEXT,
+    image_path TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pending_reviews_status ON pending_reviews(status);
+CREATE INDEX IF NOT EXISTS idx_pending_reviews_created_at ON pending_reviews(created_at);
+
+-- Verdicts received from rating-server. message_id is the join key with
+-- pending_reviews. is_*/face_visible/decision are the 4 fields the gate uses.
+CREATE TABLE IF NOT EXISTS review_verdicts (
+    message_id INTEGER PRIMARY KEY,
+    image_id TEXT,
+    decision TEXT NOT NULL,
+    is_portrait INTEGER NOT NULL,
+    is_real_person INTEGER NOT NULL,
+    face_visible INTEGER NOT NULL,
+    final_score REAL,
+    raw_payload_json TEXT,
+    prompt_version_id TEXT,
+    skill_version TEXT,
+    received_at TEXT NOT NULL
+);
+
+-- Idempotency / replay-protection for inbound webhooks.
+CREATE TABLE IF NOT EXISTS webhook_idempotency (
+    idempotency_key TEXT PRIMARY KEY,
+    received_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_idempotency_received_at
+  ON webhook_idempotency(received_at);
+
+-- Centralized analytics events on the android side. Mirrors the rating-server
+-- table; trace_id = message_id joins events across services.
+CREATE TABLE IF NOT EXISTS analytics_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    trace_id TEXT,
+    payload_json TEXT NOT NULL DEFAULT '{{}}'
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_type_ts
+  ON analytics_events(event_type, ts);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_trace_id
+  ON analytics_events(trace_id);
 {BLACKLIST_INDEXES_SQL}
 """
 
@@ -997,6 +1055,9 @@ def run_migrations(db_path: str | None = None) -> None:
     if current_version < 13:
         migrate_v12_to_v13(db_path)
 
+    if current_version < 14:
+        migrate_v13_to_v14(db_path)
+
     repairs = repair_blacklist_schema(db_path)
     if repairs:
         print(f"[schema] Repaired blacklist schema drift: {', '.join(repairs)}")
@@ -1504,6 +1565,81 @@ CREATE TABLE IF NOT EXISTS voices (
 );
 CREATE INDEX IF NOT EXISTS idx_voices_message_id ON voices(message_id);
 """
+MIGRATION_V13_TO_V14 = """
+CREATE TABLE IF NOT EXISTS pending_reviews (
+    message_id INTEGER PRIMARY KEY,
+    customer_id INTEGER,
+    customer_name TEXT,
+    device_serial TEXT,
+    channel TEXT,
+    kefu_name TEXT,
+    image_path TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    expires_at TEXT,
+    last_error TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_pending_reviews_status ON pending_reviews(status);
+CREATE INDEX IF NOT EXISTS idx_pending_reviews_created_at ON pending_reviews(created_at);
+
+CREATE TABLE IF NOT EXISTS review_verdicts (
+    message_id INTEGER PRIMARY KEY,
+    image_id TEXT,
+    decision TEXT NOT NULL,
+    is_portrait INTEGER NOT NULL,
+    is_real_person INTEGER NOT NULL,
+    face_visible INTEGER NOT NULL,
+    final_score REAL,
+    raw_payload_json TEXT,
+    prompt_version_id TEXT,
+    skill_version TEXT,
+    received_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS webhook_idempotency (
+    idempotency_key TEXT PRIMARY KEY,
+    received_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_webhook_idempotency_received_at
+  ON webhook_idempotency(received_at);
+
+CREATE TABLE IF NOT EXISTS analytics_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    ts TEXT NOT NULL,
+    event_type TEXT NOT NULL,
+    trace_id TEXT,
+    payload_json TEXT NOT NULL DEFAULT '{}'
+);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_type_ts
+  ON analytics_events(event_type, ts);
+CREATE INDEX IF NOT EXISTS idx_analytics_events_trace_id
+  ON analytics_events(trace_id);
+"""
+
+
+def migrate_v13_to_v14(db_path: str | None = None) -> None:
+    """
+    Migrate database from v13 to v14.
+
+    Adds the review-gating tables used by the image-rating-server integration:
+    pending_reviews, review_verdicts, webhook_idempotency, analytics_events.
+    """
+    path = get_db_path(db_path)
+    conn = sqlite3.connect(str(path), factory=InstrumentedConnection)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+    try:
+        cursor.executescript(MIGRATION_V13_TO_V14)
+        cursor.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (14,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+
 def migrate_v12_to_v13(db_path: str | None = None) -> None:
     """
     Migrate database from v12 to v13.
