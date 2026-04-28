@@ -107,6 +107,36 @@ async def check_ai_health(ai_server_url: str, timeout: float = 10.0) -> dict[str
     return result
 
 
+# ----------------------------------------------------------------------------
+# Severity model for probe results.
+#
+# BUG-2026-04-27-circuit-breaker-skip-reply showed that calling
+# `circuit_breaker.force_open()` on EVERY non-healthy probe creates a
+# "health-check lockup": each periodic probe re-forces the breaker open
+# for `recovery_timeout`, repeatedly skipping customer replies even when
+# real /chat traffic still completes successfully.
+#
+# We therefore classify probe statuses by severity:
+#   - "fatal":   trip the breaker immediately.
+#   - "severe":  trip the breaker only after N consecutive results.
+#   - "warn":    log only; do NOT trip the breaker. The natural failure
+#                threshold of AICircuitBreaker (record_failure x N) will
+#                still catch real outages because actual /chat calls fail.
+#   - "ok":      reset the consecutive-unhealthy counter.
+# ----------------------------------------------------------------------------
+
+_STATUS_SEVERITY: dict[str, str] = {
+    "healthy": "ok",
+    "unreachable": "fatal",
+    "service_down": "severe",
+    "inference_error": "severe",
+    # Inference timeout has been observed to be a false positive: the probe's
+    # 10s budget triggers but real customer requests still complete (see the
+    # bug report, section 5.2). Treat as warn-only.
+    "inference_timeout": "warn",
+}
+
+
 class PeriodicAIHealthChecker:
     """Runs `check_ai_health` at a fixed interval in the background."""
 
@@ -116,6 +146,7 @@ class PeriodicAIHealthChecker:
         interval_seconds: float = 300.0,
         circuit_breaker: Any | None = None,
         logger: Any | None = None,
+        force_open_threshold: int = 2,
     ):
         self._url = ai_server_url
         self._interval = interval_seconds
@@ -123,6 +154,16 @@ class PeriodicAIHealthChecker:
         self._logger = logger
         self._task: asyncio.Task | None = None
         self._last_result: dict[str, Any] | None = None
+        # Consecutive-failure gate: how many consecutive "severe" probes are
+        # required before we escalate to force_open(). "fatal" probes still
+        # fire immediately. "warn" probes never fire.
+        self._force_open_threshold = max(1, int(force_open_threshold))
+        self._consecutive_unhealthy = 0
+        # Once we've forced the breaker open for the current outage, do not
+        # re-fire force_open() until we observe a recovery ("ok" probe).
+        # This keeps logs clean and prevents the periodic health checker
+        # from monopolising the breaker's lifecycle.
+        self._already_forced_open = False
 
     @property
     def last_result(self) -> dict[str, Any] | None:
@@ -135,6 +176,79 @@ class PeriodicAIHealthChecker:
     def stop(self) -> None:
         if self._task and not self._task.done():
             self._task.cancel()
+
+    # ------------------------------------------------------------------
+    # Severity-aware breaker control
+    # ------------------------------------------------------------------
+
+    def _handle_probe_result(self, result: dict[str, Any]) -> None:
+        """Decide whether to escalate this probe to the circuit breaker.
+
+        See module-level _STATUS_SEVERITY map for the policy. Designed to be
+        unit-testable independently of the async loop / network layer.
+        """
+        status = result.get("status", "unknown")
+        severity = _STATUS_SEVERITY.get(status, "severe")  # unknown -> severe
+
+        if severity == "ok":
+            # Recovery: reset gate so a future outage is again allowed to
+            # escalate after threshold consecutive failures.
+            if self._consecutive_unhealthy or self._already_forced_open:
+                if self._logger:
+                    self._logger.info("[AIHealthChecker] AI recovered; resetting unhealthy counter")
+            self._consecutive_unhealthy = 0
+            self._already_forced_open = False
+            return
+
+        if severity == "warn":
+            # Log only. Do NOT touch the breaker. This is intentional: the
+            # field bug showed that inference_timeout is often a false
+            # positive (real /chat calls still succeed during the same
+            # window), and force_open()ing on it locked the system out of
+            # replying for hours.
+            if self._logger:
+                self._logger.warning(
+                    f"[AIHealthChecker] AI degraded ({status}); not tripping circuit breaker (warn-only severity)"
+                )
+            return
+
+        # severity in {"severe", "fatal"} — count this probe.
+        self._consecutive_unhealthy += 1
+
+        if not self._circuit_breaker:
+            return
+
+        if self._already_forced_open:
+            # Outage continues; breaker has already been forced open.
+            # Don't keep re-firing force_open — the breaker's own timer
+            # handles the half_open probing. The gate is reset only when
+            # a healthy probe is observed.
+            return
+
+        should_force_open = severity == "fatal" or (self._consecutive_unhealthy >= self._force_open_threshold)
+        if not should_force_open:
+            if self._logger:
+                self._logger.warning(
+                    f"[AIHealthChecker] AI unhealthy ({status}), "
+                    f"{self._consecutive_unhealthy}/{self._force_open_threshold} consecutive — "
+                    "deferring force_open until threshold is met"
+                )
+            return
+
+        try:
+            self._circuit_breaker.force_open()
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"[AIHealthChecker] force_open() raised: {e}")
+            return
+
+        self._already_forced_open = True
+        if self._logger:
+            self._logger.warning(
+                f"[AIHealthChecker] AI unhealthy ({status}) for "
+                f"{self._consecutive_unhealthy} consecutive probes, "
+                "circuit breaker forced open"
+            )
 
     async def _loop(self) -> None:
         while True:
@@ -160,13 +274,8 @@ class PeriodicAIHealthChecker:
                     if self._logger:
                         self._logger.warning(f"[AIHealthChecker] DB write failed: {db_err}")
 
-                # If AI is down and we have a circuit breaker, force it open
-                if self._circuit_breaker and result["status"] not in ("healthy",):
-                    self._circuit_breaker.force_open()
-                    if self._logger:
-                        self._logger.warning(
-                            f"[AIHealthChecker] AI unhealthy ({result['status']}), circuit breaker forced open"
-                        )
+                # Severity-based force_open decision (BUG-2026-04-27 fix).
+                self._handle_probe_result(result)
 
                 if self._logger:
                     self._logger.info(

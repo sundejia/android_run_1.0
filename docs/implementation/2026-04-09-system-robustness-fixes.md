@@ -110,7 +110,26 @@ Three-layer probe every 5 minutes:
 2. **HTTP** — does `/health` respond?
 3. **Inference** — does `POST /chat` with a minimal prompt return 200?
 
-Results stored in `ai_health_checks` table. If unhealthy, the circuit breaker is force-opened.
+Results stored in `ai_health_checks` table. The probe outcome feeds the
+circuit breaker through a **severity-aware policy** (introduced
+2026-04-28 to fix BUG-2026-04-27, see
+[circuit-breaker-skip-reply](../bugs/2026-04-27-circuit-breaker-skip-reply.md)):
+
+| Probe status                       | Severity | Effect on breaker                                                      |
+| ---------------------------------- | -------- | ---------------------------------------------------------------------- |
+| `unreachable`                      | fatal    | `force_open()` immediately                                             |
+| `service_down` / `inference_error` | severe   | `force_open()` after **N consecutive** results (default `N=2`)         |
+| `inference_timeout`                | warn     | log only; **never** `force_open()` (false positives observed in field) |
+| `healthy`                          | ok       | reset consecutive-unhealthy counter                                    |
+
+Once the breaker has been forced open for an outage, the health
+checker stops re-firing `force_open()` until a `healthy` probe is
+observed. This prevents the periodic checker from monopolising the
+breaker's lifecycle and starving the natural 120 s recovery cycle.
+
+> The original ship of this module force-opened the breaker on **every**
+> non-`healthy` probe. That created the "health-check lockup" repaired
+> by BUG-2026-04-27.
 
 #### 9. Sidecar Night-Mode Timeout
 
@@ -178,3 +197,19 @@ Run `pytest tests/unit/ -v --tb=short` from the `android_run_test-main` package 
 ## Update (2026-04-15) — Daytime Sidecar default 300 s → 60 s
 
 The seeded default and code fallbacks for **`sidecar_timeout`** were lowered from **300** to **60** seconds so unattended queues fail faster. Night mode defaults are unchanged. Full file list and rationale: [Sidecar review timeout defaults](../sidecar/sidecar-review-timeout-defaults.md).
+
+---
+
+## Update (2026-04-28) — Circuit-breaker health-check lockup fix
+
+`PeriodicAIHealthChecker` no longer calls `circuit_breaker.force_open()`
+on every non-`healthy` probe. See
+[BUG-2026-04-27: AI Circuit Breaker Skip Reply](../bugs/2026-04-27-circuit-breaker-skip-reply.md)
+for the full root-cause analysis, the severity table, and the TDD trace.
+
+**New tests** (regression coverage for both layers):
+
+- `tests/unit/test_circuit_breaker.py` — natural state machine + the
+  `force_open` cooldown-reset regression.
+- `tests/unit/test_ai_health_checker.py` — severity classification, the
+  N=2 consecutive-failure gate, recovery behaviour, and async loop wiring.
