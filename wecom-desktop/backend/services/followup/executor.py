@@ -501,10 +501,13 @@ class FollowupExecutor:
         需求场景：
         - 补刀目标名可能带后缀：`B2601300118-(保底正常)` 或 `B2601300118-[正常]`
         - 但搜索框需要输入缩减后的主键：`B2601300118`
+        - 名称后跟 `-数字(备注)` 形式：`总是睡不饱呢-1774683390(重复[保底正常])`
 
         规则：
-        - 若命中 `-(`, `-（`, `-[`, `-【` 形式，取其前半段
-        - 否则返回原字符串（strip 后）
+        1. 若命中 `-(`, `-（`, `-[`, `-【` 形式，取其前半段
+        2. 若命中 `name-数字(备注)` 或 `name-数字[备注]` 形式，取 `-数字` 之前的部分
+        3. Bxxxxxx-(...) 正则兜底
+        4. 否则返回原字符串（strip 后）
         """
         raw = (name or "").strip()
         if not raw:
@@ -515,6 +518,13 @@ class FollowupExecutor:
             if sep in raw:
                 base = raw.split(sep, 1)[0].strip()
                 return base or raw
+
+        # name-数字(备注) 或 name-数字[备注] 形式
+        # 例如：总是睡不饱呢-1774683390(重复[保底正常])
+        m = re.match(r"^(.+?)-\d+\s*[\(（\[【].*$", raw)
+        if m:
+            base = m.group(1).strip()
+            return base or raw
 
         # 再兜底：Bxxxxxx-(...) 或 Bxxxxxx-[...] 形式（更严格的正则）
         m = re.match(r"^(B\d+)-\s*[\(（\[【].*$", raw)
