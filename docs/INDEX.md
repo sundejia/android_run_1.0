@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-04-30 (Auto Contact Share — 自动推送主管名片功能；见 `features/auto-contact-share.md`)
+> Last Updated: 2026-05-01 (Remote chatbot SQLite recovery notes；见 `analysis/2026-05-01-remote-wecom-chat-sqlite-recovery.md`)
 
 ---
 
@@ -132,17 +132,15 @@ See [Current Architecture](03-impl-and-arch/) for high-level design.
 #### System Architecture
 
 - **[系统架构分析报告](03-impl-and-arch/系统架构分析报告.md)** ⭐ NEW - Comprehensive architecture analysis (8.5/10 score)
-- [Current Log Structure Analysis](03-impl-and-arch/key-modules/current-log-structure-analysis.md) - Current runtime logs, metrics JSONL, WebSocket streaming, and upload pipeline
-- [Multi-Device Concurrency Audit](analysis/multi-device-concurrency-audit.md) - Current partial-isolation assessment for three-device sync
-- [Device Isolation Roadmap](architecture/device-isolation-roadmap.md) - Path from process isolation to stronger device fault-domain isolation
-
-- **[系统架构分析报告](03-impl-and-arch/系统架构分析报告.md)** ⭐ NEW - Comprehensive architecture analysis (8.5/10 score)
   - Directory structure assessment
   - Code organization review
   - Naming conventions evaluation
   - Design patterns analysis
   - Technical debt catalog (10 items)
   - Improvement roadmap
+- [Current Log Structure Analysis](03-impl-and-arch/key-modules/current-log-structure-analysis.md) - Current runtime logs, metrics JSONL, WebSocket streaming, and upload pipeline
+- [Multi-Device Concurrency Audit](analysis/multi-device-concurrency-audit.md) - Current partial-isolation assessment for three-device sync
+- [Device Isolation Roadmap](architecture/device-isolation-roadmap.md) - Path from process isolation to stronger device fault-domain isolation
 
 #### Avatar System
 
@@ -154,6 +152,7 @@ See [Current Architecture](03-impl-and-arch/) for high-level design.
 #### Database & Storage
 
 - [Database Logic](03-impl-and-arch/key-modules/database_logic.md)
+- [Remote WeCom Chatbot SQLite Recovery](analysis/2026-05-01-remote-wecom-chat-sqlite-recovery.md) - Ops incident: malformed SQLite on remote chatbot host; backup/restore and provider-key reconciliation (external app path)
 - [Three-Device Stress Test Guide](guides/three-device-stress-test.md) - Repeatable validation checklist for DB/ADB/AI/host contention
 - [Followup Database Cleanup](03-impl-and-arch/key-modules/followup-database-cleanup.md)
 - [Blacklist Migration to Database](03-impl-and-arch/experiments/blacklist-database-migration.md)

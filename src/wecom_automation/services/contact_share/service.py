@@ -24,14 +24,12 @@ import logging
 import sqlite3
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
-from typing import Any
 
 from wecom_automation.database.schema import get_db_path
+from wecom_automation.services.contact_share import selectors as S
 from wecom_automation.services.contact_share.models import (
     ContactShareRequest,
-    ContactShareResult,
 )
-from wecom_automation.services.contact_share import selectors as S
 
 logger = logging.getLogger(__name__)
 
@@ -76,7 +74,10 @@ class IContactShareService(ABC):
 
     @abstractmethod
     async def contact_already_shared(
-        self, device_serial: str, customer_name: str, contact_name: str,
+        self,
+        device_serial: str,
+        customer_name: str,
+        contact_name: str,
     ) -> bool:
         """Check if we already shared this contact to this customer."""
         ...
@@ -95,16 +96,22 @@ class ContactShareService(IContactShareService):
     1. Navigate to customer chat
     2. Tap attachment button (i9u, rightmost bottom)
     3. Find "Contact Card" — try current page, swipe left if not found
-    4. Select target contact from picker (search or scroll)
+    4. Select target contact from picker via ContactFinderStrategy
     5. Tap "Send" in confirmation dialog
     """
 
     _MAX_RETRIES = 3
     _STEP_DELAY = 1.0
 
-    def __init__(self, wecom_service=None, db_path: str | None = None) -> None:
+    def __init__(
+        self,
+        wecom_service=None,
+        db_path: str | None = None,
+        contact_finder=None,
+    ) -> None:
         self._wecom = wecom_service
         self._db_path = db_path
+        self._contact_finder = contact_finder
         self._ensure_table()
 
     @contextmanager
@@ -149,7 +156,10 @@ class ContactShareService(IContactShareService):
             return False
 
     async def contact_already_shared(
-        self, device_serial: str, customer_name: str, contact_name: str,
+        self,
+        device_serial: str,
+        customer_name: str,
+        contact_name: str,
     ) -> bool:
         try:
             with self._connection() as conn:
@@ -253,6 +263,7 @@ class ContactShareService(IContactShareService):
             return False
 
         import re
+
         for elem in elements:
             if "ahe" in (elem.get("resourceId") or ""):
                 bounds = elem.get("bounds", "")
@@ -276,38 +287,18 @@ class ContactShareService(IContactShareService):
         )
 
     async def _select_contact_from_picker(self, contact_name: str) -> bool:
-        """Select a contact from the picker list by matching contact_name."""
-        # The contact picker shows contacts as plain TextViews with the contact name.
-        # We match by checking if the element text starts with the contact_name.
-        for attempt in range(self._MAX_RETRIES):
-            try:
-                ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
-            except Exception:
-                await asyncio.sleep(0.5)
-                continue
+        """Select a contact from the picker using the configured ContactFinderStrategy.
 
-            if not elements:
-                await asyncio.sleep(0.5)
-                continue
+        Defaults to SearchContactFinder (search button → input → result matching).
+        Falls back to ScrollContactFinder when explicitly configured.
+        """
+        if self._contact_finder is not None:
+            return await self._contact_finder.find_and_select(contact_name, self._wecom.adb)
 
-            for elem in elements:
-                text = (elem.get("text") or "").strip()
-                # Match: element text starts with the contact name
-                # e.g. "陈新宇2-滨 (小贝老师...)" starts with "陈新宇2-滨"
-                if text and text.startswith(contact_name):
-                    idx = elem.get("index")
-                    if idx is not None:
-                        try:
-                            await self._wecom.adb.tap(int(idx))
-                            logger.debug("Selected contact '%s' (attempt %d)", contact_name, attempt + 1)
-                            return True
-                        except Exception:
-                            continue
+        from wecom_automation.services.ui_search.strategy import SearchContactFinder
 
-            await asyncio.sleep(0.5)
-
-        logger.warning("Could not find contact '%s' in picker", contact_name)
-        return False
+        finder = SearchContactFinder()
+        return await finder.find_and_select(contact_name, self._wecom.adb)
 
     async def _confirm_send(self) -> bool:
         """Tap the 'Send' button in the confirmation dialog."""
