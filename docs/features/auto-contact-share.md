@@ -15,16 +15,24 @@
 
 ## UI 自动化流程（真机验证）
 
-在 720×1612 分辨率设备上验证通过的 6 步流程：
+在 720×1612 分辨率设备上验证通过的 5 步流程：
 
 ```
 1. navigate_to_chat(customer)           → WeComService
 2. tap i9u (附件按钮, 右下角)           → 打开附件面板
-3. swipe LEFT on GridView (ahe)         → 翻到第二页
-4. tap "Contact Card" (aha)             → 打开联系人选择器
-5. tap 联系人 (text 前缀匹配)            → 弹出确认对话框
-6. tap "Send" (dak)                     → 发送名片
+3. find "Contact Card" (自适应)          → 先查当前页，未找到则左滑 GridView 再查
+4. select contact (text 前缀匹配)        → 在联系人选择器中匹配
+5. tap "Send" (dak)                     → 确认发送
 ```
+
+### 自适应页查找
+
+WeCom 会将最近使用过的附件选项提升到第一页。`_open_contact_card_menu()` 实现了自适应逻辑：
+
+1. 先尝试在当前页查找 "Contact Card" 并点击（快速路径）
+2. 若未找到，左滑 GridView (`ahe`) 到下一页再重试（慢速路径）
+
+这确保了首次使用和后续使用两种场景都能正常工作。
 
 ### 真机 Resource ID 映射
 

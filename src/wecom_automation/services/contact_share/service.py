@@ -94,10 +94,9 @@ class ContactShareService(IContactShareService):
     UI flow (validated on real device):
     1. Navigate to customer chat
     2. Tap attachment button (i9u, rightmost bottom)
-    3. Swipe left on GridView to reveal page 2
-    4. Tap "Contact Card" menu item
-    5. Select target contact from picker
-    6. Tap "Send" in confirmation dialog
+    3. Find "Contact Card" — try current page, swipe left if not found
+    4. Select target contact from picker (search or scroll)
+    5. Tap "Send" in confirmation dialog
     """
 
     _MAX_RETRIES = 3
@@ -198,28 +197,21 @@ class ContactShareService(IContactShareService):
 
         await asyncio.sleep(self._STEP_DELAY)
 
-        # Step 3: Swipe left on GridView to reveal page 2
-        if not await self._swipe_attach_page2():
-            logger.error("Could not swipe to attachment page 2")
-            return False
-
-        await asyncio.sleep(self._STEP_DELAY)
-
-        # Step 4: Tap "Contact Card" menu item
-        if not await self._tap_contact_card_menu():
+        # Step 3: Open Contact Card — adaptive: try current page first, swipe if needed
+        if not await self._open_contact_card_menu():
             logger.error("Could not find 'Contact Card' menu item")
             return False
 
         await asyncio.sleep(self._STEP_DELAY)
 
-        # Step 5: Select the target contact from picker
+        # Step 4: Select the target contact from picker
         if not await self._select_contact_from_picker(request.contact_name):
             logger.error("Could not select contact '%s' in picker", request.contact_name)
             return False
 
         await asyncio.sleep(self._STEP_DELAY)
 
-        # Step 6: Tap "Send" in confirmation dialog
+        # Step 5: Tap "Send" in confirmation dialog
         if not await self._confirm_send():
             logger.error("Could not confirm contact card send")
             return False
@@ -234,38 +226,49 @@ class ContactShareService(IContactShareService):
             step_name="attach button (i9u)",
         )
 
-    async def _swipe_attach_page2(self) -> bool:
-        """Swipe left on the GridView (ahe) to reveal page 2 of attachment menu."""
+    async def _open_contact_card_menu(self) -> bool:
+        """Find and tap 'Contact Card' — tries current page first, swipes if not found.
+
+        WeCom promotes recently-used attachment items to page 1, so after the first
+        use 'Contact Card' may appear without swiping.  This method handles both cases.
+        """
+        # Fast path: try to find Contact Card on the current page
+        if await self._tap_contact_card_menu():
+            return True
+
+        # Slow path: swipe left on GridView, then try again
+        logger.info("Contact Card not on current page; swiping to page 2...")
+        if not await self._swipe_attach_grid():
+            return False
+
+        await asyncio.sleep(1.0)
+        return await self._tap_contact_card_menu()
+
+    async def _swipe_attach_grid(self) -> bool:
+        """Swipe left on the GridView (ahe) to reveal the next page."""
         try:
             ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
         except Exception as exc:
             logger.warning("Failed to get UI state for swipe: %s", exc)
             return False
 
-        # Find the GridView by resource ID
+        import re
         for elem in elements:
-            res_id = elem.get("resourceId", "")
-            if "ahe" in res_id:
+            if "ahe" in (elem.get("resourceId") or ""):
                 bounds = elem.get("bounds", "")
-                if bounds:
-                    # Parse bounds: [x1,y1][x2,y2]
-                    import re
-                    nums = re.findall(r"\d+", bounds)
-                    if len(nums) >= 4:
-                        x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
-                        center_y = (y1 + y2) // 2
-                        # Swipe from right to left within the grid
-                        await self._wecom.adb.swipe(x2 - 30, center_y, x1 + 30, center_y)
-                        await asyncio.sleep(1.0)
-                        logger.debug("Swiped attach grid from (%d,%d) to (%d,%d)",
-                                     x2 - 30, center_y, x1 + 30, center_y)
-                        return True
+                nums = re.findall(r"\d+", bounds)
+                if len(nums) >= 4:
+                    x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
+                    center_y = (y1 + y2) // 2
+                    await self._wecom.adb.swipe(x2 - 30, center_y, x1 + 30, center_y)
+                    logger.debug("Swiped attach grid to reveal next page")
+                    return True
 
-        logger.warning("Could not find attachment GridView for swipe")
+        logger.warning("Attachment GridView (ahe) not found for swipe")
         return False
 
     async def _tap_contact_card_menu(self) -> bool:
-        """Tap 'Contact Card' item on page 2 of the attachment menu."""
+        """Tap 'Contact Card' item in the attachment menu."""
         return await self._find_and_tap(
             text_patterns=S.CARD_TEXT_PATTERNS,
             resource_patterns=S.CARD_RESOURCE_PATTERNS,
