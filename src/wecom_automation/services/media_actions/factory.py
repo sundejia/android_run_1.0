@@ -77,4 +77,17 @@ def build_media_event_bus(
         except Exception as exc:
             logger.warning("Could not register AutoGroupInviteAction: %s", exc)
 
+    if wecom_service is not None:
+        try:
+            from wecom_automation.services.contact_share.service import ContactShareService
+            from wecom_automation.services.media_actions.actions.auto_contact_share import (
+                AutoContactShareAction,
+            )
+
+            bus.register(AutoContactShareAction(
+                ContactShareService(wecom_service=wecom_service, db_path=effects_db_path)
+            ))
+        except Exception as exc:
+            logger.warning("Could not register AutoContactShareAction: %s", exc)
+
     return bus, settings

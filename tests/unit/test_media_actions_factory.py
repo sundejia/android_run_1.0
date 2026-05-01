@@ -83,7 +83,7 @@ class TestBuildMediaEventBusDisabled:
 
 
 class TestBuildMediaEventBusEnabled:
-    def test_returns_bus_with_two_actions_when_wecom_provided(self, tmp_path):
+    def test_returns_bus_with_three_actions_when_wecom_provided(self, tmp_path):
         db_path = str(tmp_path / "test.db")
         _create_settings_db(db_path, enabled=True)
         wecom = MagicMock()
@@ -92,10 +92,11 @@ class TestBuildMediaEventBusEnabled:
 
         assert bus is not None
         assert settings["enabled"] is True
-        assert len(bus._actions) == 2
+        assert len(bus._actions) == 3
         action_names = [a.action_name for a in bus._actions]
         assert "auto_blacklist" in action_names
         assert "auto_group_invite" in action_names
+        assert "auto_contact_share" in action_names
 
     def test_registers_only_blacklist_when_no_wecom(self, tmp_path):
         db_path = str(tmp_path / "test.db")

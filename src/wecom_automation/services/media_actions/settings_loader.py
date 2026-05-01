@@ -33,6 +33,13 @@ DEFAULT_MEDIA_AUTO_ACTION_SETTINGS: dict[str, Any] = {
         "post_confirm_wait_seconds": 1.0,
         "duplicate_name_policy": "first",
     },
+    "auto_contact_share": {
+        "enabled": False,
+        "contact_name": "",
+        "skip_if_already_shared": True,
+        "cooldown_seconds": 0,
+        "kefu_overrides": {},
+    },
 }
 
 
@@ -85,7 +92,7 @@ def load_media_auto_action_settings(db_path: str) -> dict[str, Any]:
     if "enabled" in stored:
         result["enabled"] = bool(stored["enabled"])
 
-    for section in ("auto_blacklist", "auto_group_invite"):
+    for section in ("auto_blacklist", "auto_group_invite", "auto_contact_share"):
         if section in stored and isinstance(stored[section], dict):
             result[section] = {**result[section], **stored[section]}
 

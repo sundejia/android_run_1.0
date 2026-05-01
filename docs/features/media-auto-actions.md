@@ -9,6 +9,7 @@
 
 1. **自动拉黑**：将客户写入控制库 `blacklist` 表（与现有黑名单页、同步过滤逻辑一致）。
 2. **自动拉群**：在安卓端通过 `GroupInviteWorkflowService` + `WeComService` 执行完整拉群与可选的建群后首条消息发送；消息内容与群名均支持模板变量（见下文「拉群实现状态」与 [实现说明](../implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md)）。
+3. **自动推送主管名片**：在安卓端通过 `ContactShareService` + `WeComService` 自动向客户发送指定联系人的企业微信名片（Work Card）；支持按客服(kefu)配置不同主管。（见 [Auto Contact Share](auto-contact-share.md)）
 
 配置在桌面端 **Media Auto-Actions** 页面（路由 `/media-actions`，侧栏 📸），设置持久化在控制库 `settings` 表中，类别键为 `media_auto_actions`。
 
@@ -19,6 +20,7 @@
 - **动作**：
   - `AutoBlacklistAction` → `BlacklistWriter.add_to_blacklist`（`actions/auto_blacklist.py`）
   - `AutoGroupInviteAction` → `GroupChatService`（`actions/auto_group_invite.py` + `group_chat_service.py`）
+  - `AutoContactShareAction` → `ContactShareService`（`actions/auto_contact_share.py` + `contact_share/service.py`）— 详见 [Auto Contact Share](auto-contact-share.md)
 - **独立拉群工作流**：`src/wecom_automation/services/group_invite/` 定义可复用的 `GroupInviteRequest` / `GroupInviteWorkflowService`，由 `GroupChatService` 作为兼容层委托执行，供手动触发和媒体自动触发共用。
 - **同步集成**：`create_sync_orchestrator` / `create_customer_syncer`（`services/sync/factory.py`）在创建 `MessageProcessor` 时，若 DB 中 `media_auto_actions.enabled` 为真，则挂载总线与上述动作，并从同一 DB 加载子配置（`settings_loader.py`）。
 - **消息入口**：`MessageProcessor.process` 在责任链处理完成后，若结果为 `image`/`video` 且消息来自客户，则 `emit` 事件（`services/message/processor.py`）。
@@ -32,6 +34,7 @@
 | `enabled`           | boolean | 总开关                                                                                                                                                                                                  |
 | `auto_blacklist`    | json    | `enabled`, `reason`, `skip_if_already_blacklisted`                                                                                                                                                      |
 | `auto_group_invite` | json    | `enabled`, `group_members`, `group_name_template`, `skip_if_group_exists`, `member_source`, `send_test_message_after_create`, `test_message_text`, `post_confirm_wait_seconds`, `duplicate_name_policy` |
+| `auto_contact_share` | json  | `enabled`, `contact_name`, `skip_if_already_shared`, `cooldown_seconds`, `kefu_overrides`（详见 [Auto Contact Share](auto-contact-share.md)）                                                                                                                      |
 
 默认值与类型在 `wecom-desktop/backend/services/settings/defaults.py` 的 `SETTING_DEFINITIONS` 中注册，确保 JSON 子配置正确序列化。
 
@@ -103,7 +106,7 @@
 
 | 范围                   | 路径                                                                                                      |
 | ---------------------- | --------------------------------------------------------------------------------------------------------- |
-| 事件总线与动作         | `tests/unit/test_media_event_bus.py`, `test_auto_blacklist_action.py`, `test_auto_group_invite_action.py` |
+| 事件总线与动作         | `tests/unit/test_media_event_bus.py`, `test_auto_blacklist_action.py`, `test_auto_group_invite_action.py`, `test_auto_contact_share_action.py` |
 | Processor + 总线集成   | `tests/unit/test_media_action_integration.py`                                                             |
 | 设置加载               | `tests/unit/test_media_actions_settings_loader.py`                                                        |
 | 拉群工作流/兼容层      | `tests/unit/test_group_invite_workflow.py`, `tests/unit/test_group_chat_service.py`                       |
@@ -122,6 +125,7 @@
 
 ## 相关文档
 
+- [Auto Contact Share (自动推送主管名片)](auto-contact-share.md) — 名片分享 UI 流程、per-kefu 配置、幂等表、真机验证的 Resource ID
 - [安卓拉群工作流实现说明](../implementation/2026-04-04-android-group-invite-workflow.md) — 模块划分、时序、配置与限制（含建群后 `restore_navigation`）
 - [自动拉群后私聊列表导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md) — 实时跟进场景根因与三层修复
 - [自定义建群后消息与聊天页菜单兼容](../implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) — 模板、API/UI 对齐、`test-trigger` 语义、真机验证说明
