@@ -262,6 +262,16 @@ class TestFindResultCandidates:
         assert result[0]["bounds"] == "[200,200][800,260]"
         assert result[1]["bounds"] == "[200,400][800,460]"
 
+    def test_excludes_edittext_elements(self):
+        """EditText (search input) should not appear as a result candidate."""
+        elements = [
+            {"text": "张三", "className": "android.widget.EditText", "bounds": "[200,200][800,260]"},
+            {"text": "张三-经理", "className": "android.widget.TextView", "bounds": "[200,300][800,360]"},
+        ]
+        result = find_result_candidates(elements, "张三", screen_width=1080)
+        assert len(result) == 1
+        assert result[0]["text"] == "张三-经理"
+
 
 # ── find_search_button ──────────────────────────────────────────
 
@@ -305,3 +315,46 @@ class TestFindSearchButton:
             screen_height=2340,
         )
         assert result is None
+
+    def test_excludes_nd7_close_button(self):
+        """nd7 (close/back button) must never be selected as the search button."""
+        elements = [
+            {
+                "text": "",
+                "resourceId": "com.tencent.wework:id/nd7",
+                "className": "android.widget.TextView",
+                "bounds": "[624,56][720,152]",
+            },
+        ]
+        result = find_search_button(
+            elements,
+            resource_patterns=("nd7",),
+            screen_width=1080,
+            screen_height=2340,
+        )
+        assert result is None
+
+    def test_prefers_ndb_over_nd7_in_position_fallback(self):
+        """Position heuristic should pick ndb but not nd7."""
+        elements = [
+            {
+                "text": "",
+                "resourceId": "com.tencent.wework:id/ndb",
+                "className": "android.widget.TextView",
+                "bounds": "[528,56][624,152]",
+            },
+            {
+                "text": "",
+                "resourceId": "com.tencent.wework:id/nd7",
+                "className": "android.widget.TextView",
+                "bounds": "[624,56][720,152]",
+            },
+        ]
+        result = find_search_button(
+            elements,
+            text_patterns=("不存在",),
+            screen_width=720,
+            screen_height=1612,
+        )
+        assert result is not None
+        assert "ndb" in result.get("resourceId", "")

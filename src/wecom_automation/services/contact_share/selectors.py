@@ -18,15 +18,17 @@ ATTACH_GRID_RESOURCE_PATTERNS: tuple[str, ...] = ("ahe",)
 
 # ── "Contact Card" item in attachment menu page 2 ────────────────
 CARD_TEXT_PATTERNS: tuple[str, ...] = ("Contact Card", "名片", "Personal Card")
-CARD_RESOURCE_PATTERNS: tuple[str, ...] = ("aha",)
+CARD_RESOURCE_PATTERNS: tuple[str, ...] = ()
+# NOTE: "aha" is the resourceId for ALL attachment item labels (Image, Camera,
+# Contact Card, etc.), so it MUST NOT be included here — use text matching only.
 
 # ── "Select Contact(s)" title in contact picker ──────────────────
 CONTACT_PICKER_TITLE_RESOURCE: tuple[str, ...] = ("nca",)
 CONTACT_PICKER_LIST_RESOURCE: tuple[str, ...] = ("cth",)
 
 # ── "Send" button in the confirmation dialog ─────────────────────
-SEND_TEXT_PATTERNS: tuple[str, ...] = ("Send", "发送", "确定")
-SEND_RESOURCE_PATTERNS: tuple[str, ...] = ("dak",)
+SEND_TEXT_PATTERNS: tuple[str, ...] = ("Send", "SEND", "发送", "确定")
+SEND_RESOURCE_PATTERNS: tuple[str, ...] = ("dak", "blz", "i_2")
 
 # ── "Cancel" button in the confirmation dialog ───────────────────
 CANCEL_TEXT_PATTERNS: tuple[str, ...] = ("Cancel", "取消")

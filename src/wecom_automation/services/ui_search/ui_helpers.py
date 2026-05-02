@@ -168,6 +168,13 @@ def find_result_candidates(
                     append_matches(element.get("children", []))
                 continue
 
+            # Skip EditText elements (search input field itself)
+            cls = (element.get("className") or "").lower()
+            if "edittext" in cls:
+                if not is_flat_list:
+                    append_matches(element.get("children", []))
+                continue
+
             bounds = parse_element_bounds(element)
             if bounds and bounds[1] < min_y:
                 continue
@@ -194,7 +201,12 @@ def find_search_button(
     screen_height: int = 2340,
     is_flat_list: bool = True,
 ) -> dict | None:
-    """Find a search button with keyword matching + top-right position fallback."""
+    """Find a search button with keyword matching + top-right position fallback.
+
+    Excludes nd7 (close/back button) from position heuristic candidates.
+    """
+    _EXCLUDE_RIDS = ("nd7",)
+
     matches = find_elements_by_keywords(
         elements,
         text_patterns=text_patterns,
@@ -202,6 +214,11 @@ def find_search_button(
         resource_patterns=resource_patterns,
         is_flat_list=is_flat_list,
     )
+    # Filter out excluded resource IDs from keyword matches
+    matches = [
+        m for m in matches
+        if not any(ex in (m.get("resourceId") or "").lower() for ex in _EXCLUDE_RIDS)
+    ]
     if matches:
         return pick_top_right_element(matches)
 
@@ -213,6 +230,7 @@ def find_search_button(
         and (bounds := parse_element_bounds(element))
         and bounds[1] <= screen_height * 0.08
         and bounds[0] >= screen_width * 0.52
+        and not any(ex in (element.get("resourceId") or "").lower() for ex in _EXCLUDE_RIDS)
     ]
     if header_candidates:
         return pick_top_right_element(header_candidates)
