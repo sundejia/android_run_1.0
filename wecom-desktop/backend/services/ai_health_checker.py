@@ -1,12 +1,16 @@
 """
-AI Health Checker — three-layer probe.
+AI Health Checker — two-layer probe (network + HTTP service).
 
 Layer 1: TCP connectivity (is the host reachable?)
 Layer 2: HTTP service alive (does /health or base URL respond?)
-Layer 3: End-to-end inference (does POST /chat return a valid answer?)
 
 Results are stored via heartbeat_service.record_ai_health() and can
 optionally force-open an AICircuitBreaker when the service is down.
+
+NOTE: A previous Layer 3 (POST /chat with "ping") was removed because it
+sent a real AI inference request every 5 minutes per device, wasting tokens
+and inflating LangSmith traffic. The circuit breaker now relies solely on
+actual business-call failures to detect AI outages.
 """
 
 from __future__ import annotations
@@ -17,7 +21,7 @@ from typing import Any
 
 
 async def check_ai_health(ai_server_url: str, timeout: float = 10.0) -> dict[str, Any]:
-    """Run the three-layer health probe and return a diagnostic dict."""
+    """Run the two-layer health probe and return a diagnostic dict."""
     from urllib.parse import urlparse
 
     import aiohttp
@@ -76,33 +80,8 @@ async def check_ai_health(ai_server_url: str, timeout: float = 10.0) -> dict[str
             result["response_time_ms"] = (time.monotonic() - overall_start) * 1000
             return result
 
-    # --- Layer 3: End-to-end inference ---
-    chat_url = ai_server_url if ai_server_url.endswith("/chat") else f"{base_url}/chat"
-    try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                chat_url,
-                json={"chatInput": "ping", "sessionId": "health_check"},
-                timeout=aiohttp.ClientTimeout(total=timeout),
-            ) as resp:
-                if resp.status == 200:
-                    result["inference"] = "working"
-                    result["status"] = "healthy"
-                else:
-                    result["inference"] = f"error_{resp.status}"
-                    result["status"] = "inference_error"
-                    result["diagnosis"] = (
-                        "AI service online but inference failed (possible upstream model provider issue)"
-                    )
-    except TimeoutError:
-        result["inference"] = "timeout"
-        result["status"] = "inference_timeout"
-        result["diagnosis"] = "AI inference timed out (possible upstream model provider overload)"
-    except Exception as e:
-        result["inference"] = f"error:{type(e).__name__}"
-        result["status"] = "inference_error"
-        result["diagnosis"] = f"AI inference request failed: {e}"
-
+    # Both layers passed — service is reachable and HTTP-healthy.
+    result["status"] = "healthy"
     result["response_time_ms"] = (time.monotonic() - overall_start) * 1000
     return result
 
@@ -129,11 +108,6 @@ _STATUS_SEVERITY: dict[str, str] = {
     "healthy": "ok",
     "unreachable": "fatal",
     "service_down": "severe",
-    "inference_error": "severe",
-    # Inference timeout has been observed to be a false positive: the probe's
-    # 10s budget triggers but real customer requests still complete (see the
-    # bug report, section 5.2). Treat as warn-only.
-    "inference_timeout": "warn",
 }
 
 
@@ -191,25 +165,11 @@ class PeriodicAIHealthChecker:
         severity = _STATUS_SEVERITY.get(status, "severe")  # unknown -> severe
 
         if severity == "ok":
-            # Recovery: reset gate so a future outage is again allowed to
-            # escalate after threshold consecutive failures.
             if self._consecutive_unhealthy or self._already_forced_open:
                 if self._logger:
                     self._logger.info("[AIHealthChecker] AI recovered; resetting unhealthy counter")
             self._consecutive_unhealthy = 0
             self._already_forced_open = False
-            return
-
-        if severity == "warn":
-            # Log only. Do NOT touch the breaker. This is intentional: the
-            # field bug showed that inference_timeout is often a false
-            # positive (real /chat calls still succeed during the same
-            # window), and force_open()ing on it locked the system out of
-            # replying for hours.
-            if self._logger:
-                self._logger.warning(
-                    f"[AIHealthChecker] AI degraded ({status}); not tripping circuit breaker (warn-only severity)"
-                )
             return
 
         # severity in {"severe", "fatal"} — count this probe.
