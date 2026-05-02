@@ -28,9 +28,18 @@ const settings = ref<MediaAutoActionSettings>({
     post_confirm_wait_seconds: 1,
     duplicate_name_policy: 'first',
   },
+  auto_contact_share: {
+    enabled: false,
+    contact_name: '',
+    skip_if_already_shared: true,
+    cooldown_seconds: 0,
+    kefu_overrides: {},
+  },
 })
 
 const newMember = ref('')
+const newKefuName = ref('')
+const newKefuContact = ref('')
 const testCustomerName = ref('测试客户')
 const testDeviceSerial = ref('test_device')
 const testMessageType = ref<'image' | 'video'>('image')
@@ -85,6 +94,20 @@ function addMember() {
 
 function removeMember(index: number) {
   settings.value.auto_group_invite.group_members.splice(index, 1)
+}
+
+function addKefuOverride() {
+  const kefu = newKefuName.value.trim()
+  const contact = newKefuContact.value.trim()
+  if (kefu && contact) {
+    settings.value.auto_contact_share.kefu_overrides[kefu] = contact
+    newKefuName.value = ''
+    newKefuContact.value = ''
+  }
+}
+
+function removeKefuOverride(kefuName: string) {
+  delete settings.value.auto_contact_share.kefu_overrides[kefuName]
 }
 
 async function runTest() {
@@ -354,6 +377,114 @@ onMounted(loadSettings)
             />
             <label for="skip-group-exists" class="text-sm text-gray-300">
               {{ t('media_actions.skip_group_exists') }}
+            </label>
+          </div>
+        </div>
+      </div>
+
+      <!-- Auto Contact Share Section -->
+      <div
+        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
+        :class="{ 'opacity-50': !settings.enabled }"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-100">
+              {{ t('media_actions.auto_contact_share') }}
+            </h2>
+            <p class="text-sm text-gray-400 mt-1">
+              {{ t('media_actions.auto_contact_share_desc') }}
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input
+              v-model="settings.auto_contact_share.enabled"
+              type="checkbox"
+              :disabled="!settings.enabled"
+              class="sr-only peer"
+            />
+            <div
+              class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"
+            ></div>
+          </label>
+        </div>
+
+        <div v-if="settings.auto_contact_share.enabled && settings.enabled" class="space-y-4">
+          <!-- Contact Name -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-1">{{
+              t('media_actions.contact_name_label')
+            }}</label>
+            <input
+              v-model="settings.auto_contact_share.contact_name"
+              type="text"
+              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              :placeholder="t('media_actions.contact_name_placeholder')"
+            />
+          </div>
+
+          <!-- Per-Kefu Overrides -->
+          <div>
+            <label class="block text-sm font-medium text-gray-300 mb-2">{{
+              t('media_actions.kefu_overrides_label')
+            }}</label>
+            <div class="flex flex-wrap gap-2 mb-2">
+              <span
+                v-for="(contact, kefu) in settings.auto_contact_share.kefu_overrides"
+                :key="kefu"
+                class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-600/20 text-purple-300 text-sm border border-purple-600/30"
+              >
+                {{ kefu }} → {{ contact }}
+                <button
+                  class="ml-1 text-purple-400 hover:text-red-400 transition-colors"
+                  @click="removeKefuOverride(String(kefu))"
+                >
+                  &times;
+                </button>
+              </span>
+              <span
+                v-if="Object.keys(settings.auto_contact_share.kefu_overrides).length === 0"
+                class="text-sm text-gray-500 italic"
+              >
+                {{ t('media_actions.no_members') }}
+              </span>
+            </div>
+            <div class="flex gap-2">
+              <input
+                v-model="newKefuName"
+                type="text"
+                class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                :placeholder="t('media_actions.kefu_name_placeholder')"
+                @keyup.enter="addKefuOverride"
+              />
+              <input
+                v-model="newKefuContact"
+                type="text"
+                class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                :placeholder="t('media_actions.contact_for_kefu_placeholder')"
+                @keyup.enter="addKefuOverride"
+              />
+              <button
+                class="px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 transition-colors"
+                @click="addKefuOverride"
+              >
+                {{ t('media_actions.add') }}
+              </button>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+              {{ t('media_actions.kefu_overrides_desc') }}
+            </p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <input
+              id="skip-already-shared"
+              v-model="settings.auto_contact_share.skip_if_already_shared"
+              type="checkbox"
+              class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+            />
+            <label for="skip-already-shared" class="text-sm text-gray-300">
+              {{ t('media_actions.skip_already_shared') }}
             </label>
           </div>
         </div>

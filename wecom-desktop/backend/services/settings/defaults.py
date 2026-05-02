@@ -281,6 +281,20 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         "自动拉群子配置",
         False,
     ),
+    (
+        "media_auto_actions",
+        "auto_contact_share",
+        ValueType.JSON.value,
+        {
+            "enabled": False,
+            "contact_name": "",
+            "skip_if_already_shared": True,
+            "cooldown_seconds": 0,
+            "kefu_overrides": {},
+        },
+        "自动发名片子配置",
+        False,
+    ),
 ]
 
 

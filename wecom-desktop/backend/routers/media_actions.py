@@ -42,6 +42,13 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "post_confirm_wait_seconds": 1.0,
         "duplicate_name_policy": "first",
     },
+    "auto_contact_share": {
+        "enabled": False,
+        "contact_name": "",
+        "skip_if_already_shared": True,
+        "cooldown_seconds": 0,
+        "kefu_overrides": {},
+    },
 }
 
 
@@ -68,16 +75,26 @@ class AutoGroupInviteSettings(BaseModel):
     duplicate_name_policy: str = "first"
 
 
+class AutoContactShareSettings(BaseModel):
+    enabled: bool = False
+    contact_name: str = ""
+    skip_if_already_shared: bool = True
+    cooldown_seconds: int = 0
+    kefu_overrides: dict[str, str] = Field(default_factory=dict)
+
+
 class MediaAutoActionSettings(BaseModel):
     enabled: bool = False
     auto_blacklist: AutoBlacklistSettings = Field(default_factory=AutoBlacklistSettings)
     auto_group_invite: AutoGroupInviteSettings = Field(default_factory=AutoGroupInviteSettings)
+    auto_contact_share: AutoContactShareSettings = Field(default_factory=AutoContactShareSettings)
 
 
 class UpdateMediaActionSettingsRequest(BaseModel):
     enabled: Optional[bool] = None
     auto_blacklist: Optional[AutoBlacklistSettings] = None
     auto_group_invite: Optional[AutoGroupInviteSettings] = None
+    auto_contact_share: Optional[AutoContactShareSettings] = None
 
 
 class ActionLogEntry(BaseModel):
@@ -106,7 +123,7 @@ def _get_settings() -> dict[str, Any]:
         if "enabled" in stored:
             result["enabled"] = stored["enabled"]
 
-        for section_key in ("auto_blacklist", "auto_group_invite"):
+        for section_key in ("auto_blacklist", "auto_group_invite", "auto_contact_share"):
             if section_key in stored and isinstance(stored[section_key], dict):
                 result[section_key] = {**DEFAULT_SETTINGS[section_key], **stored[section_key]}
 
@@ -150,6 +167,9 @@ def _apply_media_action_settings_update_sync(
 
     if request.auto_group_invite is not None:
         current["auto_group_invite"] = request.auto_group_invite.model_dump()
+
+    if request.auto_contact_share is not None:
+        current["auto_contact_share"] = request.auto_contact_share.model_dump()
 
     return _save_settings(current)
 

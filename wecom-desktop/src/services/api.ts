@@ -869,10 +869,19 @@ export interface AutoGroupInviteSettings {
   duplicate_name_policy: string
 }
 
+export interface AutoContactShareSettings {
+  enabled: boolean
+  contact_name: string
+  skip_if_already_shared: boolean
+  cooldown_seconds: number
+  kefu_overrides: Record<string, string>
+}
+
 export interface MediaAutoActionSettings {
   enabled: boolean
   auto_blacklist: AutoBlacklistSettings
   auto_group_invite: AutoGroupInviteSettings
+  auto_contact_share: AutoContactShareSettings
 }
 
 export interface MediaActionLogEntry {
