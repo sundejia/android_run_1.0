@@ -565,6 +565,17 @@ class ResponseDetector:
                 self._logger.info(f"[{serial}] Media auto-actions enabled ({len(bus._actions)} actions)")
             else:
                 self._logger.debug(f"[{serial}] Media auto-actions disabled")
+
+            # Also inject WeComService into the review-gate singleton so
+            # webhook-driven verdicts can trigger auto-actions (contact share, etc.)
+            try:
+                from services.review_gate_runtime import bind_wecom_service
+
+                bind_wecom_service(wecom, db_path=str(get_control_db_path()))
+            except Exception as bind_exc:
+                self._logger.debug(
+                    f"[{serial}] Review gate WeComService bind failed (non-blocking): {bind_exc}"
+                )
         except Exception as exc:
             self._logger.warning(f"[{serial}] Failed to build media event bus (non-blocking): {exc}")
             self._media_event_bus = None

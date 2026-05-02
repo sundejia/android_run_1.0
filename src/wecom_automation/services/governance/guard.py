@@ -33,6 +33,7 @@ from wecom_automation.services.review.storage import ReviewStorage
 
 class GovernanceAction(enum.StrEnum):
     GROUP_INVITE = "group_invite"
+    CONTACT_SHARE = "contact_share"
 
 
 class GuardOutcome(enum.StrEnum):

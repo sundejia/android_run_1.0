@@ -107,43 +107,71 @@ def reset_for_tests() -> None:
 
 
 def _register_default_actions(bus: MediaEventBus) -> None:
-    """Best-effort registration of the canonical AutoGroupInviteAction.
+    """Best-effort registration of canonical auto-actions.
 
-    The action requires a live ``WeComService``. In production that is
-    injected per device by the sync subprocess; here we register a thin
-    factory hook so the bus can resolve it lazily. If the import fails
-    (e.g. running without the desktop dependency tree), we leave the bus
-    bare — tests / CI still work because they register their own actions.
+    Each action requires a live ``WeComService``. In production that is
+    injected per device by the sync subprocess via :func:`bind_wecom_service`.
+    Here we register placeholders that short-circuit in ``should_execute``
+    until wired up. If an import fails (e.g. running without the full
+    dependency tree), we skip gracefully — tests register their own actions.
     """
     try:
         from wecom_automation.services.media_actions.actions.auto_group_invite import (
             AutoGroupInviteAction,
         )
 
-        # Register a placeholder that becomes operational once a WeComService
-        # is bound via :func:`bind_wecom_service`. Until then it short-circuits
-        # in ``should_execute``.
-        action = AutoGroupInviteAction(wecom_service=None)
+        action = AutoGroupInviteAction(group_chat_service=None)
         bus.register(action)
     except Exception as exc:
-        logger.warning(
-            "AutoGroupInviteAction not registered (will require manual wire-up): %s",
-            exc,
+        logger.warning("AutoGroupInviteAction not registered: %s", exc)
+
+    try:
+        from wecom_automation.services.media_actions.actions.auto_contact_share import (
+            AutoContactShareAction,
         )
+        from wecom_automation.services.contact_share.service import ContactShareService
+
+        action = AutoContactShareAction(
+            contact_share_service=ContactShareService(wecom_service=None)
+        )
+        bus.register(action)
+    except Exception as exc:
+        logger.warning("AutoContactShareAction not registered: %s", exc)
 
 
-def bind_wecom_service(wecom_service: Any) -> None:
-    """Inject a live WeComService into all actions that need one.
+def bind_wecom_service(wecom_service: Any, *, db_path: str | None = None) -> None:
+    """Inject a live WeComService into all registered auto-actions.
 
-    Called by the sync subprocess once it has acquired a device session.
+    Called by the follow-up / sync subprocess once it has acquired a device
+    session.  Builds concrete service objects (GroupChatService,
+    ContactShareService) and replaces the placeholder ``action._service``.
     """
     bus = _singleton.get("bus")
     if bus is None:
         return
+    bound = 0
     for action in getattr(bus, "_actions", []):
-        if hasattr(action, "_wecom") or hasattr(action, "wecom_service"):
-            try:
-                action._wecom_service = wecom_service
-                action.wecom_service = wecom_service
-            except Exception:
-                pass
+        name = getattr(action, "action_name", "")
+        try:
+            if name == "auto_group_invite":
+                from wecom_automation.services.media_actions.group_chat_service import (
+                    GroupChatService,
+                )
+
+                action._service = GroupChatService(
+                    wecom_service=wecom_service, db_path=db_path
+                )
+                bound += 1
+            elif name == "auto_contact_share":
+                from wecom_automation.services.contact_share.service import (
+                    ContactShareService,
+                )
+
+                action._service = ContactShareService(
+                    wecom_service=wecom_service, db_path=db_path
+                )
+                bound += 1
+        except Exception as exc:
+            logger.warning("Failed to inject WeComService into action %s: %s", name, exc)
+    if bound:
+        logger.info("Bound WeComService to %d review gate action(s)", bound)

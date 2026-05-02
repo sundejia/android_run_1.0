@@ -30,6 +30,7 @@ from wecom_automation.services.contact_share import selectors as S
 from wecom_automation.services.contact_share.models import (
     ContactShareRequest,
 )
+from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
 
 logger = logging.getLogger(__name__)
 
@@ -301,11 +302,21 @@ class ContactShareService(IContactShareService):
         return await finder.find_and_select(contact_name, self._wecom.adb)
 
     async def _confirm_send(self) -> bool:
-        """Tap the 'Send' button in the confirmation dialog."""
-        return await self._find_and_tap(
-            text_patterns=S.SEND_TEXT_PATTERNS,
+        """Tap the 'Send' button in the confirmation dialog.
+
+        Uses resource_patterns first to avoid false matches like 'Send to:'.
+        Falls back to text matching only if resource matching yields nothing.
+        """
+        # Prefer resource-based matching to avoid "Send to:" false positives
+        if await self._find_and_tap(
             resource_patterns=S.SEND_RESOURCE_PATTERNS,
             step_name="Send button (dak)",
+        ):
+            return True
+        # Fallback: text matching
+        return await self._find_and_tap(
+            text_patterns=S.SEND_TEXT_PATTERNS,
+            step_name="Send button (text fallback)",
         )
 
     # ── Shared Helpers ────────────────────────────────────────────
@@ -330,7 +341,7 @@ class ContactShareService(IContactShareService):
                 await asyncio.sleep(0.5)
                 continue
 
-            matches = self._wecom._find_elements_by_keywords(
+            matches = find_elements_by_keywords(
                 elements,
                 text_patterns=text_patterns,
                 desc_patterns=desc_patterns,

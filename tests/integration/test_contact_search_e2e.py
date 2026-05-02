@@ -15,11 +15,18 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import os
 import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
+
+# Fix Windows console encoding for Chinese characters
+if sys.platform == "win32":
+    os.environ.setdefault("PYTHONIOENCODING", "utf-8")
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "src"))
@@ -348,22 +355,32 @@ async def _test_search_contact(wecom: WeComService, contact_name: str) -> tuple[
 
 
 async def _test_confirm_send(wecom: WeComService) -> tuple[bool, str]:
-    """Tap Send in the confirmation dialog."""
+    """Tap Send in the confirmation dialog.
+
+    Uses resource_patterns first to avoid false matches like 'Send to:'.
+    Falls back to text matching only if resource matching yields nothing.
+    """
     from wecom_automation.services.contact_share import selectors as S
+    from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
 
     for attempt in range(3):
         try:
             ui_tree, elements = await wecom.adb.get_ui_state(force=True)
-            matches = wecom._find_elements_by_keywords(
+            # Prefer resource-based matching to avoid "Send to:" false positives
+            matches = find_elements_by_keywords(
                 elements,
-                text_patterns=S.SEND_TEXT_PATTERNS,
                 resource_patterns=S.SEND_RESOURCE_PATTERNS,
             )
+            if not matches:
+                matches = find_elements_by_keywords(
+                    elements,
+                    text_patterns=S.SEND_TEXT_PATTERNS,
+                )
             if matches:
                 idx = matches[0].get("index")
                 if idx is not None:
                     await wecom.adb.tap(int(idx))
-                    return True, f"Tapped Send (index={idx})"
+                    return True, f"Tapped Send (index={idx}, text='{matches[0].get('text', '')}')"
         except Exception:
             pass
         await asyncio.sleep(0.5)

@@ -45,6 +45,10 @@ class AutoContactShareAction(IMediaAction):
         if not cs.get("enabled", False):
             return False
 
+        if not self._service or not getattr(self._service, "_wecom", None):
+            logger.debug("ContactShareService has no WeComService; skipping auto-contact-share")
+            return False
+
         if not event.is_media:
             return False
 
