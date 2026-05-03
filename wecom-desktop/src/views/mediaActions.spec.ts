@@ -27,6 +27,22 @@ describe('Media Actions API', () => {
     }
   }
 
+  const defaultContactShare = {
+    enabled: false,
+    contact_name: '',
+    skip_if_already_shared: true,
+    cooldown_seconds: 0,
+    kefu_overrides: {},
+  }
+
+  const defaultReviewGate = {
+    enabled: false,
+    rating_server_url: 'http://127.0.0.1:8080',
+    upload_timeout_seconds: 30,
+    upload_max_attempts: 3,
+    video_review_policy: 'extract_frame',
+  }
+
   describe('getMediaActionSettings', () => {
     it('should fetch settings from the correct endpoint', async () => {
       const expected: MediaAutoActionSettings = {
@@ -45,7 +61,10 @@ describe('Media Actions API', () => {
           test_message_text: '测试',
           post_confirm_wait_seconds: 1,
           duplicate_name_policy: 'first',
+          video_invite_policy: 'extract_frame',
         },
+        auto_contact_share: defaultContactShare,
+        review_gate: defaultReviewGate,
       }
 
       mockFetch.mockResolvedValueOnce(mockJsonResponse(expected))
@@ -84,7 +103,10 @@ describe('Media Actions API', () => {
           test_message_text: '测试',
           post_confirm_wait_seconds: 1,
           duplicate_name_policy: 'first',
+          video_invite_policy: 'extract_frame',
         },
+        auto_contact_share: defaultContactShare,
+        review_gate: defaultReviewGate,
       }
 
       mockFetch.mockResolvedValueOnce(mockJsonResponse(response))
@@ -125,6 +147,8 @@ describe('Media Actions API', () => {
             skip_if_already_blacklisted: true,
           },
           auto_group_invite: update.auto_group_invite,
+          auto_contact_share: defaultContactShare,
+          review_gate: defaultReviewGate,
         })
       )
 
@@ -202,6 +226,21 @@ describe('MediaAutoActionSettings type', () => {
         test_message_text: '您好 {customer_name}',
         post_confirm_wait_seconds: 1,
         duplicate_name_policy: 'first',
+        video_invite_policy: 'extract_frame',
+      },
+      auto_contact_share: {
+        enabled: true,
+        contact_name: '主管王',
+        skip_if_already_shared: true,
+        cooldown_seconds: 0,
+        kefu_overrides: {},
+      },
+      review_gate: {
+        enabled: true,
+        rating_server_url: 'http://127.0.0.1:8080',
+        upload_timeout_seconds: 30,
+        upload_max_attempts: 3,
+        video_review_policy: 'extract_frame',
       },
     }
 
@@ -209,5 +248,6 @@ describe('MediaAutoActionSettings type', () => {
     expect(settings.auto_blacklist.reason).toBe('test')
     expect(settings.auto_group_invite.group_members).toEqual(['A', 'B'])
     expect(settings.auto_group_invite.test_message_text).toBe('您好 {customer_name}')
+    expect(settings.review_gate.video_review_policy).toBe('extract_frame')
   })
 })

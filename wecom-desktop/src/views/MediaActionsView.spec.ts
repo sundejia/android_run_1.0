@@ -43,6 +43,21 @@ const baseSettings = {
     test_message_text: '您好 {customer_name}，我是 {kefu_name}',
     post_confirm_wait_seconds: 1,
     duplicate_name_policy: 'first',
+    video_invite_policy: 'extract_frame',
+  },
+  auto_contact_share: {
+    enabled: false,
+    contact_name: '',
+    skip_if_already_shared: true,
+    cooldown_seconds: 0,
+    kefu_overrides: {},
+  },
+  review_gate: {
+    enabled: true,
+    rating_server_url: 'http://127.0.0.1:8080',
+    upload_timeout_seconds: 30,
+    upload_max_attempts: 3,
+    video_review_policy: 'extract_frame',
   },
 }
 
@@ -78,6 +93,30 @@ describe('MediaActionsView', () => {
         auto_group_invite: expect.objectContaining({
           send_test_message_after_create: false,
           test_message_text: '欢迎 {customer_name}',
+        }),
+      })
+    )
+  })
+
+  it('saves review gate settings', async () => {
+    const wrapper = mount(MediaActionsView)
+    await flushPromises()
+
+    await wrapper.get('#media-review-server-url').setValue('http://review.local:8080')
+    await wrapper.get('#media-review-upload-timeout').setValue(45)
+    await wrapper.get('#media-review-upload-attempts').setValue(2)
+    await wrapper.get('#media-video-review-policy').setValue('extract_frame')
+    await wrapper.get('#save-media-action-settings').trigger('click')
+    await flushPromises()
+
+    expect(updateMediaActionSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        review_gate: expect.objectContaining({
+          enabled: true,
+          rating_server_url: 'http://review.local:8080',
+          upload_timeout_seconds: 45,
+          upload_max_attempts: 2,
+          video_review_policy: 'extract_frame',
         }),
       })
     )

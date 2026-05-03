@@ -53,6 +53,7 @@ class MessageProcessor:
         review_storage=None,
         review_submitter=None,
         review_gate_enabled: bool = False,
+        video_frame_extractor=None,
     ):
         """
         初始化消息处理器
@@ -71,6 +72,7 @@ class MessageProcessor:
         self._review_storage = review_storage
         self._review_submitter = review_submitter
         self._review_gate_enabled = bool(review_gate_enabled)
+        self._video_frame_extractor = video_frame_extractor
 
         # 时间戳解析器
         self._timestamp_parser = TimestampParser()
@@ -267,8 +269,11 @@ class MessageProcessor:
             once the rating-server posts back a verdict.
 
         Video flow:
-            * ``video_invite_policy == "skip"`` (default): record analytics
-              event and stop. No group invite is triggered for raw video.
+            * ``video_invite_policy == "extract_frame"`` (default when the
+              review gate is active): extract a representative frame and submit
+              it through the same review pipeline as images.
+            * ``video_invite_policy == "skip"``: record analytics event and
+              stop. No group invite is triggered for raw video.
             * ``video_invite_policy == "always"``: emit on the bus directly
               (legacy behaviour) so existing operators can opt in.
 
@@ -296,9 +301,23 @@ class MessageProcessor:
                 await self._submit_for_review(result, context, image_path)
                 return
             self._logger.warning(
-                "Image without saved path; falling back to legacy direct emit (message_id=%s)",
+                "Image without saved path; review gate fails closed (message_id=%s)",
                 result.message_id,
             )
+            if result.message_id is not None:
+                try:
+                    self._review_storage.record_event(
+                        "review.submit_failed",
+                        trace_id=str(result.message_id),
+                        payload={
+                            "customer_id": context.customer_id,
+                            "customer_name": context.customer_name,
+                            "reason": "missing image path",
+                        },
+                    )
+                except Exception as exc:
+                    self._logger.warning("review submit failure analytics recording failed: %s", exc)
+            return
 
         await self._emit_legacy(result, context)
 
@@ -306,13 +325,17 @@ class MessageProcessor:
         self, result: MessageProcessResult, context: MessageContext, gate_active: bool
     ) -> None:
         invite_settings = self._media_action_settings.get("auto_group_invite", {}) or {}
-        policy = invite_settings.get("video_invite_policy", "skip")
+        gate_settings = self._media_action_settings.get("review_gate", {}) or {}
+        policy = gate_settings.get("video_review_policy") or invite_settings.get("video_invite_policy", "extract_frame")
         if not gate_active:
             # No gate configured at all → preserve legacy behaviour.
             await self._emit_legacy(result, context)
             return
         if policy == "always":
             await self._emit_legacy(result, context)
+            return
+        if policy == "extract_frame":
+            await self._submit_video_frame_for_review(result, context)
             return
         # Default = skip: log analytics so operators can audit.
         if self._review_storage is not None and result.message_id is not None:
@@ -329,6 +352,65 @@ class MessageProcessor:
                 )
             except Exception as exc:
                 self._logger.warning("video skip analytics recording failed: %s", exc)
+
+    async def _submit_video_frame_for_review(self, result: MessageProcessResult, context: MessageContext) -> None:
+        video_path = (result.extra or {}).get("path")
+        message_id = result.message_id
+        if message_id is None:
+            self._logger.warning("Video without message_id; cannot submit review frame")
+            return
+        if not video_path:
+            self._record_video_review_failure(message_id, context, "missing video path")
+            return
+
+        extractor = self._video_frame_extractor
+        if extractor is None:
+            from wecom_automation.services.review.video_frames import extract_review_frame
+
+            extractor = extract_review_frame
+
+        try:
+            maybe_frame = extractor(video_path)
+            if asyncio.iscoroutine(maybe_frame):
+                maybe_frame = await maybe_frame
+            frame_path = str(maybe_frame)
+        except Exception as exc:
+            self._record_video_review_failure(message_id, context, str(exc))
+            return
+
+        try:
+            self._review_storage.record_event(
+                "video.review.frame_extracted",
+                trace_id=str(message_id),
+                payload={
+                    "customer_id": context.customer_id,
+                    "customer_name": context.customer_name,
+                    "device_serial": context.device_serial,
+                    "video_path": video_path,
+                    "frame_path": frame_path,
+                },
+            )
+        except Exception as exc:
+            self._logger.warning("video frame analytics recording failed: %s", exc)
+
+        await self._submit_for_review(result, context, frame_path)
+
+    def _record_video_review_failure(self, message_id: int, context: MessageContext, reason: str) -> None:
+        if self._review_storage is None:
+            return
+        try:
+            self._review_storage.record_event(
+                "video.review.submit_failed",
+                trace_id=str(message_id),
+                payload={
+                    "customer_id": context.customer_id,
+                    "customer_name": context.customer_name,
+                    "device_serial": context.device_serial,
+                    "reason": reason,
+                },
+            )
+        except Exception as exc:
+            self._logger.warning("video review failure analytics recording failed: %s", exc)
 
     async def _submit_for_review(self, result: MessageProcessResult, context: MessageContext, image_path: str) -> None:
         from wecom_automation.services.review.storage import PendingReviewRow
@@ -351,7 +433,6 @@ class MessageProcessor:
             )
         except Exception as exc:
             self._logger.error("insert_pending_review failed: %s", exc)
-            await self._emit_legacy(result, context)
             return
 
         try:
@@ -450,6 +531,7 @@ def create_message_processor(
     review_storage=None,
     review_submitter=None,
     review_gate_enabled: bool = False,
+    video_frame_extractor=None,
 ) -> MessageProcessor:
     """
     创建消息处理器并注册所有默认处理器
@@ -482,6 +564,7 @@ def create_message_processor(
         review_storage=review_storage,
         review_submitter=review_submitter,
         review_gate_enabled=review_gate_enabled,
+        video_frame_extractor=video_frame_extractor,
     )
     if media_action_settings is not None:
         processor.set_media_action_settings(media_action_settings)

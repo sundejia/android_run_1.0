@@ -29,6 +29,10 @@ from wecom_automation.services.review.storage import (
     ReviewStorage,
     ReviewVerdictRow,
 )
+from wecom_automation.services.review.video_frames import (
+    extract_review_frame,
+    review_frame_path,
+)
 
 __all__ = [
     "AnalyticsEventRow",
@@ -47,6 +51,8 @@ __all__ = [
     "ReviewVerdictRow",
     "UnknownSkillVersionError",
     "WebhookEnvelope",
+    "extract_review_frame",
     "is_approved",
     "parse_envelope",
+    "review_frame_path",
 ]

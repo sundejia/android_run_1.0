@@ -129,12 +129,13 @@ class TestPolicyEvaluator:
 
 
 class _RecordingAction(IMediaAction):
-    def __init__(self) -> None:
+    def __init__(self, name: str = "recording") -> None:
+        self._name = name
         self.calls: list[MediaEvent] = []
 
     @property
     def action_name(self) -> str:
-        return "recording"
+        return self._name
 
     async def should_execute(self, event: MediaEvent, settings: dict) -> bool:
         return True
@@ -228,6 +229,31 @@ class TestReviewGate:
 
         events = storage.list_events(trace_id="100")
         assert any(e.event_type == "review.gate.approved" for e in events)
+
+    def test_approved_emits_to_group_invite_and_contact_share_actions(self, storage: ReviewStorage) -> None:
+        _seed_pending(storage)
+        _seed_verdict(storage)
+
+        bus = MediaEventBus()
+        group = _RecordingAction("auto_group_invite")
+        contact = _RecordingAction("auto_contact_share")
+        bus.register(group)
+        bus.register(contact)
+
+        gate = ReviewGate(
+            storage=storage,
+            bus=bus,
+            settings_provider=lambda: {
+                "enabled": True,
+                "auto_group_invite": {"enabled": True},
+                "auto_contact_share": {"enabled": True},
+            },
+        )
+
+        outcome = asyncio.run(gate.on_verdict(100))
+        assert outcome == ReviewGateOutcome.APPROVED
+        assert len(group.calls) == 1
+        assert len(contact.calls) == 1
 
     @pytest.mark.parametrize(
         "decision,is_portrait,is_real_person,face_visible",

@@ -55,8 +55,7 @@ def _settings_provider() -> dict[str, Any]:
 
 def _is_enabled(settings: dict[str, Any]) -> bool:
     gate_cfg = (settings.get("review_gate") or {}) if isinstance(settings, dict) else {}
-    # Default ON when the new pipeline is in use; legacy deployments can set it to false.
-    return bool(gate_cfg.get("enabled", True))
+    return bool(gate_cfg.get("enabled", False))
 
 
 def get_review_gate(*, storage: ReviewStorage | None = None) -> ReviewGate | None:

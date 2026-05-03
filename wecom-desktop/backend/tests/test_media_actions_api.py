@@ -16,6 +16,8 @@ from fastapi.testclient import TestClient
 
 backend_dir = Path(__file__).parent.parent
 sys.path.insert(0, str(backend_dir))
+src_dir = backend_dir.parent.parent / "src"
+sys.path.insert(0, str(src_dir))
 
 from main import app
 
@@ -40,10 +42,15 @@ class TestGetSettings:
         assert data["enabled"] is False
         assert "auto_blacklist" in data
         assert "auto_group_invite" in data
+        assert "auto_contact_share" in data
+        assert "review_gate" in data
         assert data["auto_blacklist"]["enabled"] is False
         assert data["auto_group_invite"]["enabled"] is False
         assert data["auto_group_invite"]["send_test_message_after_create"] is True
         assert data["auto_group_invite"]["test_message_text"] == "测试"
+        assert data["auto_group_invite"]["video_invite_policy"] == "extract_frame"
+        assert data["review_gate"]["enabled"] is False
+        assert data["review_gate"]["video_review_policy"] == "extract_frame"
 
     def test_get_settings_returns_stored_values(self):
         stored = {
@@ -63,6 +70,13 @@ class TestGetSettings:
                 "duplicate_name_policy": "first",
                 "post_confirm_wait_seconds": 2.5,
             },
+            "review_gate": {
+                "enabled": True,
+                "rating_server_url": "http://review.local:8080",
+                "upload_timeout_seconds": 45,
+                "upload_max_attempts": 2,
+                "video_review_policy": "extract_frame",
+            },
         }
         with patch("routers.media_actions.get_settings_service") as mock_svc:
             mock_svc.return_value.get_category.return_value = stored
@@ -76,6 +90,8 @@ class TestGetSettings:
         assert data["auto_group_invite"]["send_test_message_after_create"] is False
         assert data["auto_group_invite"]["test_message_text"] == "欢迎 {customer_name}"
         assert data["auto_group_invite"]["post_confirm_wait_seconds"] == 2.5
+        assert data["review_gate"]["enabled"] is True
+        assert data["review_gate"]["rating_server_url"] == "http://review.local:8080"
 
 
 class TestUpdateSettings:
@@ -145,6 +161,32 @@ class TestUpdateSettings:
         assert data["auto_group_invite"]["send_test_message_after_create"] is True
         assert data["auto_group_invite"]["post_confirm_wait_seconds"] == 3.0
 
+    def test_update_review_gate_settings(self):
+        with patch("routers.media_actions.get_settings_service") as mock_svc:
+            mock_svc.return_value.get_category.return_value = {}
+            mock_svc.return_value.set_category.return_value = {}
+
+            with patch("routers.global_websocket.get_global_ws_manager", return_value=_mock_ws_manager()):
+                response = client.put(
+                    "/api/media-actions/settings",
+                    json={
+                        "review_gate": {
+                            "enabled": True,
+                            "rating_server_url": "http://review.local:8080",
+                            "upload_timeout_seconds": 50,
+                            "upload_max_attempts": 2,
+                            "video_review_policy": "extract_frame",
+                        }
+                    },
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["review_gate"]["enabled"] is True
+        assert data["review_gate"]["rating_server_url"] == "http://review.local:8080"
+        assert data["review_gate"]["upload_timeout_seconds"] == 50
+        assert data["review_gate"]["upload_max_attempts"] == 2
+
 
 class TestGetLogs:
     def test_get_logs_empty(self):
@@ -174,6 +216,11 @@ class TestTestTrigger:
         data = response.json()
         assert data["status"] == "ok"
         assert isinstance(data["results"], list)
+        assert {r["action_name"] for r in data["results"]} == {
+            "auto_blacklist",
+            "auto_group_invite",
+            "auto_contact_share",
+        }
         for r in data["results"]:
             assert r["status"] == "skipped"
 

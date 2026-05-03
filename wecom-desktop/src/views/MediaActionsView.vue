@@ -11,7 +11,7 @@ const saving = ref(false)
 const testing = ref(false)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
-const settings = ref<MediaAutoActionSettings>({
+const defaultSettings: MediaAutoActionSettings = {
   enabled: false,
   auto_blacklist: {
     enabled: false,
@@ -27,6 +27,7 @@ const settings = ref<MediaAutoActionSettings>({
     test_message_text: '测试',
     post_confirm_wait_seconds: 1,
     duplicate_name_policy: 'first',
+    video_invite_policy: 'extract_frame',
   },
   auto_contact_share: {
     enabled: false,
@@ -35,7 +36,16 @@ const settings = ref<MediaAutoActionSettings>({
     cooldown_seconds: 0,
     kefu_overrides: {},
   },
-})
+  review_gate: {
+    enabled: false,
+    rating_server_url: 'http://127.0.0.1:8080',
+    upload_timeout_seconds: 30,
+    upload_max_attempts: 3,
+    video_review_policy: 'extract_frame',
+  },
+}
+
+const settings = ref<MediaAutoActionSettings>(structuredClone(defaultSettings))
 
 const newMember = ref('')
 const newKefuName = ref('')
@@ -64,7 +74,15 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
 async function loadSettings() {
   loading.value = true
   try {
-    settings.value = await api.getMediaActionSettings()
+    const loaded = await api.getMediaActionSettings()
+    settings.value = {
+      ...structuredClone(defaultSettings),
+      ...loaded,
+      auto_blacklist: { ...defaultSettings.auto_blacklist, ...loaded.auto_blacklist },
+      auto_group_invite: { ...defaultSettings.auto_group_invite, ...loaded.auto_group_invite },
+      auto_contact_share: { ...defaultSettings.auto_contact_share, ...loaded.auto_contact_share },
+      review_gate: { ...defaultSettings.review_gate, ...loaded.review_gate },
+    }
   } catch (err: any) {
     showToast(err.message || t('media_actions.load_failed'), 'error')
   } finally {
@@ -176,6 +194,95 @@ onMounted(loadSettings)
               class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
             ></div>
           </label>
+        </div>
+      </div>
+
+      <!-- Review Gate Section -->
+      <div
+        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
+        :class="{ 'opacity-50': !settings.enabled }"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-100">
+              {{ t('media_actions.review_gate_title') }}
+            </h2>
+            <p class="text-sm text-gray-400 mt-1">
+              {{ t('media_actions.review_gate_desc') }}
+            </p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input
+              id="media-review-gate-enabled"
+              v-model="settings.review_gate.enabled"
+              type="checkbox"
+              :disabled="!settings.enabled"
+              class="sr-only peer"
+            />
+            <div
+              class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"
+            ></div>
+          </label>
+        </div>
+
+        <div v-if="settings.review_gate.enabled && settings.enabled" class="space-y-4">
+          <div>
+            <label for="media-review-server-url" class="block text-sm font-medium text-gray-300 mb-1">
+              {{ t('media_actions.review_server_url_label') }}
+            </label>
+            <input
+              id="media-review-server-url"
+              v-model="settings.review_gate.rating_server_url"
+              type="text"
+              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="http://127.0.0.1:8080"
+            />
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label for="media-review-upload-timeout" class="block text-sm font-medium text-gray-300 mb-1">
+                {{ t('media_actions.review_timeout_label') }}
+              </label>
+              <input
+                id="media-review-upload-timeout"
+                v-model.number="settings.review_gate.upload_timeout_seconds"
+                type="number"
+                min="1"
+                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label for="media-review-upload-attempts" class="block text-sm font-medium text-gray-300 mb-1">
+                {{ t('media_actions.review_attempts_label') }}
+              </label>
+              <input
+                id="media-review-upload-attempts"
+                v-model.number="settings.review_gate.upload_max_attempts"
+                type="number"
+                min="1"
+                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label for="media-video-review-policy" class="block text-sm font-medium text-gray-300 mb-1">
+              {{ t('media_actions.video_review_policy_label') }}
+            </label>
+            <select
+              id="media-video-review-policy"
+              v-model="settings.review_gate.video_review_policy"
+              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="extract_frame">{{ t('media_actions.video_review_extract_frame') }}</option>
+              <option value="skip">{{ t('media_actions.video_review_skip') }}</option>
+              <option value="always">{{ t('media_actions.video_review_always') }}</option>
+            </select>
+            <p class="text-xs text-gray-500 mt-1">
+              {{ t('media_actions.review_gate_hint') }}
+            </p>
+          </div>
         </div>
       </div>
 

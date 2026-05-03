@@ -91,6 +91,9 @@ def test_load_group_invite_defaults_are_backward_compatible():
     assert out["auto_group_invite"]["test_message_text"] == "测试"
     assert out["auto_group_invite"]["post_confirm_wait_seconds"] == 1.0
     assert out["auto_group_invite"]["duplicate_name_policy"] == "first"
+    assert out["auto_group_invite"]["video_invite_policy"] == "extract_frame"
+    assert out["review_gate"]["enabled"] is False
+    assert out["review_gate"]["video_review_policy"] == "extract_frame"
 
 
 def test_load_merges_new_group_invite_fields():
@@ -139,5 +142,47 @@ def test_load_merges_new_group_invite_fields():
         assert out["auto_group_invite"]["test_message_text"] == "联调消息"
         assert out["auto_group_invite"]["post_confirm_wait_seconds"] == 2.0
         assert out["auto_group_invite"]["duplicate_name_policy"] == "first"
+    finally:
+        Path(p).unlink(missing_ok=True)
+
+
+def test_load_merges_review_gate_fields():
+    fd, p = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _init_settings_db(Path(p))
+        conn = sqlite3.connect(p)
+        conn.execute(
+            """
+            INSERT INTO settings (category, key, value_type, value_bool)
+            VALUES ('media_auto_actions', 'enabled', 'boolean', 1)
+            """
+        )
+        conn.execute(
+            """
+            INSERT INTO settings (category, key, value_type, value_json)
+            VALUES ('media_auto_actions', 'review_gate', 'json', ?)
+            """,
+            (
+                json.dumps(
+                    {
+                        "enabled": True,
+                        "rating_server_url": "http://review.local:8080",
+                        "upload_timeout_seconds": 45.0,
+                        "upload_max_attempts": 2,
+                    },
+                    ensure_ascii=False,
+                ),
+            ),
+        )
+        conn.commit()
+        conn.close()
+
+        out = load_media_auto_action_settings(p)
+        assert out["review_gate"]["enabled"] is True
+        assert out["review_gate"]["rating_server_url"] == "http://review.local:8080"
+        assert out["review_gate"]["upload_timeout_seconds"] == 45.0
+        assert out["review_gate"]["upload_max_attempts"] == 2
+        assert out["review_gate"]["video_review_policy"] == "extract_frame"
     finally:
         Path(p).unlink(missing_ok=True)

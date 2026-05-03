@@ -277,6 +277,7 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
             "test_message_text": "测试",
             "post_confirm_wait_seconds": 1.0,
             "duplicate_name_policy": "first",
+            "video_invite_policy": "extract_frame",
         },
         "自动拉群子配置",
         False,
@@ -293,6 +294,20 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
             "kefu_overrides": {},
         },
         "自动发名片子配置",
+        False,
+    ),
+    (
+        "media_auto_actions",
+        "review_gate",
+        ValueType.JSON.value,
+        {
+            "enabled": False,
+            "rating_server_url": "http://127.0.0.1:8080",
+            "upload_timeout_seconds": 30.0,
+            "upload_max_attempts": 3,
+            "video_review_policy": "extract_frame",
+        },
+        "媒体动作图片审核门配置",
         False,
     ),
 ]

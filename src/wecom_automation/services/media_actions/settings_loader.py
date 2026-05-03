@@ -32,6 +32,7 @@ DEFAULT_MEDIA_AUTO_ACTION_SETTINGS: dict[str, Any] = {
         "test_message_text": "测试",
         "post_confirm_wait_seconds": 1.0,
         "duplicate_name_policy": "first",
+        "video_invite_policy": "extract_frame",
     },
     "auto_contact_share": {
         "enabled": False,
@@ -39,6 +40,13 @@ DEFAULT_MEDIA_AUTO_ACTION_SETTINGS: dict[str, Any] = {
         "skip_if_already_shared": True,
         "cooldown_seconds": 0,
         "kefu_overrides": {},
+    },
+    "review_gate": {
+        "enabled": False,
+        "rating_server_url": "http://127.0.0.1:8080",
+        "upload_timeout_seconds": 30.0,
+        "upload_max_attempts": 3,
+        "video_review_policy": "extract_frame",
     },
 }
 
@@ -92,7 +100,7 @@ def load_media_auto_action_settings(db_path: str) -> dict[str, Any]:
     if "enabled" in stored:
         result["enabled"] = bool(stored["enabled"])
 
-    for section in ("auto_blacklist", "auto_group_invite", "auto_contact_share"):
+    for section in ("auto_blacklist", "auto_group_invite", "auto_contact_share", "review_gate"):
         if section in stored and isinstance(stored[section], dict):
             result[section] = {**result[section], **stored[section]}
 

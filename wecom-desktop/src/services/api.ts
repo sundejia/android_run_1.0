@@ -867,6 +867,7 @@ export interface AutoGroupInviteSettings {
   test_message_text: string
   post_confirm_wait_seconds: number
   duplicate_name_policy: string
+  video_invite_policy?: string
 }
 
 export interface AutoContactShareSettings {
@@ -877,11 +878,20 @@ export interface AutoContactShareSettings {
   kefu_overrides: Record<string, string>
 }
 
+export interface ReviewGateSettings {
+  enabled: boolean
+  rating_server_url: string
+  upload_timeout_seconds: number
+  upload_max_attempts: number
+  video_review_policy: string
+}
+
 export interface MediaAutoActionSettings {
   enabled: boolean
   auto_blacklist: AutoBlacklistSettings
   auto_group_invite: AutoGroupInviteSettings
   auto_contact_share: AutoContactShareSettings
+  review_gate: ReviewGateSettings
 }
 
 export interface MediaActionLogEntry {

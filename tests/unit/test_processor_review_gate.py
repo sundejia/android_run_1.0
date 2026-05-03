@@ -143,7 +143,7 @@ class TestImageReviewGateRouting:
         assert any(e.event_type == "review.submitted" for e in events)
 
     @pytest.mark.asyncio
-    async def test_customer_image_without_path_falls_back_to_direct_emit(self, storage: ReviewStorage) -> None:
+    async def test_customer_image_without_path_fails_closed(self, storage: ReviewStorage) -> None:
         repo = MagicMock()
         repo.add_message_if_not_exists = MagicMock(return_value=(True, MagicMock(id=101)))
         bus = MediaEventBus()
@@ -168,8 +168,10 @@ class TestImageReviewGateRouting:
         )
 
         await processor.process(_image_msg(), _ctx())
-        spy.should_execute.assert_awaited_once()
+        spy.should_execute.assert_not_awaited()
         submitter.assert_not_awaited()
+        events = storage.list_events(trace_id="101")
+        assert any(e.event_type == "review.submit_failed" for e in events)
 
     @pytest.mark.asyncio
     async def test_disabled_review_gate_uses_legacy_direct_emit(self, storage: ReviewStorage, tmp_path: Path) -> None:
@@ -231,6 +233,101 @@ class TestVideoInvitePolicy:
 
         events = storage.list_events(trace_id="200")
         assert any(e.event_type == "video.invite.skipped" for e in events)
+
+    @pytest.mark.asyncio
+    async def test_video_extract_frame_policy_submits_frame_for_review(self, storage: ReviewStorage, tmp_path: Path) -> None:
+        repo = MagicMock()
+        repo.add_message_if_not_exists = MagicMock(return_value=(True, MagicMock(id=202)))
+        bus = MediaEventBus()
+        spy = AsyncMock()
+        spy.action_name = "spy"
+        spy.should_execute = AsyncMock(return_value=True)
+        spy.execute = AsyncMock(return_value=ActionResult(action_name="spy", status=ActionStatus.SUCCESS, message="ok"))
+        bus.register(spy)
+
+        video_path = str(tmp_path / "clip.mp4")
+        frame_path = str(tmp_path / "clip.review.jpg")
+        handler = _make_handler("video", 202)
+        handler.process = AsyncMock(
+            return_value=MessageProcessResult(
+                added=True,
+                message_type="video",
+                message_id=202,
+                extra={"path": video_path},
+            )
+        )
+        submitter = AsyncMock()
+        extractor = MagicMock(return_value=frame_path)
+        processor = MessageProcessor(
+            repository=repo,
+            handlers=[handler],
+            media_event_bus=bus,
+            review_storage=storage,
+            review_submitter=submitter,
+            review_gate_enabled=True,
+            video_frame_extractor=extractor,
+        )
+        processor.set_media_action_settings(
+            {
+                "auto_group_invite": {"enabled": True},
+                "review_gate": {"enabled": True, "video_review_policy": "extract_frame"},
+            }
+        )
+
+        await processor.process(_video_msg(), _ctx())
+
+        spy.should_execute.assert_not_awaited()
+        extractor.assert_called_once_with(video_path)
+        pending = storage.get_pending_review(202)
+        assert pending is not None
+        assert pending.image_path == frame_path
+
+        for _ in range(50):
+            if submitter.await_count >= 1:
+                break
+            await asyncio.sleep(0.01)
+        submitter.assert_awaited_once_with(202, frame_path)
+        events = storage.list_events(trace_id="202")
+        assert any(e.event_type == "video.review.frame_extracted" for e in events)
+
+    @pytest.mark.asyncio
+    async def test_video_extract_frame_failure_fails_closed(self, storage: ReviewStorage) -> None:
+        repo = MagicMock()
+        repo.add_message_if_not_exists = MagicMock(return_value=(True, MagicMock(id=203)))
+        bus = MediaEventBus()
+        spy = AsyncMock()
+        spy.action_name = "spy"
+        spy.should_execute = AsyncMock(return_value=True)
+        bus.register(spy)
+        handler = _make_handler("video", 203)
+        handler.process = AsyncMock(
+            return_value=MessageProcessResult(
+                added=True,
+                message_type="video",
+                message_id=203,
+                extra={"path": "/tmp/missing.mp4"},
+            )
+        )
+        submitter = AsyncMock()
+        extractor = MagicMock(side_effect=RuntimeError("ffmpeg not found"))
+        processor = MessageProcessor(
+            repository=repo,
+            handlers=[handler],
+            media_event_bus=bus,
+            review_storage=storage,
+            review_submitter=submitter,
+            review_gate_enabled=True,
+            video_frame_extractor=extractor,
+        )
+        processor.set_media_action_settings({"review_gate": {"enabled": True, "video_review_policy": "extract_frame"}})
+
+        await processor.process(_video_msg(), _ctx())
+
+        spy.should_execute.assert_not_awaited()
+        submitter.assert_not_awaited()
+        assert storage.get_pending_review(203) is None
+        events = storage.list_events(trace_id="203")
+        assert any(e.event_type == "video.review.submit_failed" for e in events)
 
     @pytest.mark.asyncio
     async def test_video_always_policy_emits_legacy(self, storage: ReviewStorage) -> None:

@@ -41,6 +41,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "test_message_text": "测试",
         "post_confirm_wait_seconds": 1.0,
         "duplicate_name_policy": "first",
+        "video_invite_policy": "extract_frame",
     },
     "auto_contact_share": {
         "enabled": False,
@@ -48,6 +49,13 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "skip_if_already_shared": True,
         "cooldown_seconds": 0,
         "kefu_overrides": {},
+    },
+    "review_gate": {
+        "enabled": False,
+        "rating_server_url": "http://127.0.0.1:8080",
+        "upload_timeout_seconds": 30.0,
+        "upload_max_attempts": 3,
+        "video_review_policy": "extract_frame",
     },
 }
 
@@ -73,6 +81,7 @@ class AutoGroupInviteSettings(BaseModel):
     test_message_text: str = "测试"
     post_confirm_wait_seconds: float = 1.0
     duplicate_name_policy: str = "first"
+    video_invite_policy: str = "extract_frame"
 
 
 class AutoContactShareSettings(BaseModel):
@@ -83,11 +92,20 @@ class AutoContactShareSettings(BaseModel):
     kefu_overrides: dict[str, str] = Field(default_factory=dict)
 
 
+class ReviewGateSettings(BaseModel):
+    enabled: bool = False
+    rating_server_url: str = "http://127.0.0.1:8080"
+    upload_timeout_seconds: float = 30.0
+    upload_max_attempts: int = 3
+    video_review_policy: str = "extract_frame"
+
+
 class MediaAutoActionSettings(BaseModel):
     enabled: bool = False
     auto_blacklist: AutoBlacklistSettings = Field(default_factory=AutoBlacklistSettings)
     auto_group_invite: AutoGroupInviteSettings = Field(default_factory=AutoGroupInviteSettings)
     auto_contact_share: AutoContactShareSettings = Field(default_factory=AutoContactShareSettings)
+    review_gate: ReviewGateSettings = Field(default_factory=ReviewGateSettings)
 
 
 class UpdateMediaActionSettingsRequest(BaseModel):
@@ -95,6 +113,7 @@ class UpdateMediaActionSettingsRequest(BaseModel):
     auto_blacklist: Optional[AutoBlacklistSettings] = None
     auto_group_invite: Optional[AutoGroupInviteSettings] = None
     auto_contact_share: Optional[AutoContactShareSettings] = None
+    review_gate: Optional[ReviewGateSettings] = None
 
 
 class ActionLogEntry(BaseModel):
@@ -123,7 +142,7 @@ def _get_settings() -> dict[str, Any]:
         if "enabled" in stored:
             result["enabled"] = stored["enabled"]
 
-        for section_key in ("auto_blacklist", "auto_group_invite", "auto_contact_share"):
+        for section_key in ("auto_blacklist", "auto_group_invite", "auto_contact_share", "review_gate"):
             if section_key in stored and isinstance(stored[section_key], dict):
                 result[section_key] = {**DEFAULT_SETTINGS[section_key], **stored[section_key]}
 
@@ -170,6 +189,9 @@ def _apply_media_action_settings_update_sync(
 
     if request.auto_contact_share is not None:
         current["auto_contact_share"] = request.auto_contact_share.model_dump()
+
+    if request.review_gate is not None:
+        current["review_gate"] = request.review_gate.model_dump()
 
     return _save_settings(current)
 
@@ -269,6 +291,7 @@ async def test_trigger_media_action(
         from wecom_automation.services.media_actions.event_bus import MediaEventBus
         from wecom_automation.services.media_actions.actions.auto_blacklist import AutoBlacklistAction
         from wecom_automation.services.media_actions.actions.auto_group_invite import AutoGroupInviteAction
+        from wecom_automation.services.media_actions.actions.auto_contact_share import AutoContactShareAction
         from wecom_automation.services.blacklist_service import BlacklistWriter
 
         settings = _get_settings()
@@ -293,6 +316,10 @@ async def test_trigger_media_action(
         from wecom_automation.services.media_actions.group_chat_service import GroupChatService
         group_service = GroupChatService()
         bus.register(AutoGroupInviteAction(group_chat_service=group_service))
+
+        from wecom_automation.services.contact_share.service import ContactShareService
+        contact_share_service = ContactShareService(wecom_service=None)
+        bus.register(AutoContactShareAction(contact_share_service=contact_share_service))
 
         results = await bus.emit(event, settings)
 
