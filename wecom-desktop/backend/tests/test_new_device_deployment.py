@@ -101,7 +101,26 @@ def deployment_db():
                 message_id INTEGER NOT NULL,
                 file_path TEXT,
                 width INTEGER,
-                height INTEGER
+                height INTEGER,
+                ai_review_score REAL,
+                ai_review_decision TEXT,
+                ai_review_details_json TEXT,
+                ai_review_at TEXT,
+                ai_review_status TEXT,
+                ai_review_error TEXT,
+                ai_review_requested_at TEXT
+            );
+
+            CREATE TABLE videos (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                message_id INTEGER NOT NULL,
+                duration TEXT,
+                ai_review_score REAL,
+                ai_review_status TEXT,
+                ai_review_error TEXT,
+                ai_review_requested_at TEXT,
+                ai_review_at TEXT,
+                ai_review_frames_json TEXT
             );
 
             CREATE TABLE blacklist (
@@ -315,7 +334,7 @@ def deployment_db():
         conn.close()
 
     yield db_path
-    shutil.rmtree(temp_dir)
+    shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 @pytest.fixture
@@ -386,6 +405,30 @@ def test_conversation_history_prefers_real_kefu_over_placeholder(client):
     assert payload["kefu_name"] == "RealAgent"
     assert payload["customer_name"] == "CustomerOnlyReal"
     assert payload["total_messages"] == 1
+    assert [msg["content"] for msg in payload["messages"]] == ["real only message"]
+
+
+def test_conversation_history_defaults_to_device_scoped_db(monkeypatch, deployment_db):
+    from routers import sidecar
+
+    empty_control = deployment_db.parent / "empty-control.db"
+    conn = sqlite3.connect(str(empty_control))
+    conn.close()
+
+    monkeypatch.setattr(sidecar, "get_db_path", lambda *_: empty_control)
+    monkeypatch.setattr(sidecar, "get_device_conversation_db_path", lambda serial: deployment_db)
+
+    with TestClient(app) as test_client:
+        response = test_client.get(
+            "/sidecar/SER123/conversation-history",
+            params={"contact_name": "CustomerOnlyReal", "channel": "@WeChat"},
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["db_path"] == str(deployment_db)
+    assert payload["kefu_name"] == "RealAgent"
     assert [msg["content"] for msg in payload["messages"]] == ["real only message"]
 
 

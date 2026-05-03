@@ -24,8 +24,26 @@ from wecom_automation.services.wecom_service import WeComService
 from wecom_automation.database.schema import get_connection, get_db_path
 
 from services.ai_review_details import extract_ai_review_breakdown, extract_ai_review_reason
+from services.conversation_storage import get_device_conversation_db_path
 
 router = APIRouter()
+
+
+def _resolve_sidecar_conversation_db_path(serial: str, db_path: str | None = None) -> Path:
+    """Resolve the conversation DB Sidecar should use for one device.
+
+    Sidecar history is device-scoped. The shared control DB may be empty in
+    multi-device deployments, so default to the per-device conversation DB and
+    keep the explicit db_path override for diagnostics and tests.
+    """
+    if db_path:
+        return get_db_path(db_path)
+
+    device_db = get_device_conversation_db_path(serial)
+    if device_db.exists():
+        return device_db
+
+    return get_db_path(None)
 
 
 class MessageStatus(str, Enum):
@@ -828,7 +846,7 @@ async def send_and_save_message(serial: str, request: SendAndSaveRequest) -> Sen
                 pass
 
         if contact_name or channel:
-            resolved_path = get_db_path(None)
+            resolved_path = _resolve_sidecar_conversation_db_path(serial)
             now = datetime.now()
             hash_source = f"sidecar_{serial}_{now.isoformat()}_{uuid.uuid4()}"
             message_hash = hashlib.sha256(hash_source.encode()).hexdigest()
@@ -954,7 +972,7 @@ async def get_conversation_history(
         return ConversationHistoryResponse(success=False, error="Either contact_name or channel is required")
 
     try:
-        resolved_path = get_db_path(db_path)
+        resolved_path = _resolve_sidecar_conversation_db_path(serial, db_path)
         if not resolved_path.exists():
             return ConversationHistoryResponse(
                 success=False,
