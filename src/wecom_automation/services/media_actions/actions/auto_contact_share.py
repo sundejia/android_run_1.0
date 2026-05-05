@@ -40,26 +40,72 @@ class AutoContactShareAction(IMediaAction):
 
     async def should_execute(self, event: MediaEvent, settings: dict) -> bool:
         if not settings.get("enabled", False):
+            logger.debug(
+                "Skipping auto-contact-share: media actions disabled "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         cs = settings.get("auto_contact_share", {})
         if not cs.get("enabled", False):
+            logger.debug(
+                "Skipping auto-contact-share: action disabled "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         if not self._service or not getattr(self._service, "_wecom", None):
-            logger.debug("ContactShareService has no WeComService; skipping auto-contact-share")
+            logger.debug(
+                "Skipping auto-contact-share: ContactShareService has no WeComService "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         if not event.is_media:
+            logger.debug(
+                "Skipping auto-contact-share: message is not media "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         contact_name = self._resolve_contact_name(event, cs)
         if not contact_name:
-            logger.debug("No contact name configured; skipping auto-contact-share")
+            logger.debug(
+                "Skipping auto-contact-share: no contact name configured "
+                "(device=%s, customer=%s, kefu=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.kefu_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         if cs.get("skip_if_already_shared", True):
             try:
+                logger.debug(
+                    "Checking contact share history before auto-contact-share "
+                    "(device=%s, customer=%s, contact=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    contact_name,
+                )
                 already = await self._service.contact_already_shared(
                     device_serial=event.device_serial,
                     customer_name=event.customer_name,
@@ -71,9 +117,27 @@ class AutoContactShareAction(IMediaAction):
                         event.customer_name,
                     )
                     return False
-            except Exception:
-                pass
+            except Exception as exc:
+                logger.warning(
+                    "Failed to check contact share history; continuing with auto-contact-share "
+                    "(device=%s, customer=%s, contact=%s): %s",
+                    event.device_serial,
+                    event.customer_name,
+                    contact_name,
+                    exc,
+                    exc_info=True,
+                )
 
+        logger.debug(
+            "Auto-contact-share eligible "
+            "(device=%s, customer=%s, kefu=%s, contact=%s, message_type=%s, message_id=%s)",
+            event.device_serial,
+            event.customer_name,
+            event.kefu_name,
+            contact_name,
+            event.message_type,
+            event.message_id,
+        )
         return True
 
     async def execute(self, event: MediaEvent, settings: dict) -> ActionResult:
@@ -87,6 +151,19 @@ class AutoContactShareAction(IMediaAction):
                 pre_share_text = render_media_template(template, event, preserve_on_error=True)
 
         try:
+            logger.info(
+                "Starting auto-contact-share "
+                "(device=%s, customer=%s, kefu=%s, contact=%s, message_type=%s, message_id=%s, "
+                "send_pre_message=%s, pre_message_length=%d)",
+                event.device_serial,
+                event.customer_name,
+                event.kefu_name,
+                contact_name,
+                event.message_type,
+                event.message_id,
+                bool(pre_share_text),
+                len(pre_share_text),
+            )
             request = ContactShareRequest(
                 device_serial=event.device_serial,
                 customer_name=event.customer_name,
@@ -114,6 +191,14 @@ class AutoContactShareAction(IMediaAction):
                     },
                 )
             else:
+                logger.error(
+                    "Auto-contact-share service returned failure "
+                    "(device=%s, customer=%s, contact=%s, message_id=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    contact_name,
+                    event.message_id,
+                )
                 return ActionResult(
                     action_name=self.action_name,
                     status=ActionStatus.ERROR,
@@ -121,7 +206,14 @@ class AutoContactShareAction(IMediaAction):
                 )
 
         except Exception as exc:
-            logger.error("Auto-contact-share failed for %s: %s", event.customer_name, exc)
+            logger.exception(
+                "Auto-contact-share failed "
+                "(device=%s, customer=%s, contact=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                contact_name,
+                event.message_id,
+            )
             return ActionResult(
                 action_name=self.action_name,
                 status=ActionStatus.ERROR,

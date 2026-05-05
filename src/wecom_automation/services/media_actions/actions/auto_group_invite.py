@@ -39,23 +39,61 @@ class AutoGroupInviteAction(IMediaAction):
 
     async def should_execute(self, event: MediaEvent, settings: dict) -> bool:
         if not settings.get("enabled", False):
+            logger.debug(
+                "Skipping auto-group-invite: media actions disabled "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         gi_settings = settings.get("auto_group_invite", {})
         if not gi_settings.get("enabled", False):
+            logger.debug(
+                "Skipping auto-group-invite: action disabled "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         if not event.is_media:
+            logger.debug(
+                "Skipping auto-group-invite: message is not media "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         members = gi_settings.get("group_members", [])
         if not members:
-            logger.debug("No group members configured; skipping auto-group-invite")
+            logger.debug(
+                "Skipping auto-group-invite: no group members configured "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+            )
             return False
 
         if gi_settings.get("skip_if_group_exists", True):
             group_name = self._resolve_group_name(event, gi_settings)
             try:
+                logger.debug(
+                    "Checking existing group before auto-group-invite "
+                    "(device=%s, customer=%s, group_name=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    group_name,
+                )
                 exists = await self._service.group_exists(
                     device_serial=event.device_serial,
                     customer_name=event.customer_name,
@@ -69,8 +107,26 @@ class AutoGroupInviteAction(IMediaAction):
                     )
                     return False
             except Exception as exc:
-                logger.warning("Failed to check group existence: %s", exc)
+                logger.warning(
+                    "Failed to check group existence; continuing with auto-group-invite "
+                    "(device=%s, customer=%s, group_name=%s): %s",
+                    event.device_serial,
+                    event.customer_name,
+                    group_name,
+                    exc,
+                    exc_info=True,
+                )
 
+        logger.debug(
+            "Auto-group-invite eligible "
+            "(device=%s, customer=%s, kefu=%s, message_type=%s, message_id=%s, members=%s)",
+            event.device_serial,
+            event.customer_name,
+            event.kefu_name,
+            event.message_type,
+            event.message_id,
+            members,
+        )
         return True
 
     async def execute(self, event: MediaEvent, settings: dict) -> ActionResult:
@@ -80,6 +136,22 @@ class AutoGroupInviteAction(IMediaAction):
         test_message_text = self._resolve_test_message(event, gi_settings)
 
         try:
+            logger.info(
+                "Starting auto-group-invite "
+                "(device=%s, customer=%s, kefu=%s, message_type=%s, message_id=%s, "
+                "group_name=%s, members=%s, send_test_message=%s, duplicate_policy=%s, "
+                "post_confirm_wait=%.2f)",
+                event.device_serial,
+                event.customer_name,
+                event.kefu_name,
+                event.message_type,
+                event.message_id,
+                group_name,
+                members,
+                gi_settings.get("send_test_message_after_create", True),
+                gi_settings.get("duplicate_name_policy", "first"),
+                float(gi_settings.get("post_confirm_wait_seconds", 1.0)),
+            )
             success = await self._service.create_group_chat(
                 device_serial=event.device_serial,
                 customer_name=event.customer_name,
@@ -109,6 +181,14 @@ class AutoGroupInviteAction(IMediaAction):
                     },
                 )
             else:
+                logger.error(
+                    "Auto-group-invite service returned failure "
+                    "(device=%s, customer=%s, group_name=%s, members=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    group_name,
+                    members,
+                )
                 return ActionResult(
                     action_name=self.action_name,
                     status=ActionStatus.ERROR,
@@ -116,7 +196,14 @@ class AutoGroupInviteAction(IMediaAction):
                 )
 
         except Exception as exc:
-            logger.error("Auto-group-invite failed for %s: %s", event.customer_name, exc)
+            logger.exception(
+                "Auto-group-invite failed "
+                "(device=%s, customer=%s, group_name=%s, message_id=%s)",
+                event.device_serial,
+                event.customer_name,
+                group_name,
+                event.message_id,
+            )
             return ActionResult(
                 action_name=self.action_name,
                 status=ActionStatus.ERROR,

@@ -161,6 +161,7 @@ class GroupChatService(IGroupChatService):
         """Create the group_chats tracking table if it doesn't exist."""
         try:
             self._db_path = ensure_media_action_groups_table(self._db_path)
+            logger.debug("media_action_groups table ready (db_path=%s)", self._db_path)
         except Exception as exc:
             logger.warning("Failed to ensure media_action_groups table: %s", exc)
 
@@ -183,11 +184,15 @@ class GroupChatService(IGroupChatService):
         This method handles the orchestration and record-keeping.
         """
         logger.info(
-            "Creating group chat: device=%s, customer=%s, members=%s, name=%s",
+            "Creating group chat: device=%s, customer=%s, members=%s, name=%s, "
+            "send_test_message=%s, duplicate_policy=%s, post_confirm_wait=%.2f",
             device_serial,
             customer_name,
             group_members,
             group_name,
+            send_test_message,
+            duplicate_name_policy,
+            post_confirm_wait_seconds,
         )
 
         try:
@@ -208,11 +213,33 @@ class GroupChatService(IGroupChatService):
 
             if success:
                 self._record_group(device_serial, customer_name, group_name, group_members)
+                logger.info(
+                    "Group chat creation completed and recorded "
+                    "(device=%s, customer=%s, group_name=%s)",
+                    device_serial,
+                    customer_name,
+                    group_name,
+                )
+            else:
+                logger.error(
+                    "Group chat creation returned failure "
+                    "(device=%s, customer=%s, group_name=%s, members=%s)",
+                    device_serial,
+                    customer_name,
+                    group_name,
+                    group_members,
+                )
 
             return success
 
-        except Exception as exc:
-            logger.error("Group chat creation failed: %s", exc)
+        except Exception:
+            logger.exception(
+                "Group chat creation failed "
+                "(device=%s, customer=%s, group_name=%s)",
+                device_serial,
+                customer_name,
+                group_name,
+            )
             return False
 
     async def _perform_ui_group_creation(
@@ -258,19 +285,41 @@ class GroupChatService(IGroupChatService):
                 send_test_message=send_test_message,
                 test_message_text=test_message_text,
             )
+            logger.debug("Dispatching group invite workflow request: %s", request)
             result = await self._workflow_service.create_group_chat(request)
             if not result.success:
-                logger.error("UI automation for group creation failed: %s", result.error_message)
+                logger.error(
+                    "UI automation for group creation failed "
+                    "(device=%s, customer=%s, group_name=%s, selected_members=%s, error=%s)",
+                    device_serial,
+                    customer_name,
+                    group_name,
+                    result.selected_members,
+                    result.error_message,
+                )
                 return False
 
             for warning in result.warnings:
                 logger.warning("Group invite workflow warning: %s", warning)
 
-            logger.info("Group chat created successfully via UI automation")
+            logger.info(
+                "Group chat created successfully via UI automation "
+                "(device=%s, customer=%s, group_name=%s, selected_members=%s)",
+                device_serial,
+                customer_name,
+                group_name,
+                result.selected_members,
+            )
             return True
 
-        except Exception as exc:
-            logger.error("UI automation for group creation failed: %s", exc)
+        except Exception:
+            logger.exception(
+                "UI automation for group creation failed "
+                "(device=%s, customer=%s, group_name=%s)",
+                device_serial,
+                customer_name,
+                group_name,
+            )
             return False
 
     def _record_group(
@@ -292,6 +341,14 @@ class GroupChatService(IGroupChatService):
                     VALUES (?, ?, ?, ?)
                     """,
                     (device_serial, customer_name, group_name, json.dumps(group_members, ensure_ascii=False)),
+                )
+                logger.debug(
+                    "Recorded media action group "
+                    "(device=%s, customer=%s, group_name=%s, members=%s)",
+                    device_serial,
+                    customer_name,
+                    group_name,
+                    group_members,
                 )
         except Exception as exc:
             logger.warning("Failed to record group creation: %s", exc)
@@ -328,7 +385,16 @@ class GroupChatService(IGroupChatService):
                     """,
                     (device_serial, customer_name, group_name),
                 )
-                return cursor.fetchone() is not None
+                exists = cursor.fetchone() is not None
+                logger.debug(
+                    "Checked existing media action group "
+                    "(device=%s, customer=%s, group_name=%s, exists=%s)",
+                    device_serial,
+                    customer_name,
+                    group_name,
+                    exists,
+                )
+                return exists
         except Exception as exc:
             logger.warning("Failed to check group existence: %s", exc)
             return False

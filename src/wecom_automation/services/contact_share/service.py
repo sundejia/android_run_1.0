@@ -130,6 +130,7 @@ class ContactShareService(IContactShareService):
     def _ensure_table(self) -> None:
         try:
             self._db_path = ensure_contact_shares_table(self._db_path)
+            logger.debug("media_action_contact_shares table ready (db_path=%s)", self._db_path)
         except Exception as exc:
             logger.warning("Failed to ensure contact_shares table: %s", exc)
 
@@ -137,10 +138,14 @@ class ContactShareService(IContactShareService):
 
     async def share_contact_card(self, request: ContactShareRequest) -> bool:
         logger.info(
-            "Sharing contact card: device=%s, customer=%s, contact=%s",
+            "Sharing contact card: device=%s, customer=%s, contact=%s, kefu=%s, "
+            "send_pre_message=%s, pre_message_length=%d",
             request.device_serial,
             request.customer_name,
             request.contact_name,
+            request.kefu_name,
+            request.send_message_before_share,
+            len(request.pre_share_message_text),
         )
         try:
             if self._wecom is None:
@@ -151,9 +156,30 @@ class ContactShareService(IContactShareService):
             success = await self._perform_ui_share(request)
             if success:
                 self._record_share(request)
+                logger.info(
+                    "Contact card share completed and recorded "
+                    "(device=%s, customer=%s, contact=%s)",
+                    request.device_serial,
+                    request.customer_name,
+                    request.contact_name,
+                )
+            else:
+                logger.error(
+                    "Contact card share returned failure "
+                    "(device=%s, customer=%s, contact=%s)",
+                    request.device_serial,
+                    request.customer_name,
+                    request.contact_name,
+                )
             return success
-        except Exception as exc:
-            logger.error("Contact card sharing failed: %s", exc)
+        except Exception:
+            logger.exception(
+                "Contact card sharing failed "
+                "(device=%s, customer=%s, contact=%s)",
+                request.device_serial,
+                request.customer_name,
+                request.contact_name,
+            )
             return False
 
     async def contact_already_shared(
@@ -175,7 +201,16 @@ class ContactShareService(IContactShareService):
                     """,
                     (device_serial, customer_name, contact_name),
                 )
-                return cur.fetchone() is not None
+                already_shared = cur.fetchone() is not None
+                logger.debug(
+                    "Checked contact share history "
+                    "(device=%s, customer=%s, contact=%s, already_shared=%s)",
+                    device_serial,
+                    customer_name,
+                    contact_name,
+                    already_shared,
+                )
+                return already_shared
         except Exception as exc:
             logger.warning("Failed to check contact share history: %s", exc)
             return False
@@ -195,6 +230,11 @@ class ContactShareService(IContactShareService):
         """Execute the multi-step UI automation for contact card sharing."""
 
         # Step 1: Navigate to customer chat
+        logger.debug(
+            "Contact share step: navigate to customer chat (device=%s, customer=%s)",
+            request.device_serial,
+            request.customer_name,
+        )
         if not await self._wecom.navigate_to_chat(request.device_serial, request.customer_name):
             logger.error("Could not navigate to chat for '%s'", request.customer_name)
             return False
@@ -204,14 +244,33 @@ class ContactShareService(IContactShareService):
         # Step 1.5: Send pre-share message (if configured)
         if request.send_message_before_share and request.pre_share_message_text:
             try:
+                logger.debug(
+                    "Contact share step: send pre-share message "
+                    "(device=%s, customer=%s, text_length=%d)",
+                    request.device_serial,
+                    request.customer_name,
+                    len(request.pre_share_message_text),
+                )
                 sent, _ = await self._wecom.send_message(request.pre_share_message_text)
                 if not sent:
                     logger.warning("Pre-share message failed to send, continuing with card share")
+                else:
+                    logger.info(
+                        "Pre-share message sent before contact card "
+                        "(device=%s, customer=%s)",
+                        request.device_serial,
+                        request.customer_name,
+                    )
             except Exception as exc:
                 logger.warning("Pre-share message error (continuing): %s", exc)
             await asyncio.sleep(self._STEP_DELAY)
 
         # Step 2: Tap attachment button (i9u)
+        logger.debug(
+            "Contact share step: tap attachment button (device=%s, customer=%s)",
+            request.device_serial,
+            request.customer_name,
+        )
         if not await self._tap_attach_button():
             logger.error("Could not tap attachment button")
             return False
@@ -219,6 +278,11 @@ class ContactShareService(IContactShareService):
         await asyncio.sleep(self._STEP_DELAY)
 
         # Step 3: Open Contact Card — adaptive: try current page first, swipe if needed
+        logger.debug(
+            "Contact share step: open Contact Card menu (device=%s, customer=%s)",
+            request.device_serial,
+            request.customer_name,
+        )
         if not await self._open_contact_card_menu():
             logger.error("Could not find 'Contact Card' menu item")
             return False
@@ -226,6 +290,13 @@ class ContactShareService(IContactShareService):
         await asyncio.sleep(self._STEP_DELAY)
 
         # Step 4: Select the target contact from picker
+        logger.debug(
+            "Contact share step: select contact from picker "
+            "(device=%s, customer=%s, contact=%s)",
+            request.device_serial,
+            request.customer_name,
+            request.contact_name,
+        )
         if not await self._select_contact_from_picker(request.contact_name):
             logger.error("Could not select contact '%s' in picker", request.contact_name)
             return False
@@ -233,6 +304,12 @@ class ContactShareService(IContactShareService):
         await asyncio.sleep(self._STEP_DELAY)
 
         # Step 5: Tap "Send" in confirmation dialog
+        logger.debug(
+            "Contact share step: confirm send (device=%s, customer=%s, contact=%s)",
+            request.device_serial,
+            request.customer_name,
+            request.contact_name,
+        )
         if not await self._confirm_send():
             logger.error("Could not confirm contact card send")
             return False
@@ -304,11 +381,22 @@ class ContactShareService(IContactShareService):
         Falls back to ScrollContactFinder when explicitly configured.
         """
         if self._contact_finder is not None:
+            logger.debug(
+                "Selecting contact with configured finder "
+                "(contact=%s, finder=%s)",
+                contact_name,
+                type(self._contact_finder).__name__,
+            )
             return await self._contact_finder.find_and_select(contact_name, self._wecom.adb)
 
         from wecom_automation.services.ui_search.strategy import SearchContactFinder
 
         finder = SearchContactFinder()
+        logger.debug(
+            "Selecting contact with default finder (contact=%s, finder=%s)",
+            contact_name,
+            type(finder).__name__,
+        )
         return await finder.find_and_select(contact_name, self._wecom.adb)
 
     async def _confirm_send(self) -> bool:
@@ -348,6 +436,7 @@ class ContactShareService(IContactShareService):
                 continue
 
             if not elements:
+                logger.debug("[%s] no UI elements returned (attempt %d)", step_name, attempt + 1)
                 await asyncio.sleep(0.5)
                 continue
 
@@ -361,6 +450,13 @@ class ContactShareService(IContactShareService):
             if matches:
                 elem = matches[0]
                 idx = elem.get("index")
+                logger.debug(
+                    "[%s] found %d candidate(s); first=%s (attempt %d)",
+                    step_name,
+                    len(matches),
+                    self._describe_element(elem),
+                    attempt + 1,
+                )
                 if idx is not None:
                     try:
                         await self._wecom.adb.tap(int(idx))
@@ -368,11 +464,33 @@ class ContactShareService(IContactShareService):
                         return True
                     except Exception:
                         logger.warning("[%s] tap failed (attempt %d)", step_name, attempt + 1)
+                else:
+                    logger.warning(
+                        "[%s] first candidate has no droidrun index: %s",
+                        step_name,
+                        self._describe_element(elem),
+                    )
+            else:
+                logger.debug(
+                    "[%s] no match among %d UI elements (attempt %d)",
+                    step_name,
+                    len(elements),
+                    attempt + 1,
+                )
 
             await asyncio.sleep(0.5)
 
         logger.warning("[%s] not found after %d attempts", step_name, self._MAX_RETRIES)
         return False
+
+    @staticmethod
+    def _describe_element(elem: dict) -> str:
+        """Return compact UI element metadata for debug logs."""
+        return (
+            f"index={elem.get('index')}, text={elem.get('text')!r}, "
+            f"desc={elem.get('contentDescription')!r}, resourceId={elem.get('resourceId')!r}, "
+            f"bounds={elem.get('bounds')!r}"
+        )
 
     # ── Database Recording ────────────────────────────────────────
 
@@ -386,6 +504,14 @@ class ContactShareService(IContactShareService):
                     VALUES (?, ?, ?, ?, 'shared')
                     """,
                     (request.device_serial, request.customer_name, request.contact_name, request.kefu_name),
+                )
+                logger.debug(
+                    "Recorded contact share "
+                    "(device=%s, customer=%s, contact=%s, kefu=%s)",
+                    request.device_serial,
+                    request.customer_name,
+                    request.contact_name,
+                    request.kefu_name,
                 )
         except Exception as exc:
             logger.warning("Failed to record contact share: %s", exc)
