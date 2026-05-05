@@ -251,3 +251,73 @@ class TestTestTrigger:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "ok"
+
+
+class TestContactSharePreShareMessageSettings:
+    """Tests for the new pre-share message settings fields in auto_contact_share."""
+
+    def test_get_settings_includes_pre_share_message_fields(self):
+        """Default settings should include send_message_before_share and pre_share_message_text."""
+        with patch("routers.media_actions.get_settings_service") as mock_svc:
+            mock_svc.return_value.get_category.return_value = {}
+            response = client.get("/api/media-actions/settings")
+
+        assert response.status_code == 200
+        data = response.json()
+        cs = data["auto_contact_share"]
+        assert "send_message_before_share" in cs
+        assert cs["send_message_before_share"] is False
+        assert "pre_share_message_text" in cs
+        assert cs["pre_share_message_text"] == ""
+
+    def test_update_contact_share_pre_share_message_settings(self):
+        """PUT should accept and persist the new pre-share message fields."""
+        with patch("routers.media_actions.get_settings_service") as mock_svc:
+            mock_svc.return_value.get_category.return_value = {}
+            mock_svc.return_value.set_category.return_value = {}
+
+            with patch("routers.global_websocket.get_global_ws_manager", return_value=_mock_ws_manager()):
+                response = client.put(
+                    "/api/media-actions/settings",
+                    json={
+                        "auto_contact_share": {
+                            "enabled": True,
+                            "contact_name": "主管王",
+                            "skip_if_already_shared": True,
+                            "cooldown_seconds": 0,
+                            "kefu_overrides": {},
+                            "send_message_before_share": True,
+                            "pre_share_message_text": "你好{customer_name}，推荐主管给你",
+                        }
+                    },
+                )
+
+        assert response.status_code == 200
+        data = response.json()
+        cs = data["auto_contact_share"]
+        assert cs["send_message_before_share"] is True
+        assert cs["pre_share_message_text"] == "你好{customer_name}，推荐主管给你"
+
+    def test_get_settings_returns_stored_pre_share_values(self):
+        """When DB has stored pre-share values, they should be returned."""
+        stored = {
+            "enabled": True,
+            "auto_contact_share": {
+                "enabled": True,
+                "contact_name": "主管",
+                "skip_if_already_shared": True,
+                "cooldown_seconds": 0,
+                "kefu_overrides": {},
+                "send_message_before_share": True,
+                "pre_share_message_text": "这是主管名片",
+            },
+        }
+        with patch("routers.media_actions.get_settings_service") as mock_svc:
+            mock_svc.return_value.get_category.return_value = stored
+            response = client.get("/api/media-actions/settings")
+
+        assert response.status_code == 200
+        data = response.json()
+        cs = data["auto_contact_share"]
+        assert cs["send_message_before_share"] is True
+        assert cs["pre_share_message_text"] == "这是主管名片"

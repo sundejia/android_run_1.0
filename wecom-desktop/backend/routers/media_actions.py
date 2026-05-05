@@ -49,6 +49,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "skip_if_already_shared": True,
         "cooldown_seconds": 0,
         "kefu_overrides": {},
+        "send_message_before_share": False,
+        "pre_share_message_text": "",
     },
     "review_gate": {
         "enabled": False,
@@ -90,6 +92,8 @@ class AutoContactShareSettings(BaseModel):
     skip_if_already_shared: bool = True
     cooldown_seconds: int = 0
     kefu_overrides: dict[str, str] = Field(default_factory=dict)
+    send_message_before_share: bool = False
+    pre_share_message_text: str = ""
 
 
 class ReviewGateSettings(BaseModel):

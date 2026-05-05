@@ -18,6 +18,7 @@ from wecom_automation.services.media_actions.interfaces import (
     IMediaAction,
     MediaEvent,
 )
+from wecom_automation.services.media_actions.template_resolver import render_media_template
 
 logger = logging.getLogger(__name__)
 
@@ -79,12 +80,20 @@ class AutoContactShareAction(IMediaAction):
         cs = settings.get("auto_contact_share", {})
         contact_name = self._resolve_contact_name(event, cs)
 
+        pre_share_text = ""
+        if cs.get("send_message_before_share", False):
+            template = cs.get("pre_share_message_text", "")
+            if template.strip():
+                pre_share_text = render_media_template(template, event, preserve_on_error=True)
+
         try:
             request = ContactShareRequest(
                 device_serial=event.device_serial,
                 customer_name=event.customer_name,
                 contact_name=contact_name,
                 kefu_name=event.kefu_name,
+                send_message_before_share=bool(pre_share_text),
+                pre_share_message_text=pre_share_text,
             )
             success = await self._service.share_contact_card(request)
 

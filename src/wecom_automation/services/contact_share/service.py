@@ -201,6 +201,16 @@ class ContactShareService(IContactShareService):
 
         await asyncio.sleep(self._STEP_DELAY)
 
+        # Step 1.5: Send pre-share message (if configured)
+        if request.send_message_before_share and request.pre_share_message_text:
+            try:
+                sent, _ = await self._wecom.send_message(request.pre_share_message_text)
+                if not sent:
+                    logger.warning("Pre-share message failed to send, continuing with card share")
+            except Exception as exc:
+                logger.warning("Pre-share message error (continuing): %s", exc)
+            await asyncio.sleep(self._STEP_DELAY)
+
         # Step 2: Tap attachment button (i9u)
         if not await self._tap_attach_button():
             logger.error("Could not tap attachment button")

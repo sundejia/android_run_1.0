@@ -292,6 +292,8 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
             "skip_if_already_shared": True,
             "cooldown_seconds": 0,
             "kefu_overrides": {},
+            "send_message_before_share": False,
+            "pre_share_message_text": "",
         },
         "自动发名片子配置",
         False,

@@ -326,3 +326,128 @@ class TestAutoContactShareNavigationRecovery:
         # Success result should not be masked by navigation failure
         assert result.status == ActionStatus.SUCCESS
         service.restore_navigation.assert_awaited_once()
+
+
+class TestAutoContactSharePreShareMessage:
+    """Tests for send_message_before_share feature."""
+
+    @pytest.mark.asyncio
+    async def test_execute_sends_message_before_card_when_enabled(self):
+        """When send_message_before_share is enabled with text, share_contact_card
+        should receive a request with pre_share_message_text populated."""
+        service = AsyncMock()
+        service.share_contact_card = AsyncMock(return_value=True)
+        action = AutoContactShareAction(contact_share_service=service)
+
+        event = _make_event(customer_name="张三")
+        settings = _default_settings(
+            contact_name="主管王",
+            send_message_before_share=True,
+            pre_share_message_text="你好{customer_name}，这是我主管的名片",
+        )
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        call_args = service.share_contact_card.call_args[0][0]
+        assert call_args.send_message_before_share is True
+        assert "张三" in call_args.pre_share_message_text
+
+    @pytest.mark.asyncio
+    async def test_execute_skips_message_when_disabled(self):
+        """When send_message_before_share is False, request should have empty pre_share fields."""
+        service = AsyncMock()
+        service.share_contact_card = AsyncMock(return_value=True)
+        action = AutoContactShareAction(contact_share_service=service)
+
+        event = _make_event()
+        settings = _default_settings(
+            contact_name="主管王",
+            send_message_before_share=False,
+            pre_share_message_text="你好",
+        )
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        call_args = service.share_contact_card.call_args[0][0]
+        assert call_args.send_message_before_share is False
+
+    @pytest.mark.asyncio
+    async def test_execute_skips_message_when_text_empty(self):
+        """When enabled but text is empty/whitespace, send_message_before_share should be False."""
+        service = AsyncMock()
+        service.share_contact_card = AsyncMock(return_value=True)
+        action = AutoContactShareAction(contact_share_service=service)
+
+        event = _make_event()
+        settings = _default_settings(
+            contact_name="主管王",
+            send_message_before_share=True,
+            pre_share_message_text="   ",
+        )
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        call_args = service.share_contact_card.call_args[0][0]
+        assert call_args.send_message_before_share is False
+        assert call_args.pre_share_message_text == ""
+
+    @pytest.mark.asyncio
+    async def test_execute_message_uses_template(self):
+        """Template placeholders like {customer_name} should be resolved."""
+        service = AsyncMock()
+        service.share_contact_card = AsyncMock(return_value=True)
+        action = AutoContactShareAction(contact_share_service=service)
+
+        event = _make_event(customer_name="李四", kefu_name="客服B")
+        settings = _default_settings(
+            contact_name="主管王",
+            send_message_before_share=True,
+            pre_share_message_text="{customer_name}您好，{kefu_name}为您推荐主管",
+        )
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        call_args = service.share_contact_card.call_args[0][0]
+        assert call_args.pre_share_message_text == "李四您好，客服B为您推荐主管"
+
+    @pytest.mark.asyncio
+    async def test_execute_card_still_sent_if_message_fails(self):
+        """Card sharing should proceed even if the pre-share message sending fails.
+        The failure is handled inside ContactShareService, so at the action level
+        we just verify the request is properly constructed."""
+        service = AsyncMock()
+        service.share_contact_card = AsyncMock(return_value=True)
+        action = AutoContactShareAction(contact_share_service=service)
+
+        event = _make_event()
+        settings = _default_settings(
+            contact_name="主管王",
+            send_message_before_share=True,
+            pre_share_message_text="你好",
+        )
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        service.share_contact_card.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_execute_without_pre_share_settings_uses_defaults(self):
+        """When settings don't include pre_share fields, defaults should apply (no message)."""
+        service = AsyncMock()
+        service.share_contact_card = AsyncMock(return_value=True)
+        action = AutoContactShareAction(contact_share_service=service)
+
+        event = _make_event()
+        settings = _default_settings(contact_name="主管王")
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        call_args = service.share_contact_card.call_args[0][0]
+        assert call_args.send_message_before_share is False
+        assert call_args.pre_share_message_text == ""
