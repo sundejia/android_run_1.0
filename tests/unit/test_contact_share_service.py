@@ -609,6 +609,106 @@ class TestStrictMatchPreventsFakeSuccess:
         assert exact_hits == []
 
 
+class TestOpenContactCardMenuMissDiagnostics:
+    """When both fast-path and slow-path miss the Contact Card item we
+    now (a) log every node whose text/desc contains a Contact-Card-shaped
+    keyword so we can extend selectors blind, and (b) dump the full UI
+    tree to ``logs/contact_share_dump_*_contact_card_menu.json`` so a
+    real device snapshot is preserved off-log.
+
+    This is the regression for the 00:07 failure on 10AE9P1DTT002LE
+    where attach_panel state-check passed (aij/aif fix worked) but
+    Contact Card itself was still unfindable on page 1 *and* page 2,
+    and we had no UI dump to debug it because the failure path
+    short-circuited before ``_assert_page_state``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_miss_with_request_dumps_ui_and_logs_candidates(
+        self, service, mock_wecom
+    ):
+        ui_after_swipe = (
+            None,
+            [
+                {
+                    "text": "我的名片夹",
+                    "contentDescription": "",
+                    "resourceId": "com.tencent.wework:id/aif",
+                    "bounds": "[0,0][100,100]",
+                },
+                {
+                    "text": "Personal Card",
+                    "contentDescription": "",
+                    "resourceId": "com.tencent.wework:id/aif",
+                    "bounds": "[0,100][100,200]",
+                },
+            ],
+        )
+        mock_wecom.adb.get_ui_state = AsyncMock(return_value=ui_after_swipe)
+
+        with patch.object(service, "_tap_contact_card_menu", return_value=False), \
+             patch.object(service, "_swipe_attach_grid", return_value=True), \
+             patch.object(service, "_dump_full_ui_for_diagnosis") as mock_dump:
+
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="张三",
+                contact_name="主管王",
+            )
+            result = await service._open_contact_card_menu(request=request)
+
+        assert result is False
+        mock_dump.assert_called_once()
+        kwargs = mock_dump.call_args.kwargs
+        assert kwargs["step"] == "contact_card_menu"
+        assert kwargs["expected_state"] == "contact_card_visible"
+        assert "after_swipe=True" in kwargs["reason"]
+        assert kwargs["request"] is request
+
+    @pytest.mark.asyncio
+    async def test_miss_without_request_does_not_dump_but_still_safe(
+        self, service, mock_wecom
+    ):
+        """Backward-compat: legacy callers that don't pass ``request``
+        must not blow up — they just skip the dump.
+        """
+        mock_wecom.adb.get_ui_state = AsyncMock(return_value=(None, []))
+
+        with patch.object(service, "_tap_contact_card_menu", return_value=False), \
+             patch.object(service, "_swipe_attach_grid", return_value=True), \
+             patch.object(service, "_dump_full_ui_for_diagnosis") as mock_dump:
+
+            result = await service._open_contact_card_menu()
+
+        assert result is False
+        mock_dump.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_miss_when_swipe_itself_fails_still_dumps(
+        self, service, mock_wecom
+    ):
+        """If the swipe fails (no GridView found) we still want the
+        UI dump — that's exactly the case where selector intel is most
+        valuable, since *something* about the panel layout is foreign.
+        """
+        mock_wecom.adb.get_ui_state = AsyncMock(return_value=(None, []))
+
+        with patch.object(service, "_tap_contact_card_menu", return_value=False), \
+             patch.object(service, "_swipe_attach_grid", return_value=False), \
+             patch.object(service, "_dump_full_ui_for_diagnosis") as mock_dump:
+
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="张三",
+                contact_name="主管王",
+            )
+            result = await service._open_contact_card_menu(request=request)
+
+        assert result is False
+        mock_dump.assert_called_once()
+        assert "after_swipe=False" in mock_dump.call_args.kwargs["reason"]
+
+
 class TestSwipeAttachGridResolvesByPattern:
     """`_swipe_attach_grid` used to hardcode ``'ahe'`` as the GridView
     resource id. The 720x1612, 2026-05-06 build moved it to ``'aij'``,

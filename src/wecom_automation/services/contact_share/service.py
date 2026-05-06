@@ -323,7 +323,7 @@ class ContactShareService(IContactShareService):
                 request.device_serial,
                 request.customer_name,
             )
-            if not await self._open_contact_card_menu():
+            if not await self._open_contact_card_menu(request=request):
                 logger.error("Could not find 'Contact Card' menu item")
                 failure_step = "contact_card_menu"
                 return False
@@ -677,23 +677,96 @@ class ContactShareService(IContactShareService):
         except Exception as exc:
             logger.debug("UI dump for attach failure errored: %s", exc)
 
-    async def _open_contact_card_menu(self) -> bool:
+    async def _open_contact_card_menu(
+        self,
+        request: ContactShareRequest | None = None,
+    ) -> bool:
         """Find and tap 'Contact Card' — tries current page first, swipes if not found.
 
         WeCom promotes recently-used attachment items to page 1, so after the first
-        use 'Contact Card' may appear without swiping.  This method handles both cases.
+        use 'Contact Card' may appear without swiping. This method handles both cases.
+
+        On total failure (both fast-path and slow-path miss) we dump the
+        post-swipe attach panel to ``logs/contact_share_dump_*_contact_card_menu.json``
+        AND log every visible element whose text/desc/resourceId contains a
+        Contact-Card-shaped keyword. That second log is critical because the
+        primary failure mode now is *resourceId/text drift* — without seeing
+        the real strings we cannot extend ``CARD_TEXT_PATTERNS`` to match
+        the new build (e.g. "Personal Card" vs "推荐联系人" vs ...).
         """
-        # Fast path: try to find Contact Card on the current page
         if await self._tap_contact_card_menu():
             return True
 
-        # Slow path: swipe left on GridView, then try again
         logger.info("Contact Card not on current page; swiping to page 2...")
         if not await self._swipe_attach_grid():
+            await self._diagnose_contact_card_miss(request, after_swipe=False)
             return False
 
         await asyncio.sleep(1.0)
-        return await self._tap_contact_card_menu()
+        if await self._tap_contact_card_menu():
+            return True
+
+        await self._diagnose_contact_card_miss(request, after_swipe=True)
+        return False
+
+    async def _diagnose_contact_card_miss(
+        self,
+        request: ContactShareRequest | None,
+        *,
+        after_swipe: bool,
+    ) -> None:
+        """Log Contact-Card candidates and dump the UI when the menu item
+        cannot be tapped. No-op if anything in the path raises — diagnostics
+        must never mask the underlying share failure.
+        """
+        try:
+            ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("[contact-card miss] failed to read UI for diagnosis: %s", exc)
+            return
+
+        # Surface every candidate string an operator could plausibly need.
+        keywords = ("card", "Card", "名片", "Contact", "Personal", "联系人", "Recommend", "推荐")
+        candidates: list[str] = []
+        for elem in (elements or []):
+            text = (elem.get("text") or "").strip()
+            desc = (elem.get("contentDescription") or "").strip()
+            rid = (elem.get("resourceId") or "")
+            if any(kw in text or kw in desc for kw in keywords):
+                short_rid = rid.rsplit("/", 1)[-1] if rid else ""
+                candidates.append(
+                    f"text={text!r} desc={desc!r} rid={short_rid!r} bounds={elem.get('bounds')!r}"
+                )
+
+        if candidates:
+            logger.warning(
+                "[contact-card miss] %d candidate node(s) with Contact-Card-shaped text "
+                "(after_swipe=%s) — review and extend CARD_TEXT_PATTERNS if real:\n  - %s",
+                len(candidates),
+                after_swipe,
+                "\n  - ".join(candidates),
+            )
+        else:
+            logger.warning(
+                "[contact-card miss] zero Contact-Card-shaped candidates in tree "
+                "(after_swipe=%s, total_elements=%d) — attach panel may have closed "
+                "or layout changed entirely",
+                after_swipe,
+                len(elements or []),
+            )
+
+        if request is not None:
+            self._dump_full_ui_for_diagnosis(
+                request=request,
+                step="contact_card_menu",
+                expected_state="contact_card_visible",
+                ui_tree=ui_tree,
+                elements=elements or [],
+                reason=(
+                    "Contact Card menu item not found "
+                    f"(after_swipe={after_swipe})"
+                ),
+            )
 
     async def _swipe_attach_grid(self) -> bool:
         """Swipe left on the attachment GridView to reveal the next page.
