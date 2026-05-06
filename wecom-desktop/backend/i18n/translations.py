@@ -1690,7 +1690,7 @@ TRANSLATIONS: dict[str, dict[str, dict[str, str]]] = {
             "auto_contact_share_desc": "客户发送图片或视频时自动分享主管名片",
             "contact_name_label": "默认联系人姓名",
             "contact_name_placeholder": "企业微信通讯录中可搜索到的姓名",
-            "contact_name_hint": "必须是企业微信通讯录中可搜索到的内部成员或外部联系人。仅出现在私聊客户列表里的名字无法被分享。可用下方"测试可达性"先验证。",
+            "contact_name_hint": "必须是企业微信通讯录中可搜索到的内部成员或外部联系人。仅出现在私聊客户列表里的名字无法被分享。可用下方「测试可达性」先验证。",
             "test_contact_reachability": "测试名片可达性",
             "testing_contact_reachability": "测试中...",
             "test_contact_reachability_hint": "在不真发名片的情况下，让设备走一遍联系人选择器搜索流程。",
