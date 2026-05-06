@@ -64,7 +64,19 @@ def build_media_event_bus(
 
     bus = MediaEventBus(on_action_results=on_action_results)
 
-    bus.register(AutoBlacklistAction(BlacklistWriter(effects_db_path)))
+    if wecom_service is not None:
+        try:
+            from wecom_automation.services.contact_share.service import ContactShareService
+            from wecom_automation.services.media_actions.actions.auto_contact_share import (
+                AutoContactShareAction,
+            )
+
+            bus.register(AutoContactShareAction(
+                ContactShareService(wecom_service=wecom_service, db_path=effects_db_path),
+                restore_navigation_after_execute=False,
+            ))
+        except Exception as exc:
+            logger.warning("Could not register AutoContactShareAction: %s", exc)
 
     if wecom_service is not None:
         try:
@@ -77,17 +89,6 @@ def build_media_event_bus(
         except Exception as exc:
             logger.warning("Could not register AutoGroupInviteAction: %s", exc)
 
-    if wecom_service is not None:
-        try:
-            from wecom_automation.services.contact_share.service import ContactShareService
-            from wecom_automation.services.media_actions.actions.auto_contact_share import (
-                AutoContactShareAction,
-            )
-
-            bus.register(AutoContactShareAction(
-                ContactShareService(wecom_service=wecom_service, db_path=effects_db_path)
-            ))
-        except Exception as exc:
-            logger.warning("Could not register AutoContactShareAction: %s", exc)
+    bus.register(AutoBlacklistAction(BlacklistWriter(effects_db_path)))
 
     return bus, settings

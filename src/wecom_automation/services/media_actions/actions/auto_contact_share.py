@@ -31,8 +31,14 @@ class AutoContactShareAction(IMediaAction):
     and idempotency tracking.
     """
 
-    def __init__(self, contact_share_service: IContactShareService) -> None:
+    def __init__(
+        self,
+        contact_share_service: IContactShareService,
+        *,
+        restore_navigation_after_execute: bool = True,
+    ) -> None:
         self._service = contact_share_service
+        self._restore_navigation_after_execute = restore_navigation_after_execute
 
     @property
     def action_name(self) -> str:
@@ -171,6 +177,7 @@ class AutoContactShareAction(IMediaAction):
                 kefu_name=event.kefu_name,
                 send_message_before_share=bool(pre_share_text),
                 pre_share_message_text=pre_share_text,
+                assume_current_chat=not self._restore_navigation_after_execute,
             )
             success = await self._service.share_contact_card(request)
 
@@ -220,14 +227,15 @@ class AutoContactShareAction(IMediaAction):
                 message=str(exc),
             )
         finally:
-            try:
-                restored = await self._service.restore_navigation()
-                if restored:
-                    logger.info("Navigation restored after auto-contact-share")
-                else:
-                    logger.warning("Could not restore navigation after auto-contact-share")
-            except Exception as nav_exc:
-                logger.warning("Error restoring navigation after auto-contact-share: %s", nav_exc)
+            if self._restore_navigation_after_execute:
+                try:
+                    restored = await self._service.restore_navigation()
+                    if restored:
+                        logger.info("Navigation restored after auto-contact-share")
+                    else:
+                        logger.warning("Could not restore navigation after auto-contact-share")
+                except Exception as nav_exc:
+                    logger.warning("Error restoring navigation after auto-contact-share: %s", nav_exc)
 
     @staticmethod
     def _resolve_contact_name(event: MediaEvent, cs: dict) -> str:

@@ -118,6 +118,52 @@ class TestMessageProcessorMediaEventIntegration:
         assert call_event.customer_name == "张三"
 
     @pytest.mark.asyncio
+    async def test_processor_does_not_emit_for_duplicate_customer_image(self):
+        repo = MagicMock()
+
+        bus = MediaEventBus()
+        spy_action = AsyncMock()
+        spy_action.action_name = "spy"
+        spy_action.should_execute = AsyncMock(return_value=True)
+        bus.register(spy_action)
+
+        handler = AsyncMock()
+        handler.can_handle = AsyncMock(return_value=True)
+        handler.process = AsyncMock(
+            return_value=MessageProcessResult(added=False, message_type="image", message_id=100)
+        )
+
+        processor = MessageProcessor(repository=repo, handlers=[handler], media_event_bus=bus)
+        processor.set_media_action_settings({"enabled": True})
+
+        await processor.process(_make_image_message(), _make_context())
+
+        spy_action.should_execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_processor_does_not_emit_for_duplicate_customer_video(self):
+        repo = MagicMock()
+
+        bus = MediaEventBus()
+        spy_action = AsyncMock()
+        spy_action.action_name = "spy"
+        spy_action.should_execute = AsyncMock(return_value=True)
+        bus.register(spy_action)
+
+        handler = AsyncMock()
+        handler.can_handle = AsyncMock(return_value=True)
+        handler.process = AsyncMock(
+            return_value=MessageProcessResult(added=False, message_type="video", message_id=101)
+        )
+
+        processor = MessageProcessor(repository=repo, handlers=[handler], media_event_bus=bus)
+        processor.set_media_action_settings({"enabled": True})
+
+        await processor.process(_make_video_message(), _make_context())
+
+        spy_action.should_execute.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_processor_does_not_emit_for_kefu_image(self):
         repo = MagicMock()
         repo.add_message_if_not_exists = MagicMock(return_value=(True, MagicMock(id=100)))

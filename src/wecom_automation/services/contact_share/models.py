@@ -17,6 +17,7 @@ class ContactShareRequest:
     kefu_name: str = ""
     send_message_before_share: bool = False
     pre_share_message_text: str = ""
+    assume_current_chat: bool = False
 
 
 @dataclass

@@ -230,12 +230,13 @@ class ContactShareService(IContactShareService):
         """Execute the multi-step UI automation for contact card sharing."""
 
         # Step 1: Navigate to customer chat
-        logger.debug(
-            "Contact share step: navigate to customer chat (device=%s, customer=%s)",
+        logger.info(
+            "Contact share step: ensure target chat (device=%s, customer=%s, assume_current_chat=%s)",
             request.device_serial,
             request.customer_name,
+            request.assume_current_chat,
         )
-        if not await self._wecom.navigate_to_chat(request.device_serial, request.customer_name):
+        if not await self._ensure_target_chat(request):
             logger.error("Could not navigate to chat for '%s'", request.customer_name)
             return False
 
@@ -244,7 +245,7 @@ class ContactShareService(IContactShareService):
         # Step 1.5: Send pre-share message (if configured)
         if request.send_message_before_share and request.pre_share_message_text:
             try:
-                logger.debug(
+                logger.info(
                     "Contact share step: send pre-share message "
                     "(device=%s, customer=%s, text_length=%d)",
                     request.device_serial,
@@ -266,7 +267,7 @@ class ContactShareService(IContactShareService):
             await asyncio.sleep(self._STEP_DELAY)
 
         # Step 2: Tap attachment button (i9u)
-        logger.debug(
+        logger.info(
             "Contact share step: tap attachment button (device=%s, customer=%s)",
             request.device_serial,
             request.customer_name,
@@ -278,7 +279,7 @@ class ContactShareService(IContactShareService):
         await asyncio.sleep(self._STEP_DELAY)
 
         # Step 3: Open Contact Card — adaptive: try current page first, swipe if needed
-        logger.debug(
+        logger.info(
             "Contact share step: open Contact Card menu (device=%s, customer=%s)",
             request.device_serial,
             request.customer_name,
@@ -290,7 +291,7 @@ class ContactShareService(IContactShareService):
         await asyncio.sleep(self._STEP_DELAY)
 
         # Step 4: Select the target contact from picker
-        logger.debug(
+        logger.info(
             "Contact share step: select contact from picker "
             "(device=%s, customer=%s, contact=%s)",
             request.device_serial,
@@ -304,7 +305,7 @@ class ContactShareService(IContactShareService):
         await asyncio.sleep(self._STEP_DELAY)
 
         # Step 5: Tap "Send" in confirmation dialog
-        logger.debug(
+        logger.info(
             "Contact share step: confirm send (device=%s, customer=%s, contact=%s)",
             request.device_serial,
             request.customer_name,
@@ -316,6 +317,37 @@ class ContactShareService(IContactShareService):
 
         logger.info("Contact card shared successfully to %s", request.customer_name)
         return True
+
+    async def _ensure_target_chat(self, request: ContactShareRequest) -> bool:
+        if request.assume_current_chat:
+            try:
+                screen = await self._wecom.get_current_screen()
+            except Exception as exc:
+                logger.warning(
+                    "Could not inspect current screen before contact share; falling back to navigation "
+                    "(device=%s, customer=%s): %s",
+                    request.device_serial,
+                    request.customer_name,
+                    exc,
+                )
+            else:
+                if screen == "chat":
+                    logger.info(
+                        "Contact share using current chat without re-navigation "
+                        "(device=%s, customer=%s)",
+                        request.device_serial,
+                        request.customer_name,
+                    )
+                    return True
+                logger.info(
+                    "Current screen is %s, navigating before contact share "
+                    "(device=%s, customer=%s)",
+                    screen,
+                    request.device_serial,
+                    request.customer_name,
+                )
+
+        return await self._wecom.navigate_to_chat(request.device_serial, request.customer_name)
 
     async def _tap_attach_button(self) -> bool:
         """Tap the attachment button (i9u, rightmost bottom icon)."""

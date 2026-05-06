@@ -282,6 +282,24 @@ class TestAutoContactShareNavigationRecovery:
         service.restore_navigation.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_restore_navigation_can_be_disabled_for_inline_media_flow(self):
+        service = AsyncMock()
+        service.share_contact_card = AsyncMock(return_value=True)
+        service.restore_navigation = AsyncMock(return_value=True)
+        action = AutoContactShareAction(
+            contact_share_service=service,
+            restore_navigation_after_execute=False,
+        )
+
+        event = _make_event()
+        settings = _default_settings()
+
+        result = await action.execute(event, settings)
+
+        assert result.status == ActionStatus.SUCCESS
+        service.restore_navigation.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_restore_navigation_called_on_failure(self):
         service = AsyncMock()
         service.share_contact_card = AsyncMock(return_value=False)

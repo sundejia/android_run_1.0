@@ -282,6 +282,8 @@ class MessageProcessor:
         """
         if self._media_event_bus is None:
             return
+        if not result.added:
+            return
         if result.message_type not in ("image", "video"):
             return
         if self._is_from_kefu(message):
