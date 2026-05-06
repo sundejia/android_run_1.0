@@ -1907,6 +1907,22 @@ class ApiClient {
       method: 'POST',
     })
   }
+
+  async testContactReachability(params: {
+    device_serial: string
+    contact_name: string
+  }): Promise<{
+    reachable: boolean
+    finder: string
+    contact_name: string
+    device_serial: string
+    message: string
+  }> {
+    return this.request('/api/media-actions/auto-contact-share/test-reachability', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    })
+  }
 }
 
 export const api = new ApiClient()

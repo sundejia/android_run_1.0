@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from wecom_automation.services.ui_search.strategy import (
+    CompositeContactFinder,
     ContactFinderStrategy,
     ScrollContactFinder,
     SearchContactFinder,
@@ -419,3 +420,110 @@ class TestContactFinderStrategyIsABC:
 
     def test_search_is_subclass(self):
         assert issubclass(SearchContactFinder, ContactFinderStrategy)
+
+
+class TestCompositeContactFinder:
+    """CompositeContactFinder must short-circuit on the first hit and try
+    every strategy on misses without leaking exceptions.
+    """
+
+    @pytest.mark.asyncio
+    async def test_returns_true_on_first_hit_and_skips_later_strategies(self):
+        first = AsyncMock(spec=ContactFinderStrategy)
+        first.find_and_select = AsyncMock(return_value=True)
+        second = AsyncMock(spec=ContactFinderStrategy)
+        second.find_and_select = AsyncMock(return_value=False)
+        composite = CompositeContactFinder([first, second])
+
+        adb = _adb_mock()
+        ok = await composite.find_and_select("张三", adb)
+
+        assert ok is True
+        first.find_and_select.assert_awaited_once_with("张三", adb)
+        second.find_and_select.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_falls_through_to_scroll_when_search_misses(self):
+        first = AsyncMock(spec=ContactFinderStrategy)
+        first.find_and_select = AsyncMock(return_value=False)
+        second = AsyncMock(spec=ContactFinderStrategy)
+        second.find_and_select = AsyncMock(return_value=True)
+        composite = CompositeContactFinder([first, second])
+
+        adb = _adb_mock()
+        ok = await composite.find_and_select("孙德家", adb)
+
+        assert ok is True
+        first.find_and_select.assert_awaited_once_with("孙德家", adb)
+        second.find_and_select.assert_awaited_once_with("孙德家", adb)
+
+    @pytest.mark.asyncio
+    async def test_continues_after_strategy_raises(self):
+        boom = AsyncMock(spec=ContactFinderStrategy)
+        boom.find_and_select = AsyncMock(side_effect=RuntimeError("ADB down"))
+        good = AsyncMock(spec=ContactFinderStrategy)
+        good.find_and_select = AsyncMock(return_value=True)
+        composite = CompositeContactFinder([boom, good])
+
+        adb = _adb_mock()
+        ok = await composite.find_and_select("孙德家", adb)
+
+        assert ok is True
+        good.find_and_select.assert_awaited_once_with("孙德家", adb)
+
+    def test_rejects_empty_finder_list(self):
+        with pytest.raises(ValueError):
+            CompositeContactFinder([])
+
+
+class TestSearchContactFinderScreenWidthAutoDetect:
+    """Reproduces the 720px-device incident: the hard-coded 1080 default
+    pushed `min_x = 1080 * 0.14 = 151` which over-filtered candidate rows
+    on a 720-wide screen, dropping otherwise-valid matches.
+    """
+
+    @pytest.mark.asyncio
+    async def test_finds_match_on_720_wide_device_when_x_below_1080_min_margin(self):
+        """A row with x1=110 should be matched on a 720px device.
+        On the old hard-coded 1080 default, min_x=151 would discard it.
+        """
+        call_count = 0
+
+        async def mock_get_ui_state(force=False):  # noqa: ARG001
+            nonlocal call_count
+            call_count += 1
+            # Every batch advertises a 720x1612 screen via root bounds
+            screen_anchor = _elem(index=0, bounds="[0,0][720,1612]")
+            if call_count == 1:
+                return (
+                    None,
+                    [
+                        screen_anchor,
+                        _elem(
+                            className="android.widget.EditText",
+                            index=15,
+                            bounds="[40,60][680,110]",
+                        ),
+                    ],
+                )
+            return (
+                None,
+                [
+                    screen_anchor,
+                    # x1=110 — would be filtered out by min_x=151 (1080 default)
+                    # but should pass at min_x = 720 * 0.14 ≈ 100.
+                    _elem(text="苏南老师", index=20, bounds="[110,200][620,260]"),
+                    _elem(
+                        className="android.widget.EditText",
+                        index=15,
+                        bounds="[40,60][680,110]",
+                    ),
+                ],
+            )
+
+        adb = _adb_mock(get_ui_state_side_effect=mock_get_ui_state)
+        finder = SearchContactFinder()  # default 1080 — should self-correct
+        ok = await finder.find_and_select("苏南老师", adb)
+
+        assert ok is True
+        adb.tap.assert_any_await(20)

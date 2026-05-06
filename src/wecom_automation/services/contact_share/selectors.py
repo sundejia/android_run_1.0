@@ -18,8 +18,13 @@ from __future__ import annotations
 # Multiple patterns to support different WeCom versions:
 #   * "i9u": validated on WeCom Android 720x1612 (older builds)
 #   * "id8": validated on WeCom Android 1080x2340 (newer builds, image_sender)
-#   * "i_a": defensive prefix match seen in some builds with shorter mangled IDs
-ATTACH_RESOURCE_PATTERNS: tuple[str, ...] = ("i9u", "id8")
+#   * "igu": validated on WeCom Android 720x1612, 2026-05-06 build
+#           (observed via position fallback when i9u/id8 missed)
+# IMPORTANT: keep this list append-only — devices in the fleet may be on
+# different WeCom versions, removing an old ID will silently break older builds.
+# DO NOT add too-short prefixes like "i_a" — find_elements_by_keywords does
+# substring matching on resourceId, so a 2-char token will explode false matches.
+ATTACH_RESOURCE_PATTERNS: tuple[str, ...] = ("i9u", "id8", "igu")
 ATTACH_DESC_PATTERNS: tuple[str, ...] = ("更多功能", "more functions", "more")
 
 # ── Attachment menu GridView (for horizontal swipe) ──────────────

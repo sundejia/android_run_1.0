@@ -424,6 +424,16 @@ class MetricsLogger:
             },
         )
 
+    def log_event(self, event: str, data: dict[str, Any]) -> None:
+        """Emit a free-form structured event.
+
+        Use this for module-specific signals (e.g. contact share step results)
+        that don't warrant a dedicated typed method on the logger. Counters are
+        not auto-updated here — callers should also call the typed methods if
+        a counter increment is intended.
+        """
+        self._emit(event, data)
+
 
 # 全局实例管理
 _metrics_loggers: dict[str, MetricsLogger] = {}

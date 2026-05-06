@@ -25,6 +25,7 @@ import sqlite3
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
+from wecom_automation.core.metrics_logger import get_metrics_logger
 from wecom_automation.database.schema import get_db_path
 from wecom_automation.services.contact_share import selectors as S
 from wecom_automation.services.contact_share.models import (
@@ -33,6 +34,14 @@ from wecom_automation.services.contact_share.models import (
 from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
 
 logger = logging.getLogger(__name__)
+
+
+def _emit_share_metric(device_serial: str, event: str, data: dict) -> None:
+    """Best-effort metric emission — never raise from instrumentation."""
+    try:
+        get_metrics_logger(device_serial=device_serial or "default").log_event(event, data)
+    except Exception:  # noqa: BLE001 — metrics must never break the share flow
+        logger.debug("metrics_logger emit failed for event=%s", event, exc_info=True)
 
 CONTACT_SHARES_TABLE_SQL = """
     CREATE TABLE IF NOT EXISTS media_action_contact_shares (
@@ -227,7 +236,16 @@ class ContactShareService(IContactShareService):
     # ── UI Automation Steps ───────────────────────────────────────
 
     async def _perform_ui_share(self, request: ContactShareRequest) -> bool:
-        """Execute the multi-step UI automation for contact card sharing."""
+        """Execute the multi-step UI automation for contact card sharing.
+
+        Transactional contract:
+          - The pre-share message is sent FIRST (so the customer sees the lead-in
+            text in the right order), but if any subsequent step fails, we send a
+            recovery message so the customer is not left with a promise that
+            never lands a card.
+        """
+        pre_message_sent = False
+        failure_step: str | None = None
 
         # Step 1: Navigate to customer chat
         logger.info(
@@ -256,6 +274,7 @@ class ContactShareService(IContactShareService):
                 if not sent:
                     logger.warning("Pre-share message failed to send, continuing with card share")
                 else:
+                    pre_message_sent = True
                     logger.info(
                         "Pre-share message sent before contact card "
                         "(device=%s, customer=%s)",
@@ -266,57 +285,142 @@ class ContactShareService(IContactShareService):
                 logger.warning("Pre-share message error (continuing): %s", exc)
             await asyncio.sleep(self._STEP_DELAY)
 
-        # Step 2: Tap attachment button (i9u)
-        logger.info(
-            "Contact share step: tap attachment button (device=%s, customer=%s)",
-            request.device_serial,
-            request.customer_name,
-        )
-        if not await self._tap_attach_button():
-            logger.error("Could not tap attachment button")
-            return False
+        try:
+            # Step 2: Tap attachment button (i9u/id8/igu)
+            logger.info(
+                "Contact share step: tap attachment button (device=%s, customer=%s)",
+                request.device_serial,
+                request.customer_name,
+            )
+            if not await self._tap_attach_button(device_serial=request.device_serial):
+                logger.error("Could not tap attachment button")
+                failure_step = "attach_button"
+                return False
 
-        await asyncio.sleep(self._STEP_DELAY)
+            await asyncio.sleep(self._STEP_DELAY)
 
-        # Step 3: Open Contact Card — adaptive: try current page first, swipe if needed
-        logger.info(
-            "Contact share step: open Contact Card menu (device=%s, customer=%s)",
-            request.device_serial,
-            request.customer_name,
-        )
-        if not await self._open_contact_card_menu():
-            logger.error("Could not find 'Contact Card' menu item")
-            return False
+            # Step 3: Open Contact Card menu
+            logger.info(
+                "Contact share step: open Contact Card menu (device=%s, customer=%s)",
+                request.device_serial,
+                request.customer_name,
+            )
+            if not await self._open_contact_card_menu():
+                logger.error("Could not find 'Contact Card' menu item")
+                failure_step = "contact_card_menu"
+                return False
 
-        await asyncio.sleep(self._STEP_DELAY)
+            await asyncio.sleep(self._STEP_DELAY)
 
-        # Step 4: Select the target contact from picker
-        logger.info(
-            "Contact share step: select contact from picker "
-            "(device=%s, customer=%s, contact=%s)",
-            request.device_serial,
-            request.customer_name,
-            request.contact_name,
-        )
-        if not await self._select_contact_from_picker(request.contact_name):
-            logger.error("Could not select contact '%s' in picker", request.contact_name)
-            return False
+            # Step 4: Select the target contact from picker
+            logger.info(
+                "Contact share step: select contact from picker "
+                "(device=%s, customer=%s, contact=%s)",
+                request.device_serial,
+                request.customer_name,
+                request.contact_name,
+            )
+            if not await self._select_contact_from_picker(
+                request.contact_name,
+                device_serial=request.device_serial,
+            ):
+                logger.error("Could not select contact '%s' in picker", request.contact_name)
+                failure_step = "contact_picker"
+                return False
 
-        await asyncio.sleep(self._STEP_DELAY)
+            await asyncio.sleep(self._STEP_DELAY)
 
-        # Step 5: Tap "Send" in confirmation dialog
-        logger.info(
-            "Contact share step: confirm send (device=%s, customer=%s, contact=%s)",
-            request.device_serial,
-            request.customer_name,
-            request.contact_name,
-        )
-        if not await self._confirm_send():
-            logger.error("Could not confirm contact card send")
-            return False
+            # Step 5: Tap "Send" in confirmation dialog
+            logger.info(
+                "Contact share step: confirm send (device=%s, customer=%s, contact=%s)",
+                request.device_serial,
+                request.customer_name,
+                request.contact_name,
+            )
+            if not await self._confirm_send():
+                logger.error("Could not confirm contact card send")
+                failure_step = "confirm_send"
+                return False
 
-        logger.info("Contact card shared successfully to %s", request.customer_name)
-        return True
+            logger.info("Contact card shared successfully to %s", request.customer_name)
+            return True
+        finally:
+            _emit_share_metric(
+                request.device_serial,
+                "contact_share_attempt",
+                {
+                    "customer_name": request.customer_name,
+                    "contact_name": request.contact_name,
+                    "kefu_name": request.kefu_name,
+                    "result": "success" if failure_step is None else f"fail_{failure_step}",
+                    "pre_message_sent": pre_message_sent,
+                    "recovery_triggered": failure_step is not None and pre_message_sent,
+                },
+            )
+            if failure_step is not None and pre_message_sent:
+                # Only send recovery when pre-message went out but the card never
+                # arrived — otherwise customer thinks "card incoming" but nothing follows.
+                await self._send_recovery_message_after_failure(request, failure_step)
+
+    async def _send_recovery_message_after_failure(
+        self,
+        request: ContactShareRequest,
+        failure_step: str,
+    ) -> None:
+        """Send a recovery message so the customer is not left expecting a card.
+
+        Only invoked when:
+          1. The pre-share message was already delivered (the customer was promised
+             a card or supervisor handoff)
+          2. A subsequent UI step failed (attach_button / contact_card_menu /
+             contact_picker / confirm_send) so no card was actually sent.
+        """
+        text = (request.recovery_message_on_failure_text or "").strip()
+        if not text:
+            logger.warning(
+                "Skipping recovery message: empty text "
+                "(device=%s, customer=%s, failure_step=%s)",
+                request.device_serial,
+                request.customer_name,
+                failure_step,
+            )
+            return
+
+        try:
+            logger.info(
+                "Contact share recovery: sending fallback message "
+                "(device=%s, customer=%s, failure_step=%s, text_length=%d)",
+                request.device_serial,
+                request.customer_name,
+                failure_step,
+                len(text),
+            )
+            sent, _ = await self._wecom.send_message(text)
+            if sent:
+                logger.info(
+                    "Recovery message delivered after card share failure "
+                    "(device=%s, customer=%s, failure_step=%s)",
+                    request.device_serial,
+                    request.customer_name,
+                    failure_step,
+                )
+            else:
+                logger.warning(
+                    "Recovery message send returned False "
+                    "(device=%s, customer=%s, failure_step=%s)",
+                    request.device_serial,
+                    request.customer_name,
+                    failure_step,
+                )
+        except Exception as exc:
+            logger.warning(
+                "Recovery message send raised "
+                "(device=%s, customer=%s, failure_step=%s): %s",
+                request.device_serial,
+                request.customer_name,
+                failure_step,
+                exc,
+            )
 
     async def _ensure_target_chat(self, request: ContactShareRequest) -> bool:
         if request.assume_current_chat:
@@ -349,7 +453,7 @@ class ContactShareService(IContactShareService):
 
         return await self._wecom.navigate_to_chat(request.device_serial, request.customer_name)
 
-    async def _tap_attach_button(self) -> bool:
+    async def _tap_attach_button(self, device_serial: str | None = None) -> bool:
         """Tap the attachment button (rightmost bottom icon in chat input area).
 
         Tries in order:
@@ -366,6 +470,11 @@ class ContactShareService(IContactShareService):
             desc_patterns=S.ATTACH_DESC_PATTERNS,
             step_name="attach button",
         ):
+            _emit_share_metric(
+                device_serial or "",
+                "contact_share_attach_button",
+                {"match": "resource_id"},
+            )
             return True
 
         logger.warning(
@@ -374,7 +483,13 @@ class ContactShareService(IContactShareService):
             S.ATTACH_RESOURCE_PATTERNS,
             S.ATTACH_DESC_PATTERNS,
         )
-        return await self._tap_attach_button_by_position()
+        ok = await self._tap_attach_button_by_position()
+        _emit_share_metric(
+            device_serial or "",
+            "contact_share_attach_button",
+            {"match": "position_fallback" if ok else "miss"},
+        )
+        return ok
 
     async def _tap_attach_button_by_position(self) -> bool:
         """Heuristically tap the rightmost icon in the chat input row.
@@ -446,6 +561,12 @@ class ContactShareService(IContactShareService):
             target_cx,
             self._describe_element(target_elem),
         )
+        # Always dump the bottom band when we resort to position fallback so we
+        # can audit whether we picked the real attach button vs an emoji /
+        # voice-toggle icon. This is deliberately verbose: any time the
+        # resource-id selector misses, we want a full record for selector
+        # drift analysis even when the tap "happened to work".
+        self._dump_ui_for_attach_failure(elements)
 
         if idx is None:
             logger.warning("[attach button position fallback] candidate has no index, cannot tap")
@@ -571,11 +692,18 @@ class ContactShareService(IContactShareService):
             step_name="Contact Card menu item",
         )
 
-    async def _select_contact_from_picker(self, contact_name: str) -> bool:
+    async def _select_contact_from_picker(
+        self,
+        contact_name: str,
+        device_serial: str | None = None,
+    ) -> bool:
         """Select a contact from the picker using the configured ContactFinderStrategy.
 
-        Defaults to SearchContactFinder (search button → input → result matching).
-        Falls back to ScrollContactFinder when explicitly configured.
+        Defaults to a composite of (SearchContactFinder, ScrollContactFinder).
+        Search hits are precise but can miss when IME drops a keystroke or the
+        WeCom search index is cold; ScrollContactFinder then walks the visible
+        list as a safety net so we don't fail closed when the contact is
+        actually right there.
         """
         if self._contact_finder is not None:
             logger.debug(
@@ -584,17 +712,44 @@ class ContactShareService(IContactShareService):
                 contact_name,
                 type(self._contact_finder).__name__,
             )
-            return await self._contact_finder.find_and_select(contact_name, self._wecom.adb)
+            ok = await self._contact_finder.find_and_select(contact_name, self._wecom.adb)
+            _emit_share_metric(
+                device_serial or "",
+                "contact_share_picker",
+                {
+                    "contact_name": contact_name,
+                    "finder": type(self._contact_finder).__name__,
+                    "result": "hit" if ok else "miss",
+                },
+            )
+            return ok
 
-        from wecom_automation.services.ui_search.strategy import SearchContactFinder
+        from wecom_automation.services.ui_search.strategy import (
+            CompositeContactFinder,
+            ScrollContactFinder,
+            SearchContactFinder,
+        )
 
-        finder = SearchContactFinder()
+        finder = CompositeContactFinder([
+            SearchContactFinder(),
+            ScrollContactFinder(),
+        ])
         logger.debug(
             "Selecting contact with default finder (contact=%s, finder=%s)",
             contact_name,
             type(finder).__name__,
         )
-        return await finder.find_and_select(contact_name, self._wecom.adb)
+        ok = await finder.find_and_select(contact_name, self._wecom.adb)
+        _emit_share_metric(
+            device_serial or "",
+            "contact_share_picker",
+            {
+                "contact_name": contact_name,
+                "finder": "composite_search_then_scroll",
+                "result": "hit" if ok else "miss",
+            },
+        )
+        return ok
 
     async def _confirm_send(self) -> bool:
         """Tap the 'Send' button in the confirmation dialog.

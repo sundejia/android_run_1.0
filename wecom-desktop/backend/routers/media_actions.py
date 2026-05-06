@@ -279,6 +279,134 @@ async def get_action_logs(
         return {"logs": [], "total": 0}
 
 
+class TestContactReachabilityRequest(BaseModel):
+    device_serial: str
+    contact_name: str
+
+
+class TestContactReachabilityResponse(BaseModel):
+    reachable: bool
+    finder: str
+    contact_name: str
+    device_serial: str
+    message: str
+
+
+@router.post("/auto-contact-share/test-reachability", response_model=TestContactReachabilityResponse)
+async def test_contact_reachability(request: TestContactReachabilityRequest):
+    """Run a non-destructive picker search for ``contact_name`` on the given device.
+
+    Pre-conditions:
+        - The device is connected and ADB-reachable.
+        - WeCom is open on a chat screen (the picker is opened from the input bar).
+
+    Behavior:
+        1. Tap the attach button.
+        2. Open the Contact Card menu.
+        3. Run the composite (search → scroll) picker finder for ``contact_name``.
+        4. ALWAYS press back twice to dismiss the picker and attach panel — we
+           never tap "Send" so no card is actually delivered to anyone.
+
+    Returns ``reachable=True`` only if the picker successfully selected a row.
+    """
+    contact_name = (request.contact_name or "").strip()
+    serial = (request.device_serial or "").strip()
+    if not contact_name:
+        return TestContactReachabilityResponse(
+            reachable=False,
+            finder="none",
+            contact_name=contact_name,
+            device_serial=serial,
+            message="contact_name is empty",
+        )
+    if not serial:
+        return TestContactReachabilityResponse(
+            reachable=False,
+            finder="none",
+            contact_name=contact_name,
+            device_serial=serial,
+            message="device_serial is empty",
+        )
+
+    try:
+        from wecom_automation.core.config import Config
+        from wecom_automation.services.adb_service import ADBService
+        from wecom_automation.services.contact_share.service import ContactShareService
+        from wecom_automation.services.wecom_service import WeComService
+
+        config = Config.from_env().with_overrides(device_serial=serial)
+        adb = ADBService(config)
+        wecom = WeComService(config, adb)
+        share_service = ContactShareService(wecom_service=wecom)
+
+        # Step 1: Open attach panel
+        if not await share_service._tap_attach_button(device_serial=serial):
+            return TestContactReachabilityResponse(
+                reachable=False,
+                finder="attach_button",
+                contact_name=contact_name,
+                device_serial=serial,
+                message="Attach button not found — make sure WeCom is on a chat screen",
+            )
+
+        await asyncio.sleep(share_service._STEP_DELAY)
+
+        # Step 2: Open Contact Card menu
+        if not await share_service._open_contact_card_menu():
+            return TestContactReachabilityResponse(
+                reachable=False,
+                finder="contact_card_menu",
+                contact_name=contact_name,
+                device_serial=serial,
+                message="Contact Card menu not found in attach panel",
+            )
+
+        await asyncio.sleep(share_service._STEP_DELAY)
+
+        # Step 3: Composite picker search
+        from wecom_automation.services.ui_search.strategy import (
+            CompositeContactFinder,
+            ScrollContactFinder,
+            SearchContactFinder,
+        )
+
+        finder = CompositeContactFinder([
+            SearchContactFinder(),
+            ScrollContactFinder(),
+        ])
+        ok = False
+        try:
+            ok = await finder.find_and_select(contact_name, wecom.adb)
+        finally:
+            # Always back out — we never want to actually send a card here.
+            for _ in range(3):
+                try:
+                    await wecom.go_back()
+                except Exception:
+                    break
+
+        return TestContactReachabilityResponse(
+            reachable=bool(ok),
+            finder="composite_search_then_scroll",
+            contact_name=contact_name,
+            device_serial=serial,
+            message=(
+                "Contact found in picker"
+                if ok
+                else "Contact NOT found in picker — verify the name appears in WeCom contact picker"
+            ),
+        )
+    except Exception as exc:
+        logger.exception("Contact reachability probe failed")
+        return TestContactReachabilityResponse(
+            reachable=False,
+            finder="error",
+            contact_name=contact_name,
+            device_serial=serial,
+            message=f"Probe failed: {exc}",
+        )
+
+
 @router.post("/test-trigger")
 async def test_trigger_media_action(
     device_serial: str = "test_device",

@@ -290,3 +290,159 @@ class TestContactShareAttachButtonSelector:
 
         assert result is False
         mock_wecom.adb.tap.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_attach_button_matches_igu_resource_2026_05_06_build(self, service, mock_wecom):
+        """Regression for the 2026-05-06 WeCom build where the attach button
+        resource ID drifted to ``igu``. Without this entry in selectors the
+        flow falls back to the position heuristic which is far less reliable.
+        """
+        elements = [
+            {
+                "index": 7,
+                "resourceId": "com.tencent.wework:id/igu",
+                "bounds": "[644,1425][700,1481]",
+                "clickable": True,
+            },
+        ]
+        mock_wecom.adb.get_ui_state = AsyncMock(return_value=(None, elements))
+        mock_wecom.adb.tap = AsyncMock()
+
+        result = await service._tap_attach_button()
+
+        assert result is True
+        mock_wecom.adb.tap.assert_awaited_once_with(7)
+
+
+class TestContactSharePreMessageTransactionality:
+    """Regression for the 'said-but-no-card' incident.
+
+    When the pre-share message has been delivered but a later UI step fails,
+    the customer must NOT be left expecting a card that never arrives — we
+    must send the recovery_message_on_failure_text instead.
+    """
+
+    @pytest.mark.asyncio
+    async def test_recovery_sent_when_picker_fails_after_pre_message(self, service, mock_wecom):
+        mock_wecom.send_message = AsyncMock(return_value=(True, None))
+
+        with patch.object(service, "_tap_attach_button", return_value=True), \
+             patch.object(service, "_open_contact_card_menu", return_value=True), \
+             patch.object(service, "_select_contact_from_picker", return_value=False), \
+             patch.object(service, "_confirm_send", return_value=True):
+
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="张三",
+                contact_name="苏南老师",
+                send_message_before_share=True,
+                pre_share_message_text="可以的小宝，这是名片",
+                recovery_message_on_failure_text="抱歉系统稍后重发，请稍候",
+            )
+            result = await service._perform_ui_share(request)
+
+        assert result is False
+        # Two send_message calls: pre-share + recovery
+        send_calls = mock_wecom.send_message.await_args_list
+        sent_texts = [call.args[0] for call in send_calls]
+        assert "可以的小宝，这是名片" in sent_texts
+        assert "抱歉系统稍后重发，请稍候" in sent_texts
+
+    @pytest.mark.asyncio
+    async def test_no_recovery_when_pre_message_was_not_sent(self, service, mock_wecom):
+        """If pre-message was disabled, do NOT send a recovery message —
+        otherwise we'd surface a confusing 'something went wrong' message to a
+        customer who never saw the lead-in.
+        """
+        mock_wecom.send_message = AsyncMock(return_value=(True, None))
+
+        with patch.object(service, "_tap_attach_button", return_value=False):
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="张三",
+                contact_name="苏南老师",
+                send_message_before_share=False,
+                pre_share_message_text="",
+                recovery_message_on_failure_text="抱歉系统稍后重发，请稍候",
+            )
+            result = await service._perform_ui_share(request)
+
+        assert result is False
+        mock_wecom.send_message.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_no_recovery_when_pre_message_send_returned_false(
+        self, service, mock_wecom
+    ):
+        """If the pre-message itself failed to send, the customer never saw
+        anything — no need for a recovery, just fail closed.
+        """
+        mock_wecom.send_message = AsyncMock(return_value=(False, "Send failed"))
+
+        with patch.object(service, "_tap_attach_button", return_value=False):
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="张三",
+                contact_name="苏南老师",
+                send_message_before_share=True,
+                pre_share_message_text="可以的小宝，这是名片",
+                recovery_message_on_failure_text="抱歉系统稍后重发，请稍候",
+            )
+            result = await service._perform_ui_share(request)
+
+        assert result is False
+        # Exactly one send (the failed pre-message) — recovery is suppressed.
+        assert mock_wecom.send_message.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_no_recovery_when_recovery_text_empty(self, service, mock_wecom):
+        mock_wecom.send_message = AsyncMock(return_value=(True, None))
+
+        with patch.object(service, "_tap_attach_button", return_value=False):
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="张三",
+                contact_name="苏南老师",
+                send_message_before_share=True,
+                pre_share_message_text="可以的小宝，这是名片",
+                recovery_message_on_failure_text="   ",
+            )
+            result = await service._perform_ui_share(request)
+
+        assert result is False
+        # Only the pre-share message went out; empty recovery text is honored.
+        assert mock_wecom.send_message.await_count == 1
+
+
+class TestContactSharePickerFallback:
+    """Default picker uses CompositeContactFinder (search → scroll)."""
+
+    @pytest.mark.asyncio
+    async def test_default_finder_falls_back_to_scroll_when_search_misses(
+        self, service, mock_wecom
+    ):
+        # Make UI calls for SearchContactFinder return nothing useful, but
+        # ScrollContactFinder will see a matching row.
+        elements_for_search = [
+            {"index": 50, "className": "android.widget.EditText", "bounds": "[50,60][700,110]"},
+        ]
+        elements_for_scroll = [
+            {"index": 99, "text": "苏南老师", "bounds": "[200,200][800,260]"},
+        ]
+        # The composite finder reuses adb.get_ui_state across many calls; we
+        # simulate "search miss → scroll hit" by always returning the scroll
+        # match — search will still miss because there's no input field row.
+        async def get_ui_state(force=False):  # noqa: ARG001
+            return (None, elements_for_search + elements_for_scroll)
+
+        mock_wecom.adb.get_ui_state = AsyncMock(side_effect=get_ui_state)
+        mock_wecom.adb.tap = AsyncMock()
+        mock_wecom.adb.clear_text_field = AsyncMock()
+        mock_wecom.adb.input_text = AsyncMock()
+        mock_wecom.adb.wait = AsyncMock()
+
+        ok = await service._select_contact_from_picker("苏南老师", device_serial="dev1")
+
+        assert ok is True
+        # Scroll finder taps by the row's index (99)
+        assert any(call.args == (99,) for call in mock_wecom.adb.tap.await_args_list)

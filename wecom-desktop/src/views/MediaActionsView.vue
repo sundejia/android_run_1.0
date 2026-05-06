@@ -9,6 +9,8 @@ const { t } = useI18n()
 const loading = ref(true)
 const saving = ref(false)
 const testing = ref(false)
+const reachabilityTesting = ref(false)
+const reachabilityResult = ref<{ reachable: boolean; message: string } | null>(null)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
 const defaultSettings: MediaAutoActionSettings = {
@@ -136,6 +138,39 @@ function addKefuOverride() {
 
 function removeKefuOverride(kefuName: string) {
   delete settings.value.auto_contact_share.kefu_overrides[kefuName]
+}
+
+async function testContactReachability() {
+  const contactName = settings.value.auto_contact_share.contact_name.trim()
+  const serial = testDeviceSerial.value.trim()
+  if (!serial) {
+    reachabilityResult.value = {
+      reachable: false,
+      message: t('media_actions.test_contact_reachability_no_device'),
+    }
+    return
+  }
+  reachabilityTesting.value = true
+  reachabilityResult.value = null
+  try {
+    const res = await api.testContactReachability({
+      device_serial: serial,
+      contact_name: contactName,
+    })
+    reachabilityResult.value = {
+      reachable: res.reachable,
+      message: res.reachable
+        ? t('media_actions.test_contact_reachability_success')
+        : res.message || t('media_actions.test_contact_reachability_failure'),
+    }
+  } catch (err: any) {
+    reachabilityResult.value = {
+      reachable: false,
+      message: err.message || t('media_actions.test_contact_reachability_failure'),
+    }
+  } finally {
+    reachabilityTesting.value = false
+  }
 }
 
 async function runTest() {
@@ -538,6 +573,39 @@ onMounted(loadSettings)
               class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
               :placeholder="t('media_actions.contact_name_placeholder')"
             />
+            <p class="text-xs text-amber-400 mt-1">
+              {{ t('media_actions.contact_name_hint') }}
+            </p>
+            <div class="flex items-center gap-3 mt-2">
+              <button
+                id="test-contact-reachability"
+                :disabled="
+                  reachabilityTesting ||
+                  !settings.auto_contact_share.contact_name.trim() ||
+                  !testDeviceSerial.trim()
+                "
+                class="px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-md hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                @click="testContactReachability"
+              >
+                {{
+                  reachabilityTesting
+                    ? t('media_actions.testing_contact_reachability')
+                    : t('media_actions.test_contact_reachability')
+                }}
+              </button>
+              <span
+                v-if="reachabilityResult"
+                :class="[
+                  'text-xs',
+                  reachabilityResult.reachable ? 'text-green-400' : 'text-red-400',
+                ]"
+              >
+                {{ reachabilityResult.message }}
+              </span>
+            </div>
+            <p class="text-xs text-gray-500 mt-1">
+              {{ t('media_actions.test_contact_reachability_hint') }}
+            </p>
           </div>
 
           <div class="space-y-3 rounded-lg border border-gray-700/80 bg-gray-800/40 p-4">

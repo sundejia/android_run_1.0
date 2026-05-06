@@ -28,6 +28,33 @@ _REF_WIDTH = 1080
 _REF_HEIGHT = 2340
 
 
+_MIN_PLAUSIBLE_SCREEN_WIDTH = 400
+_MIN_PLAUSIBLE_SCREEN_HEIGHT = 800
+
+
+def _infer_screen_size_from_elements(elements: list[dict]) -> tuple[int, int]:
+    """Infer (width, height) from the largest right/bottom bound seen.
+
+    Returns (0, 0) when the observed bounds are too small to plausibly
+    represent a real device screen (caller should keep its current default).
+    Plausibility gates exist so a UI snapshot containing only one tiny
+    icon doesn't collapse our screen-size estimate to that icon's box.
+    """
+    max_right = 0
+    max_bottom = 0
+    for elem in elements or []:
+        bounds = parse_element_bounds(elem)
+        if not bounds:
+            continue
+        if bounds[2] > max_right:
+            max_right = bounds[2]
+        if bounds[3] > max_bottom:
+            max_bottom = bounds[3]
+    width = max_right if max_right >= _MIN_PLAUSIBLE_SCREEN_WIDTH else 0
+    height = max_bottom if max_bottom >= _MIN_PLAUSIBLE_SCREEN_HEIGHT else 0
+    return (width, height)
+
+
 class ContactFinderStrategy(ABC):
     """Abstract base for contact finding in a WeCom picker/list."""
 
@@ -109,7 +136,9 @@ class SearchContactFinder(ContactFinderStrategy):
         self._screen_height = screen_height or _REF_HEIGHT
 
     async def find_and_select(self, contact_name: str, adb_service) -> bool:
-        # Step 1: Ensure search input is ready
+        # Step 1: Ensure search input is ready (also auto-detects screen size
+        # from the first get_ui_state result so left-margin / top-band
+        # heuristics aren't off by 1.5x on a 720-wide device).
         try:
             search_ready = await self._ensure_search_input_ready(adb_service)
         except Exception as exc:
@@ -169,6 +198,14 @@ class SearchContactFinder(ContactFinderStrategy):
             ui_tree, elements = await adb_service.get_ui_state(force=True)
         except Exception:
             return False
+
+        # Auto-detect actual screen size from this first batch — keeps the
+        # left-margin / top-band heuristics correct on 720-wide devices.
+        detected_w, detected_h = _infer_screen_size_from_elements(elements or [])
+        if detected_w:
+            self._screen_width = detected_w
+        if detected_h:
+            self._screen_height = detected_h
 
         # Try to find existing input field first
         input_field = find_search_input(elements)
@@ -244,3 +281,49 @@ class SearchContactFinder(ContactFinderStrategy):
                 return False
 
         return True
+
+
+class CompositeContactFinder(ContactFinderStrategy):
+    """Try strategies in order, returning on first success.
+
+    Used to give SearchContactFinder a ScrollContactFinder safety net so a
+    miss in the search box does not silently abort the whole share flow when
+    the contact is actually visible in the picker list.
+    """
+
+    def __init__(self, finders: list[ContactFinderStrategy]) -> None:
+        if not finders:
+            raise ValueError("CompositeContactFinder requires at least one finder")
+        self._finders = finders
+
+    async def find_and_select(self, contact_name: str, adb_service) -> bool:
+        for finder in self._finders:
+            name = type(finder).__name__
+            try:
+                ok = await finder.find_and_select(contact_name, adb_service)
+            except Exception as exc:
+                logger.warning(
+                    "CompositeContactFinder: %s raised for '%s': %s",
+                    name,
+                    contact_name,
+                    exc,
+                )
+                continue
+            if ok:
+                logger.debug(
+                    "CompositeContactFinder: %s selected '%s'",
+                    name,
+                    contact_name,
+                )
+                return True
+            logger.info(
+                "CompositeContactFinder: %s missed '%s', trying next strategy",
+                name,
+                contact_name,
+            )
+        logger.warning(
+            "CompositeContactFinder: all %d strategies missed '%s'",
+            len(self._finders),
+            contact_name,
+        )
+        return False
