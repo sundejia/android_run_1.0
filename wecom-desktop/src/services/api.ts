@@ -876,6 +876,8 @@ export interface AutoContactShareSettings {
   skip_if_already_shared: boolean
   cooldown_seconds: number
   kefu_overrides: Record<string, string>
+  send_message_before_share: boolean
+  pre_share_message_text: string
 }
 
 export interface ReviewGateSettings {

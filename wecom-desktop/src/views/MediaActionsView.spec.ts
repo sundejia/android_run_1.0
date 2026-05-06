@@ -51,6 +51,8 @@ const baseSettings = {
     skip_if_already_shared: true,
     cooldown_seconds: 0,
     kefu_overrides: {},
+    send_message_before_share: false,
+    pre_share_message_text: '',
   },
   review_gate: {
     enabled: true,
@@ -93,6 +95,52 @@ describe('MediaActionsView', () => {
         auto_group_invite: expect.objectContaining({
           send_test_message_after_create: false,
           test_message_text: '欢迎 {customer_name}',
+        }),
+      })
+    )
+  })
+
+  it('shows contact share pre-message controls and preview', async () => {
+    getMediaActionSettings.mockResolvedValueOnce({
+      ...structuredClone(baseSettings),
+      auto_contact_share: {
+        ...baseSettings.auto_contact_share,
+        enabled: true,
+        pre_share_message_text: '您好 {customer_name}，我是 {kefu_name}',
+      },
+    })
+
+    const wrapper = mount(MediaActionsView)
+    await flushPromises()
+
+    expect(wrapper.find('#send-message-before-contact-share').exists()).toBe(true)
+    expect(wrapper.find('#contact-share-message-template').exists()).toBe(true)
+    expect(wrapper.get('#contact-share-message-preview').text()).toContain('测试客户')
+    expect(wrapper.get('#contact-share-message-preview').text()).toContain('客服A')
+  })
+
+  it('saves contact share pre-message settings', async () => {
+    getMediaActionSettings.mockResolvedValueOnce({
+      ...structuredClone(baseSettings),
+      auto_contact_share: {
+        ...baseSettings.auto_contact_share,
+        enabled: true,
+      },
+    })
+
+    const wrapper = mount(MediaActionsView)
+    await flushPromises()
+
+    await wrapper.get('#send-message-before-contact-share').setValue(true)
+    await wrapper.get('#contact-share-message-template').setValue('您好 {customer_name}，这是主管名片')
+    await wrapper.get('#save-media-action-settings').trigger('click')
+    await flushPromises()
+
+    expect(updateMediaActionSettings).toHaveBeenCalledWith(
+      expect.objectContaining({
+        auto_contact_share: expect.objectContaining({
+          send_message_before_share: true,
+          pre_share_message_text: '您好 {customer_name}，这是主管名片',
         }),
       })
     )

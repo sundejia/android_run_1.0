@@ -33,6 +33,8 @@ describe('Media Actions API', () => {
     skip_if_already_shared: true,
     cooldown_seconds: 0,
     kefu_overrides: {},
+    send_message_before_share: false,
+    pre_share_message_text: '',
   }
 
   const defaultReviewGate = {
@@ -163,6 +165,55 @@ describe('Media Actions API', () => {
         })
       )
     })
+
+    it('should preserve contact share pre-message fields in request body', async () => {
+      const update = {
+        auto_contact_share: {
+          enabled: true,
+          contact_name: '主管王',
+          skip_if_already_shared: true,
+          cooldown_seconds: 0,
+          kefu_overrides: {},
+          send_message_before_share: true,
+          pre_share_message_text: '您好 {customer_name}，这是主管名片',
+        },
+      }
+
+      mockFetch.mockResolvedValueOnce(
+        mockJsonResponse({
+          enabled: true,
+          auto_blacklist: {
+            enabled: false,
+            reason: 'Customer sent media (auto)',
+            skip_if_already_blacklisted: true,
+          },
+          auto_group_invite: {
+            enabled: false,
+            group_members: [],
+            group_name_template: '{customer_name}-服务群',
+            skip_if_group_exists: true,
+            send_test_message_after_create: true,
+            test_message_text: '测试',
+            post_confirm_wait_seconds: 1,
+            duplicate_name_policy: 'first',
+            video_invite_policy: 'extract_frame',
+          },
+          auto_contact_share: update.auto_contact_share,
+          review_gate: defaultReviewGate,
+        })
+      )
+
+      const { api } = await import('../services/api')
+      await api.updateMediaActionSettings(update)
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/media-actions/settings'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(update),
+        })
+      )
+    })
   })
 
   describe('testTriggerMediaAction', () => {
@@ -234,6 +285,8 @@ describe('MediaAutoActionSettings type', () => {
         skip_if_already_shared: true,
         cooldown_seconds: 0,
         kefu_overrides: {},
+        send_message_before_share: true,
+        pre_share_message_text: '您好 {customer_name}，这是主管名片',
       },
       review_gate: {
         enabled: true,
@@ -248,6 +301,7 @@ describe('MediaAutoActionSettings type', () => {
     expect(settings.auto_blacklist.reason).toBe('test')
     expect(settings.auto_group_invite.group_members).toEqual(['A', 'B'])
     expect(settings.auto_group_invite.test_message_text).toBe('您好 {customer_name}')
+    expect(settings.auto_contact_share.pre_share_message_text).toBe('您好 {customer_name}，这是主管名片')
     expect(settings.review_gate.video_review_policy).toBe('extract_frame')
   })
 })
