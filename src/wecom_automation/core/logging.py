@@ -61,6 +61,59 @@ def _swipe_filter(record: dict) -> bool:
     return True
 
 
+class _LoguruInterceptHandler(logging.Handler):
+    """Forward stdlib ``logging`` records into loguru.
+
+    A non-trivial portion of the codebase (e.g. ``services/media_actions/*``,
+    ``services/contact_share/*``) was written with ``logging.getLogger(__name__)``.
+    Without this bridge those records are discarded silently because we tear
+    down the stdlib root handlers in ``init_logging`` and never attach a sink
+    to them.
+
+    Mapping rules:
+    - levels are translated by ``logging.getLevelName`` (loguru accepts the
+      same names: DEBUG/INFO/WARNING/ERROR/CRITICAL).
+    - the originating module name is preserved as ``extra[module]`` so the
+      file format stays consistent across stdlib and loguru-native callers.
+    - ``record.exc_info`` is preserved so tracebacks show up in the file sink.
+    """
+
+    def emit(self, record: logging.LogRecord) -> None:  # pragma: no cover - thin shim
+        try:
+            level = _loguru_logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+
+        frame = logging.currentframe()
+        depth = 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        bound = _loguru_logger.bind(module=record.name)
+        bound.opt(depth=depth, exception=record.exc_info).log(level, record.getMessage())
+
+
+def _install_stdlib_intercept(level: str) -> None:
+    """Reroute stdlib ``logging`` through loguru.
+
+    Idempotent: subsequent calls keep the existing intercept handler in place
+    and refresh its level threshold. Any pre-existing handlers on the root
+    logger are replaced so we get a single source of truth for log output.
+    """
+    handler = _LoguruInterceptHandler()
+    handler.setLevel(level)
+
+    root = logging.getLogger()
+    root.handlers = [handler]
+    root.setLevel(level)
+
+    for name in list(logging.Logger.manager.loggerDict.keys()):
+        existing = logging.getLogger(name)
+        existing.handlers = []
+        existing.propagate = True
+
+
 def _get_hostname() -> str:
     """从设置中获取主机名"""
     try:
@@ -133,6 +186,11 @@ def init_logging(
             colorize=True,
             filter=_swipe_filter,
         )
+
+    # 转发 stdlib logging 到 loguru（让 services/media_actions/* 等使用
+    # logging.getLogger(__name__) 的旧模块也能写入设备日志，否则它们的
+    # warning/error 在生产环境完全不可见，调试名片分享之类的链路时无从下手）
+    _install_stdlib_intercept(level)
 
     # 日志文件写入策略：根据是否提供 serial 决定
     if serial:
@@ -345,4 +403,15 @@ __all__ = [
     "get_logger",
     "setup_logger",
     "log_operation",
+    "install_stdlib_intercept",
 ]
+
+
+def install_stdlib_intercept(level: str = "INFO") -> None:
+    """Public wrapper for the internal stdlib→loguru bridge installer.
+
+    Useful for ad-hoc scripts and tests that initialize loguru manually but
+    still want third-party / legacy modules using ``logging.getLogger`` to
+    funnel into the same sinks.
+    """
+    _install_stdlib_intercept(level)

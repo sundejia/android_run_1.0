@@ -350,11 +350,176 @@ class ContactShareService(IContactShareService):
         return await self._wecom.navigate_to_chat(request.device_serial, request.customer_name)
 
     async def _tap_attach_button(self) -> bool:
-        """Tap the attachment button (i9u, rightmost bottom icon)."""
-        return await self._find_and_tap(
+        """Tap the attachment button (rightmost bottom icon in chat input area).
+
+        Tries in order:
+          1. Known resource IDs (i9u, id8, ...) and descriptions ("更多功能").
+          2. Position heuristic: the rightmost clickable element in the bottom
+             ~25% of the screen, excluding the send button area.
+
+        The position fallback exists because WeCom obfuscates resource IDs and
+        they drift between minor versions — a single hardcoded ID is the most
+        common reason this step silently fails on production devices.
+        """
+        if await self._find_and_tap(
             resource_patterns=S.ATTACH_RESOURCE_PATTERNS,
-            step_name="attach button (i9u)",
+            desc_patterns=S.ATTACH_DESC_PATTERNS,
+            step_name="attach button",
+        ):
+            return True
+
+        logger.warning(
+            "Attach button not found via resourceId/desc patterns "
+            "(tried resource_ids=%s, descs=%s); falling back to position heuristic",
+            S.ATTACH_RESOURCE_PATTERNS,
+            S.ATTACH_DESC_PATTERNS,
         )
+        return await self._tap_attach_button_by_position()
+
+    async def _tap_attach_button_by_position(self) -> bool:
+        """Heuristically tap the rightmost icon in the chat input row.
+
+        The chat input bar always sits at the bottom of the screen with the
+        attachment button as the rightmost icon (or second-to-rightmost when
+        the keyboard / voice toggle is visible). We pick the clickable element
+        whose center sits in the bottom ~20% of the screen and farthest right,
+        then dump UI state on failure for diagnosis.
+        """
+        try:
+            ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
+        except Exception as exc:
+            logger.warning("[attach button position fallback] get_ui_state failed: %s", exc)
+            return False
+
+        if not elements:
+            logger.warning("[attach button position fallback] no UI elements returned")
+            return False
+
+        screen_height = self._infer_screen_height(elements)
+        if screen_height <= 0:
+            logger.warning("[attach button position fallback] could not infer screen height")
+            self._dump_ui_for_attach_failure(elements)
+            return False
+
+        bottom_band_top = int(screen_height * 0.78)
+
+        candidates: list[tuple[int, dict]] = []
+        for elem in elements:
+            if not isinstance(elem, dict):
+                continue
+            bounds = self._parse_bounds(elem)
+            if not bounds:
+                continue
+            x1, y1, x2, y2 = bounds
+            if y1 < bottom_band_top:
+                continue
+
+            cls_name = (elem.get("className") or "").lower()
+            if "edittext" in cls_name:
+                continue
+
+            text = (elem.get("text") or "").strip()
+            if any(token in text for token in ("Send", "发送", "SEND")):
+                continue
+
+            if elem.get("clickable") is False:
+                continue
+
+            cx = (x1 + x2) // 2
+            candidates.append((cx, elem))
+
+        if not candidates:
+            logger.warning(
+                "[attach button position fallback] no candidates in bottom band y>=%d (screen_height=%d)",
+                bottom_band_top,
+                screen_height,
+            )
+            self._dump_ui_for_attach_failure(elements)
+            return False
+
+        candidates.sort(key=lambda pair: pair[0], reverse=True)
+        target_cx, target_elem = candidates[0]
+        idx = target_elem.get("index")
+        logger.info(
+            "[attach button position fallback] picked rightmost bottom element "
+            "(center_x=%d, %s)",
+            target_cx,
+            self._describe_element(target_elem),
+        )
+
+        if idx is None:
+            logger.warning("[attach button position fallback] candidate has no index, cannot tap")
+            return False
+
+        try:
+            await self._wecom.adb.tap(int(idx))
+            return True
+        except Exception as exc:
+            logger.warning("[attach button position fallback] tap failed: %s", exc)
+            return False
+
+    @staticmethod
+    def _parse_bounds(elem: dict) -> tuple[int, int, int, int] | None:
+        """Parse an element's bounds into (x1, y1, x2, y2) or None."""
+        import re
+
+        bounds_value = elem.get("bounds") or elem.get("boundsInScreen")
+        if isinstance(bounds_value, dict):
+            try:
+                return (
+                    int(bounds_value.get("left", 0)),
+                    int(bounds_value.get("top", 0)),
+                    int(bounds_value.get("right", 0)),
+                    int(bounds_value.get("bottom", 0)),
+                )
+            except (TypeError, ValueError):
+                return None
+        if isinstance(bounds_value, str):
+            nums = re.findall(r"-?\d+", bounds_value)
+            if len(nums) >= 4:
+                return tuple(int(n) for n in nums[:4])  # type: ignore[return-value]
+        return None
+
+    @staticmethod
+    def _infer_screen_height(elements: list[dict]) -> int:
+        """Infer device screen height from the largest bottom bound seen."""
+        max_bottom = 0
+        for elem in elements:
+            if not isinstance(elem, dict):
+                continue
+            bounds = ContactShareService._parse_bounds(elem)
+            if bounds and bounds[3] > max_bottom:
+                max_bottom = bounds[3]
+        return max_bottom
+
+    def _dump_ui_for_attach_failure(self, elements: list[dict]) -> None:
+        """Log a compact UI snapshot to help debug attach-button selector drift.
+
+        Only the bottom 30% of the screen is dumped — that's where the input
+        bar lives, and dumping the whole tree would flood the log file.
+        """
+        try:
+            screen_height = self._infer_screen_height(elements) or 1
+            cutoff = int(screen_height * 0.7)
+            lines = []
+            for elem in elements:
+                if not isinstance(elem, dict):
+                    continue
+                bounds = self._parse_bounds(elem)
+                if not bounds or bounds[1] < cutoff:
+                    continue
+                lines.append(self._describe_element(elem))
+            if lines:
+                logger.warning(
+                    "[attach button] bottom-of-screen UI snapshot for diagnosis "
+                    "(screen_height=%d, cutoff=%d, count=%d):\n  - %s",
+                    screen_height,
+                    cutoff,
+                    len(lines),
+                    "\n  - ".join(lines),
+                )
+        except Exception as exc:
+            logger.debug("UI dump for attach failure errored: %s", exc)
 
     async def _open_contact_card_menu(self) -> bool:
         """Find and tap 'Contact Card' — tries current page first, swipes if not found.

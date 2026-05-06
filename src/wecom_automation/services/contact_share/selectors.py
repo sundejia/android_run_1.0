@@ -3,15 +3,24 @@ UI element selector patterns for WeCom contact card sharing.
 
 Validated on real device (WeCom Android, 720x1612 resolution).
 
-Flow: chat → tap i9u (attach button) → swipe left on GridView (ahe)
+Flow: chat → tap attach button (i9u/id8/...) → swipe left on GridView (ahe)
       → tap "Contact Card" (aha) → select contact → tap "Send" (dak)
+
+Resource IDs for the attach button drift between WeCom builds, so we keep a
+list of known IDs and rely on a position-based fallback when none match. New
+IDs should be appended (not replaced) here so we stay backwards-compatible
+with older devices in the fleet.
 """
 
 from __future__ import annotations
 
 # ── Attachment button in chat input area (rightmost bottom icon) ──
-ATTACH_RESOURCE_PATTERNS: tuple[str, ...] = ("i9u",)
-ATTACH_DESC_PATTERNS: tuple[str, ...] = ()
+# Multiple patterns to support different WeCom versions:
+#   * "i9u": validated on WeCom Android 720x1612 (older builds)
+#   * "id8": validated on WeCom Android 1080x2340 (newer builds, image_sender)
+#   * "i_a": defensive prefix match seen in some builds with shorter mangled IDs
+ATTACH_RESOURCE_PATTERNS: tuple[str, ...] = ("i9u", "id8")
+ATTACH_DESC_PATTERNS: tuple[str, ...] = ("更多功能", "more functions", "more")
 
 # ── Attachment menu GridView (for horizontal swipe) ──────────────
 ATTACH_GRID_RESOURCE_PATTERNS: tuple[str, ...] = ("ahe",)
