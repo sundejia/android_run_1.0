@@ -108,6 +108,10 @@ _STATUS_SEVERITY: dict[str, str] = {
     "healthy": "ok",
     "unreachable": "fatal",
     "service_down": "severe",
+    # Layer-3 style outcomes (not emitted by current check_ai_health, but still
+    # handled for callers/tests and any future probe extensions — BUG-2026-04-27).
+    "inference_timeout": "warn",
+    "inference_error": "severe",
 }
 
 
@@ -170,6 +174,16 @@ class PeriodicAIHealthChecker:
                     self._logger.info("[AIHealthChecker] AI recovered; resetting unhealthy counter")
             self._consecutive_unhealthy = 0
             self._already_forced_open = False
+            return
+
+        if severity == "warn":
+            # Degraded but not breaker-worthy (e.g. probe /chat timeout while
+            # real traffic still completes). Do not increment the consecutive
+            # gate or force_open — BUG-2026-04-27.
+            if self._logger:
+                self._logger.warning(
+                    f"[AIHealthChecker] AI degraded ({status}) — warn only, not forcing circuit breaker open"
+                )
             return
 
         # severity in {"severe", "fatal"} — count this probe.
