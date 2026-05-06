@@ -446,6 +446,12 @@ class ResponseDetector:
         self._followup_scan_running = False
         self._media_event_bus = None
         self._media_action_settings: dict = {}
+        # Tracks (device_serial, customer_name) tuples for which a media auto
+        # action (auto_group_invite or auto_blacklist) succeeded during the
+        # current scan cycle. When set, AI reply is suppressed for that user
+        # in the same processing round to avoid sending a redundant message
+        # right after an automated action.
+        self._media_action_handled_keys: set[tuple[str, str]] = set()
         self._ai_circuit_breaker = AICircuitBreaker(
             failure_threshold=3,
             recovery_timeout=120.0,
@@ -500,19 +506,14 @@ class ResponseDetector:
             all_settings = svc.get_flat_settings()
 
             day_timeout = float(all_settings.get("sidecar_timeout", day_timeout))
-            night_timeout = float(
-                all_settings.get("night_mode_sidecar_timeout", night_timeout)
-            )
+            night_timeout = float(all_settings.get("night_mode_sidecar_timeout", night_timeout))
             night_start = int(all_settings.get("night_mode_start_hour", night_start))
             night_end = int(all_settings.get("night_mode_end_hour", night_end))
         except (ImportError, ValueError, TypeError, KeyError) as exc:
-            self._logger.debug(
-                "Sidecar timeout settings unavailable, using defaults: %s", exc
-            )
+            self._logger.debug("Sidecar timeout settings unavailable, using defaults: %s", exc)
         except Exception as exc:
             self._logger.warning(
-                "Sidecar timeout settings lookup failed unexpectedly "
-                "(%s: %s); using defaults",
+                "Sidecar timeout settings lookup failed unexpectedly (%s: %s); using defaults",
                 type(exc).__name__,
                 exc,
             )
@@ -531,10 +532,27 @@ class ResponseDetector:
         Uses the shared factory so behaviour is identical to full-sync.
         Failures are logged but never break the scan.
         """
+        # Reset per-cycle bookkeeping so stale flags from a previous scan do
+        # not accidentally suppress AI replies in the new cycle.
+        self._media_action_handled_keys.clear()
         try:
             from wecom_automation.services.media_actions.factory import build_media_event_bus
 
             async def _on_media_results(event, results):
+                try:
+                    from wecom_automation.services.media_actions.interfaces import ActionStatus
+
+                    suppress_ai_actions = {"auto_group_invite", "auto_blacklist"}
+                    if any(r.action_name in suppress_ai_actions and r.status == ActionStatus.SUCCESS for r in results):
+                        key = (event.device_serial, event.customer_name)
+                        self._media_action_handled_keys.add(key)
+                        self._logger.info(
+                            f"[{event.device_serial}] Media auto-action handled "
+                            f"customer={event.customer_name}; AI reply will be suppressed this round"
+                        )
+                except Exception as ai_exc:
+                    self._logger.debug("Media action AI-suppression bookkeeping failed (non-blocking): %s", ai_exc)
+
                 try:
                     from routers.global_websocket import broadcast_media_action_triggered
 
@@ -573,9 +591,7 @@ class ResponseDetector:
 
                 bind_wecom_service(wecom, db_path=str(get_control_db_path()))
             except Exception as bind_exc:
-                self._logger.debug(
-                    f"[{serial}] Review gate WeComService bind failed (non-blocking): {bind_exc}"
-                )
+                self._logger.debug(f"[{serial}] Review gate WeComService bind failed (non-blocking): {bind_exc}")
         except Exception as exc:
             self._logger.warning(f"[{serial}] Failed to build media event bus (non-blocking): {exc}")
             self._media_event_bus = None
@@ -739,6 +755,7 @@ class ResponseDetector:
             else:
                 try:
                     from services.device_manager import PortAllocator
+
                     port = PortAllocator().get_allocation(serial)
                     if port is not None:
                         config_kwargs["droidrun_port"] = port
@@ -800,17 +817,14 @@ class ResponseDetector:
                     "scroll_to_top_enabled": True,
                 }
                 try:
-                    from services.settings import get_settings_service, SettingCategory
+                    from services.settings import SettingCategory, get_settings_service
 
                     _svc = get_settings_service()
                     for _key in _pre_scan_toggles:
-                        _pre_scan_toggles[_key] = bool(
-                            _svc.get(SettingCategory.REALTIME.value, _key, True)
-                        )
+                        _pre_scan_toggles[_key] = bool(_svc.get(SettingCategory.REALTIME.value, _key, True))
                 except Exception as _toggle_err:
                     self._logger.debug(
-                        f"[{serial}] Failed to read realtime pre-scan toggles, "
-                        f"defaulting all to True: {_toggle_err}"
+                        f"[{serial}] Failed to read realtime pre-scan toggles, defaulting all to True: {_toggle_err}"
                     )
 
                 # Step 1: Launch WeCom (gated by realtime.launch_wecom_enabled).
@@ -826,10 +840,7 @@ class ResponseDetector:
                         f"duration_ms={(time.perf_counter() - _step_started) * 1000:.1f}"
                     )
                 else:
-                    self._logger.info(
-                        f"[{serial}] Step 1: Skipping launch-wecom "
-                        f"(realtime.launch_wecom_enabled=False)"
-                    )
+                    self._logger.info(f"[{serial}] Step 1: Skipping launch-wecom (realtime.launch_wecom_enabled=False)")
 
                 # Step 2: Switch to Private Chats (gated by
                 # realtime.switch_to_private_chats_enabled). Skipping saves
@@ -867,8 +878,7 @@ class ResponseDetector:
                     )
                 else:
                     self._logger.info(
-                        f"[{serial}] Step 3: Skipping scroll-to-top "
-                        f"(realtime.scroll_to_top_enabled=False)"
+                        f"[{serial}] Step 3: Skipping scroll-to-top (realtime.scroll_to_top_enabled=False)"
                     )
 
                 # Step 4: Initial red dot detection
@@ -1346,6 +1356,16 @@ class ResponseDetector:
                         # Log detailed error but continue processing (skip check is optional)
                         self._logger.warning(f"[{serial}] Error checking skip before AI: {type(e).__name__}: {e}")
 
+                # Suppress AI reply when a media auto-action (auto_group_invite /
+                # auto_blacklist) already handled this customer in the current
+                # scan cycle. Avoids sending a private-chat reply right after we
+                # pulled them into a group / blacklisted them.
+                media_handled_key = (serial, user_name)
+                if media_handled_key in self._media_action_handled_keys:
+                    self._logger.info(f"[{serial}] Skip AI reply for {user_name}: media auto-action handled this scan")
+                    self._media_action_handled_keys.discard(media_handled_key)
+                    return result
+
                 # Circuit breaker gate: skip AI call when breaker is open
                 if not self._ai_circuit_breaker.allow_request():
                     self._logger.warning(f"[{serial}]    AI circuit breaker OPEN — skipping AI call for {user_name}")
@@ -1638,7 +1658,14 @@ class ResponseDetector:
 
                 # Generate and send reply (with circuit breaker)
                 loop_metrics = get_metrics_logger(serial)
-                if not self._ai_circuit_breaker.allow_request():
+                media_handled_key = (serial, user_name)
+                if media_handled_key in self._media_action_handled_keys:
+                    self._logger.info(
+                        f"[{serial}] Skip AI reply for {user_name} in wait loop: media auto-action handled this scan"
+                    )
+                    self._media_action_handled_keys.discard(media_handled_key)
+                    reply = None
+                elif not self._ai_circuit_breaker.allow_request():
                     self._logger.warning(f"[{serial}]    AI circuit breaker OPEN — skipping AI in interactive loop")
                     reply = None
                 else:
@@ -2179,6 +2206,7 @@ class ResponseDetector:
             wecom_service=wecom,
             videos_dir=project_root / "conversation_videos",
             logger=self._logger,
+            wait_for_review=True,
         )
         processor.register_handler(video_handler)
 
@@ -2607,7 +2635,6 @@ class ResponseDetector:
 
             import random as _random  # local alias to avoid shadowing module-level imports
 
-            response = None  # populated by the inner block on the final attempt
             data = None
             ai_reply = None
             response_status = None
@@ -2634,15 +2661,12 @@ class ResponseDetector:
                     if _attempt > 0:
                         _retry_succeeded_after_failure = True
                         self._logger.info(
-                            f"[{device_serial}] ✅ AI request succeeded on retry "
-                            f"{_attempt + 1}/{ai_max_retries}"
+                            f"[{device_serial}] ✅ AI request succeeded on retry {_attempt + 1}/{ai_max_retries}"
                         )
                     break
                 except _retryable_excs as _retry_exc:
                     if _attempt < ai_max_retries - 1:
-                        _backoff_seconds = (ai_retry_backoff_ms / 1000.0) * (2 ** _attempt) + _random.uniform(
-                            0, 0.5
-                        )
+                        _backoff_seconds = (ai_retry_backoff_ms / 1000.0) * (2**_attempt) + _random.uniform(0, 0.5)
                         self._logger.warning(
                             f"[{device_serial}] ⚠️ AI request transient failure "
                             f"({type(_retry_exc).__name__}: {_retry_exc}) on attempt "
@@ -2661,9 +2685,7 @@ class ResponseDetector:
             self._logger.info(f"[{device_serial}] " + "=" * 60)
             self._logger.info(f"[{device_serial}] HTTP Status: {response_status}")
             if _retry_succeeded_after_failure:
-                self._logger.info(
-                    f"[{device_serial}] (recovered after retry — connection self-healed)"
-                )
+                self._logger.info(f"[{device_serial}] (recovered after retry — connection self-healed)")
 
             # Re-shape downstream code to consume the retry-loop result.
             if response_status == 200:
@@ -3156,9 +3178,7 @@ class ResponseDetector:
             # is preferable to two duplicate replies.
             _dedup_repo.record(_dedup_customer_key, _dedup_message_hash, serial)
         except Exception as _dedup_exc:  # noqa: BLE001 — dedup must never raise
-            self._logger.debug(
-                f"[{serial}] recent-replies dedup unavailable, proceeding without dedup: {_dedup_exc}"
-            )
+            self._logger.debug(f"[{serial}] recent-replies dedup unavailable, proceeding without dedup: {_dedup_exc}")
 
         # Track whether the message was successfully enqueued. If yes, almost
         # every non-success outcome must NOT trigger a direct-send fallback,
@@ -3210,8 +3230,7 @@ class ResponseDetector:
                         return False, None
                     if reason == "failed":
                         self._logger.warning(
-                            f"[{serial}] Sidecar reported send failed; "
-                            f"NOT retrying via direct send to avoid duplicate"
+                            f"[{serial}] Sidecar reported send failed; NOT retrying via direct send to avoid duplicate"
                         )
                         return False, None
                     if reason == "still_sending":
@@ -3226,8 +3245,7 @@ class ResponseDetector:
                         return False, None
                     if reason == "not_found":
                         self._logger.warning(
-                            f"[{serial}] Queue message {msg_id} disappeared; "
-                            f"NOT direct-sending (state unknown)"
+                            f"[{serial}] Queue message {msg_id} disappeared; NOT direct-sending (state unknown)"
                         )
                         return False, None
                     if reason == "timeout":
@@ -3236,15 +3254,11 @@ class ResponseDetector:
                         # send. It also marks the message EXPIRED, so the
                         # frontend can no longer transition it to SENDING.
                         # Direct send is safe here.
-                        self._logger.warning(
-                            f"[{serial}] User did not act in time; "
-                            f"falling back to direct send"
-                        )
+                        self._logger.warning(f"[{serial}] User did not act in time; falling back to direct send")
                         allow_direct_fallback = True
                     else:
                         self._logger.warning(
-                            f"[{serial}] Sidecar returned unknown reason '{reason}'; "
-                            f"NOT direct-sending (conservative)"
+                            f"[{serial}] Sidecar returned unknown reason '{reason}'; NOT direct-sending (conservative)"
                         )
                         return False, None
 
@@ -3254,22 +3268,16 @@ class ResponseDetector:
                     # unknown after the exception. A direct send here could
                     # land a second copy on the device.
                     self._logger.warning(
-                        f"[{serial}] Error using Sidecar after enqueue: {e}; "
-                        f"NOT direct-sending to avoid duplicate"
+                        f"[{serial}] Error using Sidecar after enqueue: {e}; NOT direct-sending to avoid duplicate"
                     )
                     return False, None
-                self._logger.warning(
-                    f"[{serial}] Error using Sidecar before enqueue: {e}, "
-                    f"falling back to direct send"
-                )
+                self._logger.warning(f"[{serial}] Error using Sidecar before enqueue: {e}, falling back to direct send")
                 allow_direct_fallback = True
 
         if not allow_direct_fallback:
             # Defensive: code should never reach here without an explicit
             # decision above. Refuse to send rather than risk a duplicate.
-            self._logger.error(
-                f"[{serial}] Unexpected fall-through to direct send block; refusing"
-            )
+            self._logger.error(f"[{serial}] Unexpected fall-through to direct send block; refusing")
             return False, None
 
         # 直接发送（无人工审核）- 使用 Sidecar 的 send API

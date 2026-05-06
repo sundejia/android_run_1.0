@@ -8,7 +8,7 @@ with configured members when a customer sends an image or video.
 from __future__ import annotations
 
 from datetime import datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -18,6 +18,9 @@ from wecom_automation.services.media_actions.actions.auto_group_invite import (
 from wecom_automation.services.media_actions.interfaces import (
     ActionStatus,
     MediaEvent,
+)
+from wecom_automation.services.media_actions.media_review_decision import (
+    MediaReviewDecision,
 )
 
 
@@ -45,10 +48,10 @@ def _default_settings(enabled: bool = True, **overrides) -> dict:
             "group_members": ["经理A", "主管B"],
             "group_name_template": "{customer_name}-服务群",
             "skip_if_group_exists": True,
-                "send_test_message_after_create": True,
-                "test_message_text": "测试",
-                "post_confirm_wait_seconds": 1.0,
-                "duplicate_name_policy": "first",
+            "send_test_message_after_create": True,
+            "test_message_text": "测试",
+            "post_confirm_wait_seconds": 1.0,
+            "duplicate_name_policy": "first",
         },
     }
     base["auto_group_invite"].update(overrides)
@@ -360,3 +363,137 @@ class TestAutoGroupInviteNavigationRecovery:
 
         assert result.status == ActionStatus.SUCCESS
         service.restore_navigation.assert_awaited_once()
+
+
+class TestAutoGroupInviteReviewGate:
+    """Verify the portrait/decision review gate when ``db_path`` is wired in."""
+
+    def _settings(self, *, gate_enabled: bool) -> dict:
+        return {
+            "enabled": True,
+            "auto_group_invite": {
+                "enabled": True,
+                "group_members": ["经理A"],
+                "skip_if_group_exists": False,
+            },
+            "review_gate": {"enabled": gate_enabled},
+        }
+
+    @pytest.mark.asyncio
+    async def test_gate_off_portrait_true_executes(self):
+        service = AsyncMock()
+        service.group_exists = AsyncMock(return_value=False)
+        action = AutoGroupInviteAction(group_chat_service=service, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=True,
+            has_data=True,
+            reason="ok",
+            details={"is_portrait": True},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_group_invite.evaluate_gate_pass",
+            return_value=decision,
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=False)) is True
+            mock_eval.assert_called_once()
+            assert mock_eval.call_args.kwargs["gate_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_gate_off_portrait_false_skips(self):
+        service = AsyncMock()
+        service.group_exists = AsyncMock(return_value=False)
+        action = AutoGroupInviteAction(group_chat_service=service, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=False,
+            has_data=True,
+            reason="portrait_false",
+            details={"is_portrait": False},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_group_invite.evaluate_gate_pass",
+            return_value=decision,
+        ):
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=False)) is False
+
+    @pytest.mark.asyncio
+    async def test_gate_on_portrait_and_qualified_executes(self):
+        service = AsyncMock()
+        service.group_exists = AsyncMock(return_value=False)
+        action = AutoGroupInviteAction(group_chat_service=service, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=True,
+            has_data=True,
+            reason="ok",
+            details={"is_portrait": True, "decision": "合格"},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_group_invite.evaluate_gate_pass",
+            return_value=decision,
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=True)) is True
+            assert mock_eval.call_args.kwargs["gate_enabled"] is True
+
+    @pytest.mark.asyncio
+    async def test_gate_on_portrait_true_but_unqualified_skips(self):
+        service = AsyncMock()
+        service.group_exists = AsyncMock(return_value=False)
+        action = AutoGroupInviteAction(group_chat_service=service, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=False,
+            has_data=True,
+            reason="decision_not_qualified",
+            details={"is_portrait": True, "decision": "不合格"},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_group_invite.evaluate_gate_pass",
+            return_value=decision,
+        ):
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=True)) is False
+
+    @pytest.mark.asyncio
+    async def test_missing_review_data_skips_with_warning(self, caplog):
+        service = AsyncMock()
+        service.group_exists = AsyncMock(return_value=False)
+        action = AutoGroupInviteAction(group_chat_service=service, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=False,
+            has_data=False,
+            reason="ai_review_status='pending'",
+            details={"message_id": 100},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_group_invite.evaluate_gate_pass",
+            return_value=decision,
+        ):
+            import logging
+
+            with caplog.at_level(
+                logging.WARNING,
+                logger="wecom_automation.services.media_actions.actions.auto_group_invite",
+            ):
+                assert await action.should_execute(_make_event(), self._settings(gate_enabled=True)) is False
+
+        assert any("review data missing" in rec.message for rec in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_legacy_no_db_path_keeps_behaviour(self):
+        """When db_path is omitted (legacy mode), gate is skipped entirely."""
+        service = AsyncMock()
+        service.group_exists = AsyncMock(return_value=False)
+        action = AutoGroupInviteAction(group_chat_service=service)
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_group_invite.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=False)) is True
+            mock_eval.assert_not_called()

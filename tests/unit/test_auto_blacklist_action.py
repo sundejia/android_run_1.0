@@ -7,17 +7,20 @@ when a customer sends an image or video.
 
 from __future__ import annotations
 
-import pytest
 from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
+import pytest
+
+from wecom_automation.services.media_actions.actions.auto_blacklist import (
+    AutoBlacklistAction,
+)
 from wecom_automation.services.media_actions.interfaces import (
-    ActionResult,
     ActionStatus,
     MediaEvent,
 )
-from wecom_automation.services.media_actions.actions.auto_blacklist import (
-    AutoBlacklistAction,
+from wecom_automation.services.media_actions.media_review_decision import (
+    MediaReviewDecision,
 )
 
 
@@ -205,7 +208,152 @@ class TestAutoBlacklistExecute:
         event = _make_event()
         settings = _default_settings(reason="Sent inappropriate content")
 
-        result = await action.execute(event, settings)
+        await action.execute(event, settings)
 
         call_kwargs = writer.add_to_blacklist.call_args
         assert call_kwargs[1]["reason"] == "Sent inappropriate content"
+
+
+class TestAutoBlacklistReviewGate:
+    """The gate keeps blacklist + group_invite aligned: only act on portrait media."""
+
+    def _settings(self, *, gate_enabled: bool, skip_already: bool = True) -> dict:
+        return {
+            "enabled": True,
+            "auto_blacklist": {
+                "enabled": True,
+                "reason": "auto",
+                "skip_if_already_blacklisted": skip_already,
+            },
+            "review_gate": {"enabled": gate_enabled},
+        }
+
+    @pytest.mark.asyncio
+    async def test_gate_off_portrait_true_executes(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=True,
+            has_data=True,
+            reason="ok",
+            details={"is_portrait": True},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+            return_value=decision,
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=False)) is True
+            assert mock_eval.call_args.kwargs["gate_enabled"] is False
+
+    @pytest.mark.asyncio
+    async def test_gate_off_portrait_false_skips(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=False,
+            has_data=True,
+            reason="portrait_false",
+            details={"is_portrait": False},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+            return_value=decision,
+        ):
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=False)) is False
+
+    @pytest.mark.asyncio
+    async def test_gate_on_portrait_and_qualified_executes(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=True,
+            has_data=True,
+            reason="ok",
+            details={"is_portrait": True, "decision": "合格"},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+            return_value=decision,
+        ):
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=True)) is True
+
+    @pytest.mark.asyncio
+    async def test_gate_on_unqualified_skips(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=False,
+            has_data=True,
+            reason="decision_not_qualified",
+            details={"is_portrait": True, "decision": "不合格"},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+            return_value=decision,
+        ):
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=True)) is False
+
+    @pytest.mark.asyncio
+    async def test_missing_review_data_skips_with_warning(self, caplog):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        decision = MediaReviewDecision(
+            gate_pass=False,
+            has_data=False,
+            reason="ai_review_status='pending'",
+            details={"message_id": 100},
+        )
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+            return_value=decision,
+        ):
+            import logging
+
+            with caplog.at_level(
+                logging.WARNING,
+                logger="wecom_automation.services.media_actions.actions.auto_blacklist",
+            ):
+                assert await action.should_execute(_make_event(), self._settings(gate_enabled=True)) is False
+
+        assert any("review data missing" in rec.message for rec in caplog.records)
+
+    @pytest.mark.asyncio
+    async def test_already_blacklisted_short_circuits_before_gate(self):
+        """If user is already blacklisted, we skip without calling evaluator."""
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=True)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=True)) is False
+            mock_eval.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_legacy_no_db_path_keeps_behaviour(self):
+        """When db_path is omitted (legacy mode), gate is skipped entirely."""
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer)
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), self._settings(gate_enabled=False)) is True
+            mock_eval.assert_not_called()

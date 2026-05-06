@@ -16,6 +16,9 @@ from wecom_automation.services.media_actions.interfaces import (
     IMediaAction,
     MediaEvent,
 )
+from wecom_automation.services.media_actions.media_review_decision import (
+    evaluate_gate_pass,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +30,16 @@ class AutoBlacklistAction(IMediaAction):
     Requires a BlacklistWriter instance (from blacklist_service) for
     database operations. Optionally checks existing blacklist status
     to avoid duplicate entries.
+
+    When ``db_path`` is provided, the action consults the persisted
+    image-rating-server review (portrait + decision) and only blacklists
+    customers whose media passes the same gate that triggers
+    auto-group-invite, so the two actions stay aligned.
     """
 
-    def __init__(self, blacklist_writer) -> None:
+    def __init__(self, blacklist_writer, db_path: str | None = None) -> None:
         self._writer = blacklist_writer
+        self._db_path = db_path
 
     @property
     def action_name(self) -> str:
@@ -61,6 +70,54 @@ class AutoBlacklistAction(IMediaAction):
                     return False
             except Exception as exc:
                 logger.warning("Failed to check blacklist status: %s", exc)
+
+        if self._db_path is not None:
+            gate_enabled = bool(settings.get("review_gate", {}).get("enabled", False))
+            decision = evaluate_gate_pass(
+                message_id=event.message_id,
+                message_type=event.message_type,
+                db_path=self._db_path,
+                gate_enabled=gate_enabled,
+            )
+            if not decision.has_data:
+                logger.warning(
+                    "Skipping auto-blacklist: review data missing "
+                    "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                    "gate_enabled=%s, reason=%s, details=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    event.message_type,
+                    event.message_id,
+                    gate_enabled,
+                    decision.reason,
+                    decision.details,
+                )
+                return False
+            if not decision.gate_pass:
+                logger.debug(
+                    "Skipping auto-blacklist: portrait/decision gate rejected "
+                    "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                    "gate_enabled=%s, reason=%s, details=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    event.message_type,
+                    event.message_id,
+                    gate_enabled,
+                    decision.reason,
+                    decision.details,
+                )
+                return False
+            logger.info(
+                "Auto-blacklist gate passed "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                "gate_enabled=%s, details=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+                gate_enabled,
+                decision.details,
+            )
 
         return True
 

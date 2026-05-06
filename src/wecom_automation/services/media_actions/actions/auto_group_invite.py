@@ -15,6 +15,9 @@ from wecom_automation.services.media_actions.interfaces import (
     IMediaAction,
     MediaEvent,
 )
+from wecom_automation.services.media_actions.media_review_decision import (
+    evaluate_gate_pass,
+)
 from wecom_automation.services.media_actions.template_resolver import render_media_template
 
 logger = logging.getLogger(__name__)
@@ -27,11 +30,14 @@ class AutoGroupInviteAction(IMediaAction):
     Creates a group chat with configured members when a customer sends media.
 
     Requires a GroupChatService (or IGroupChatService) instance for the
-    actual group creation logic.
+    actual group creation logic. When ``db_path`` is provided, the action
+    consults the persisted image-rating-server review (portrait + decision)
+    to gate execution; otherwise it preserves legacy behaviour.
     """
 
-    def __init__(self, group_chat_service) -> None:
+    def __init__(self, group_chat_service, db_path: str | None = None) -> None:
         self._service = group_chat_service
+        self._db_path = db_path
 
     @property
     def action_name(self) -> str:
@@ -116,6 +122,54 @@ class AutoGroupInviteAction(IMediaAction):
                     exc,
                     exc_info=True,
                 )
+
+        if self._db_path is not None:
+            gate_enabled = bool(settings.get("review_gate", {}).get("enabled", False))
+            decision = evaluate_gate_pass(
+                message_id=event.message_id,
+                message_type=event.message_type,
+                db_path=self._db_path,
+                gate_enabled=gate_enabled,
+            )
+            if not decision.has_data:
+                logger.warning(
+                    "Skipping auto-group-invite: review data missing "
+                    "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                    "gate_enabled=%s, reason=%s, details=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    event.message_type,
+                    event.message_id,
+                    gate_enabled,
+                    decision.reason,
+                    decision.details,
+                )
+                return False
+            if not decision.gate_pass:
+                logger.info(
+                    "Skipping auto-group-invite: portrait/decision gate rejected "
+                    "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                    "gate_enabled=%s, reason=%s, details=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    event.message_type,
+                    event.message_id,
+                    gate_enabled,
+                    decision.reason,
+                    decision.details,
+                )
+                return False
+            logger.info(
+                "Auto-group-invite gate passed "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                "gate_enabled=%s, details=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+                gate_enabled,
+                decision.details,
+            )
 
         logger.debug(
             "Auto-group-invite eligible "

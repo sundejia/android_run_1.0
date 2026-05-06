@@ -27,7 +27,14 @@ class VideoMessageHandler(BaseMessageHandler):
     - 创建消息和视频记录
     """
 
-    def __init__(self, repository: ConversationRepository, wecom_service, videos_dir: Path, logger=None):
+    def __init__(
+        self,
+        repository: ConversationRepository,
+        wecom_service,
+        videos_dir: Path,
+        logger=None,
+        wait_for_review: bool = False,
+    ):
         """
         初始化视频消息处理器
 
@@ -36,9 +43,13 @@ class VideoMessageHandler(BaseMessageHandler):
             wecom_service: WeComService实例
             videos_dir: 视频保存目录
             logger: 日志记录器
+            wait_for_review: True 时同步等待视频多帧 AI 审核完成（用于 realtime
+                门控，需要在 should_execute 之前拿到 ai_review_*）。False
+                则保持原有 fire-and-forget，避免阻塞全量同步。
         """
         super().__init__(repository, logger)
         self._wecom = wecom_service
+        self._wait_for_review = wait_for_review
         self._videos_dir = Path(videos_dir)
         self._videos_dir.mkdir(parents=True, exist_ok=True)
 
@@ -135,9 +146,14 @@ class VideoMessageHandler(BaseMessageHandler):
 
         if video_path and msg_record:
             try:
-                from services.video_review_service import schedule_video_review_for_message
+                if self._wait_for_review:
+                    from services.video_review_service import run_video_review_for_message
 
-                schedule_video_review_for_message(msg_record.id, None)
+                    await run_video_review_for_message(msg_record.id, None)
+                else:
+                    from services.video_review_service import schedule_video_review_for_message
+
+                    schedule_video_review_for_message(msg_record.id, None)
             except Exception as exc:
                 self._logger.warning(f"Video AI review schedule failed: {exc}")
 
