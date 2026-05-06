@@ -36,6 +36,18 @@ def _elem(text="", index=None, bounds=None, **extra):
     return e
 
 
+def _picker_marker(index: int = 99):
+    """Inject a contact-picker signature so PageStateValidator.is_contact_picker_open
+    returns True in tests that exercise ScrollContactFinder behaviour.
+
+    ScrollContactFinder now refuses to scan when not in the picker (this is
+    the regression introduced after 22:58's fake-success); pre-existing
+    tests that wanted to exercise scan logic must therefore opt into the
+    picker context explicitly.
+    """
+    return _elem(resourceId="com.tencent.wework:id/cth", index=index)
+
+
 def _adb_mock(get_ui_state_side_effect=None):
     """Create a mock ADBService with common async methods."""
     adb = AsyncMock()
@@ -62,6 +74,7 @@ class TestScrollContactFinderFindsContact:
                 return_value=(
                     None,
                     [
+                        _picker_marker(),
                         _elem(text="张三-经理", index=5, bounds="[100,200][500,260]"),
                     ],
                 )
@@ -79,6 +92,7 @@ class TestScrollContactFinderFindsContact:
                 return_value=(
                     None,
                     [
+                        _picker_marker(),
                         _elem(text="李四", index=10, bounds="[100,200][500,260]"),
                     ],
                 )
@@ -96,6 +110,7 @@ class TestScrollContactFinderFindsContact:
                 return_value=(
                     None,
                     [
+                        _picker_marker(),
                         _elem(text="李四", index=5, bounds="[100,200][500,260]"),
                     ],
                 )
@@ -142,6 +157,7 @@ class TestScrollContactFinderFindsContact:
                 return_value=(
                     None,
                     [
+                        _picker_marker(),
                         _elem(text="张三", bounds="[100,200][500,260]"),
                     ],
                 )
@@ -150,6 +166,63 @@ class TestScrollContactFinderFindsContact:
         finder = ScrollContactFinder()
         result = await finder.find_and_select("张三", adb)
         assert result is False  # No index to tap
+
+
+class TestScrollContactFinderPickerContextCheck:
+    """Regression for the 22:58 fake-success: ScrollContactFinder must
+    refuse to scan when the current page is NOT the contact picker, even
+    if a text node happens to start with the contact name.
+    """
+
+    @pytest.mark.asyncio
+    async def test_returns_false_on_attach_panel_even_with_matching_text(self):
+        """Attach panel state with a "孙德家..."-prefixed shortcut tile.
+
+        Without the picker context check this returned True (tap whatever
+        node prefixed with the customer name) — the page-state check now
+        bails out fast so CompositeContactFinder can record a clean miss.
+        """
+        adb = _adb_mock(
+            get_ui_state_side_effect=AsyncMock(
+                return_value=(
+                    None,
+                    [
+                        # Attach panel signature (GridView resourceId)
+                        _elem(resourceId="com.tencent.wework:id/ahe", index=0),
+                        _elem(resourceId="com.tencent.wework:id/aha", text="Image", index=1),
+                        _elem(resourceId="com.tencent.wework:id/aha", text="Camera", index=2),
+                        _elem(resourceId="com.tencent.wework:id/aha", text="Contact Card", index=3),
+                        _elem(resourceId="com.tencent.wework:id/aha", text="Favorites", index=4),
+                        # Tempting but bogus prefix-match candidate left on
+                        # the chat behind the panel
+                        _elem(text="孙德家发来的消息", index=42, bounds="[100,200][500,260]"),
+                    ],
+                )
+            )
+        )
+        finder = ScrollContactFinder(max_retries=1)
+        result = await finder.find_and_select("孙德家", adb)
+        assert result is False
+        adb.tap.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_returns_false_on_chat_screen_even_with_matching_text(self):
+        adb = _adb_mock(
+            get_ui_state_side_effect=AsyncMock(
+                return_value=(
+                    None,
+                    [
+                        # Chat screen signature (input EditText)
+                        _elem(className="android.widget.EditText", index=0, bounds="[50,1400][700,1500]"),
+                        _elem(text="孙德家昨天发的图", index=42, bounds="[100,400][500,460]"),
+                    ],
+                )
+            )
+        )
+        finder = ScrollContactFinder(max_retries=1)
+        result = await finder.find_and_select("孙德家", adb)
+        assert result is False
+        adb.tap.assert_not_awaited()
 
 
 # ── SearchContactFinder ─────────────────────────────────────────

@@ -8,6 +8,9 @@ without coupling to the full service. All functions are stateless.
 from __future__ import annotations
 
 import re
+from typing import Literal
+
+MatchMode = Literal["substring", "exact", "prefix"]
 
 
 def parse_element_bounds(element: dict | None) -> tuple[int, int, int, int] | None:
@@ -43,6 +46,25 @@ def parse_element_bounds(element: dict | None) -> tuple[int, int, int, int] | No
     return None
 
 
+def _matches(value: str, patterns: tuple[str, ...], mode: MatchMode) -> bool:
+    """Apply the requested match strategy to a single (value, patterns) pair.
+
+    Why a single helper: keeping the per-mode rules co-located here means
+    callers can flip from substring → exact at the call site without
+    re-implementing the matching logic, and the contact_share flow can
+    safely use exact match for short labels like "Send" / "Cancel" without
+    forking the whole helper.
+    """
+    if not patterns:
+        return False
+    value_lc = value.lower()
+    if mode == "exact":
+        return any(value_lc == pattern.lower() for pattern in patterns)
+    if mode == "prefix":
+        return any(value_lc.startswith(pattern.lower()) for pattern in patterns)
+    return any(pattern.lower() in value_lc for pattern in patterns)
+
+
 def find_elements_by_keywords(
     elements: list[dict],
     *,
@@ -50,22 +72,32 @@ def find_elements_by_keywords(
     desc_patterns: tuple[str, ...] = (),
     resource_patterns: tuple[str, ...] = (),
     is_flat_list: bool = True,
+    text_match_mode: MatchMode = "substring",
+    desc_match_mode: MatchMode = "substring",
+    resource_match_mode: MatchMode = "substring",
 ) -> list[dict]:
-    """Find elements whose text, contentDescription, or resourceId matches any pattern."""
+    """Find elements whose text, contentDescription, or resourceId matches any pattern.
+
+    The default ``substring`` mode is preserved for every existing caller.
+    Pass ``text_match_mode="exact"`` for short, well-known labels like
+    "Send" or "Cancel" so substrings ("Send to:") cannot false-match —
+    this is what stops the contact-share confirm-dialog from "succeeding"
+    when no dialog is even open.
+    """
     matches: list[dict] = []
 
     def walk(items: list[dict]) -> None:
         for element in items:
             if not isinstance(element, dict):
                 continue
-            text = (element.get("text") or "").lower()
-            desc = (element.get("contentDescription") or "").lower()
-            rid = (element.get("resourceId") or "").lower()
+            text = element.get("text") or ""
+            desc = element.get("contentDescription") or ""
+            rid = element.get("resourceId") or ""
 
             if (
-                any(pattern.lower() in text for pattern in text_patterns)
-                or any(pattern.lower() in desc for pattern in desc_patterns)
-                or any(pattern.lower() in rid for pattern in resource_patterns)
+                _matches(text, text_patterns, text_match_mode)
+                or _matches(desc, desc_patterns, desc_match_mode)
+                or _matches(rid, resource_patterns, resource_match_mode)
             ):
                 matches.append(element)
 

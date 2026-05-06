@@ -20,10 +20,13 @@ Validated UI flow (WeCom Android):
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import sqlite3
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
+from datetime import datetime
+from pathlib import Path
 
 from wecom_automation.core.metrics_logger import get_metrics_logger
 from wecom_automation.database.schema import get_db_path
@@ -31,9 +34,19 @@ from wecom_automation.services.contact_share import selectors as S
 from wecom_automation.services.contact_share.models import (
     ContactShareRequest,
 )
-from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
+from wecom_automation.services.contact_share.page_state import PageStateValidator
+from wecom_automation.services.ui_search.ui_helpers import (
+    MatchMode,
+    find_elements_by_keywords,
+)
 
 logger = logging.getLogger(__name__)
+
+# Stabilization window after a UI action before re-querying state. WeCom's
+# attach panel slide-up animation is ~250ms; picker push is ~400ms; confirm
+# dialog appears within ~200ms. 0.6s gives all three a comfortable margin
+# without bloating per-share latency.
+_STATE_STABILIZATION_DELAY = 0.6
 
 
 def _emit_share_metric(device_serial: str, event: str, data: dict) -> None:
@@ -286,7 +299,7 @@ class ContactShareService(IContactShareService):
             await asyncio.sleep(self._STEP_DELAY)
 
         try:
-            # Step 2: Tap attachment button (i9u/id8/igu)
+            # Step 2: Tap attachment button (i9u/id8/igu) → attach panel
             logger.info(
                 "Contact share step: tap attachment button (device=%s, customer=%s)",
                 request.device_serial,
@@ -296,10 +309,15 @@ class ContactShareService(IContactShareService):
                 logger.error("Could not tap attachment button")
                 failure_step = "attach_button"
                 return False
+            if not await self._assert_page_state(
+                "attach_panel",
+                step="attach_button",
+                request=request,
+            ):
+                failure_step = "attach_button_state_check"
+                return False
 
-            await asyncio.sleep(self._STEP_DELAY)
-
-            # Step 3: Open Contact Card menu
+            # Step 3: Open Contact Card menu → contact picker
             logger.info(
                 "Contact share step: open Contact Card menu (device=%s, customer=%s)",
                 request.device_serial,
@@ -309,10 +327,15 @@ class ContactShareService(IContactShareService):
                 logger.error("Could not find 'Contact Card' menu item")
                 failure_step = "contact_card_menu"
                 return False
+            if not await self._assert_page_state(
+                "contact_picker",
+                step="contact_card_menu",
+                request=request,
+            ):
+                failure_step = "contact_card_menu_state_check"
+                return False
 
-            await asyncio.sleep(self._STEP_DELAY)
-
-            # Step 4: Select the target contact from picker
+            # Step 4: Select the target contact from picker → confirm dialog
             logger.info(
                 "Contact share step: select contact from picker "
                 "(device=%s, customer=%s, contact=%s)",
@@ -327,10 +350,15 @@ class ContactShareService(IContactShareService):
                 logger.error("Could not select contact '%s' in picker", request.contact_name)
                 failure_step = "contact_picker"
                 return False
+            if not await self._assert_page_state(
+                "confirm_send_dialog",
+                step="contact_picker",
+                request=request,
+            ):
+                failure_step = "contact_picker_state_check"
+                return False
 
-            await asyncio.sleep(self._STEP_DELAY)
-
-            # Step 5: Tap "Send" in confirmation dialog
+            # Step 5: Tap "Send" in confirmation dialog → back to chat screen
             logger.info(
                 "Contact share step: confirm send (device=%s, customer=%s, contact=%s)",
                 request.device_serial,
@@ -340,6 +368,13 @@ class ContactShareService(IContactShareService):
             if not await self._confirm_send():
                 logger.error("Could not confirm contact card send")
                 failure_step = "confirm_send"
+                return False
+            if not await self._assert_page_state(
+                "chat_screen",
+                step="confirm_send",
+                request=request,
+            ):
+                failure_step = "confirm_send_state_check"
                 return False
 
             logger.info("Contact card shared successfully to %s", request.customer_name)
@@ -685,10 +720,18 @@ class ContactShareService(IContactShareService):
         return False
 
     async def _tap_contact_card_menu(self) -> bool:
-        """Tap 'Contact Card' item in the attachment menu."""
+        """Tap 'Contact Card' item in the attachment menu.
+
+        Uses *exact* text match. Substring matching previously caused
+        false positives — any chat history label or attach-panel item
+        text that contained "名片" / "Contact Card" as a substring (e.g.
+        "我的名片夹") would be tapped instead of the real menu item, and
+        the share flow would silently advance with no actual page change.
+        """
         return await self._find_and_tap(
             text_patterns=S.CARD_TEXT_PATTERNS,
             resource_patterns=S.CARD_RESOURCE_PATTERNS,
+            text_match_mode="exact",
             step_name="Contact Card menu item",
         )
 
@@ -754,18 +797,22 @@ class ContactShareService(IContactShareService):
     async def _confirm_send(self) -> bool:
         """Tap the 'Send' button in the confirmation dialog.
 
-        Uses resource_patterns first to avoid false matches like 'Send to:'.
-        Falls back to text matching only if resource matching yields nothing.
+        Resource ID first (dak/blz/i_2), then *exact* text match. Substring
+        text matching is the original sin here: ``"Send"`` would gladly
+        match ``"Send to:"`` (the picker title!) on a page where no real
+        confirm dialog ever appeared, returning fake success. The page-
+        state envelope around this call (`is_confirm_send_dialog_open`)
+        already filters most wrong contexts, but exact match is a second
+        line of defense if the validator ever drifts.
         """
-        # Prefer resource-based matching to avoid "Send to:" false positives
         if await self._find_and_tap(
             resource_patterns=S.SEND_RESOURCE_PATTERNS,
             step_name="Send button (dak)",
         ):
             return True
-        # Fallback: text matching
         return await self._find_and_tap(
             text_patterns=S.SEND_TEXT_PATTERNS,
+            text_match_mode="exact",
             step_name="Send button (text fallback)",
         )
 
@@ -777,8 +824,18 @@ class ContactShareService(IContactShareService):
         desc_patterns: tuple[str, ...] = (),
         resource_patterns: tuple[str, ...] = (),
         step_name: str = "element",
+        text_match_mode: MatchMode = "substring",
+        desc_match_mode: MatchMode = "substring",
+        resource_match_mode: MatchMode = "substring",
     ) -> bool:
-        """Generic find-and-tap with retry logic."""
+        """Generic find-and-tap with retry logic.
+
+        Match modes default to ``substring`` to preserve every existing
+        call site. Pass ``text_match_mode="exact"`` for short labels like
+        "Send" / "Cancel" / "Contact Card" where substrings on unrelated
+        UI nodes would otherwise be tapped — this is exactly how 22:58's
+        fake-success was happening.
+        """
         for attempt in range(self._MAX_RETRIES):
             try:
                 ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
@@ -797,6 +854,9 @@ class ContactShareService(IContactShareService):
                 text_patterns=text_patterns,
                 desc_patterns=desc_patterns,
                 resource_patterns=resource_patterns,
+                text_match_mode=text_match_mode,
+                desc_match_mode=desc_match_mode,
+                resource_match_mode=resource_match_mode,
             )
 
             if matches:
@@ -843,6 +903,163 @@ class ContactShareService(IContactShareService):
             f"desc={elem.get('contentDescription')!r}, resourceId={elem.get('resourceId')!r}, "
             f"bounds={elem.get('bounds')!r}"
         )
+
+    # ── Page State Assertion & Diagnostic Dump ────────────────────
+
+    async def _assert_page_state(
+        self,
+        expected: str,
+        *,
+        step: str,
+        request: ContactShareRequest,
+    ) -> bool:
+        """Re-read the UI tree and assert we landed on ``expected`` page.
+
+        Why this exists: WeCom's obfuscated resource IDs + substring
+        matching used to let any step "succeed" by tapping a wrong element,
+        so the next step would happily run on the same stale page until the
+        whole flow recorded a fake success. This helper closes that loop —
+        every transition is verified against PageStateValidator and a full
+        UI snapshot is dumped on mismatch so we can update selectors.
+
+        Args:
+            expected: one of "attach_panel" / "contact_picker" /
+                "confirm_send_dialog" / "chat_screen".
+            step: name of the UI action that *should* have produced
+                ``expected`` (used for log lines and dump filename).
+            request: the active share request, used for diagnostic context.
+        """
+        await asyncio.sleep(_STATE_STABILIZATION_DELAY)
+        try:
+            ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
+        except Exception as exc:
+            logger.error(
+                "[state-check %s] get_ui_state failed (device=%s, customer=%s): %s",
+                step,
+                request.device_serial,
+                request.customer_name,
+                exc,
+            )
+            self._dump_full_ui_for_diagnosis(
+                request=request,
+                step=step,
+                expected_state=expected,
+                ui_tree=None,
+                elements=[],
+                reason=f"get_ui_state error: {exc!r}",
+            )
+            return False
+
+        validator_summary = PageStateValidator.describe(elements or [])
+        check_map = {
+            "attach_panel": PageStateValidator.is_attach_panel_open,
+            "contact_picker": PageStateValidator.is_contact_picker_open,
+            "confirm_send_dialog": PageStateValidator.is_confirm_send_dialog_open,
+            "chat_screen": PageStateValidator.is_chat_screen,
+        }
+        check = check_map.get(expected)
+        if check is None:
+            logger.error("[state-check %s] unknown expected state: %s", step, expected)
+            return False
+
+        ok = bool(check(elements or []))
+        if ok:
+            logger.info(
+                "[state-check %s] OK — observed=%s (device=%s, customer=%s)",
+                step,
+                validator_summary,
+                request.device_serial,
+                request.customer_name,
+            )
+            return True
+
+        logger.error(
+            "[state-check %s] FAILED — expected=%s observed=%s "
+            "(device=%s, customer=%s, contact=%s) — dumping UI for diagnosis",
+            step,
+            expected,
+            validator_summary,
+            request.device_serial,
+            request.customer_name,
+            request.contact_name,
+        )
+        self._dump_full_ui_for_diagnosis(
+            request=request,
+            step=step,
+            expected_state=expected,
+            ui_tree=ui_tree,
+            elements=elements or [],
+            reason=f"expected={expected} observed={validator_summary}",
+        )
+        return False
+
+    def _dump_full_ui_for_diagnosis(
+        self,
+        *,
+        request: ContactShareRequest,
+        step: str,
+        expected_state: str,
+        ui_tree,
+        elements: list[dict],
+        reason: str,
+    ) -> None:
+        """Persist the full UI snapshot to ``logs/contact_share_dump_<ts>_<step>.json``.
+
+        Captures BOTH the recursive ui_tree and the flat clickable list so
+        we can reconstruct exactly what was on screen when the page-state
+        check failed. The dump intentionally lives outside the rotated
+        log file to preserve large payloads; selector drift work needs the
+        whole tree, not the bottom 30%.
+        """
+        try:
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+            dump_dir = Path("logs")
+            dump_dir.mkdir(parents=True, exist_ok=True)
+            dump_path = dump_dir / f"contact_share_dump_{timestamp}_{step}.json"
+
+            payload = {
+                "captured_at": datetime.now().isoformat(timespec="microseconds"),
+                "device_serial": request.device_serial,
+                "customer_name": request.customer_name,
+                "contact_name": request.contact_name,
+                "kefu_name": request.kefu_name,
+                "step": step,
+                "expected_state": expected_state,
+                "reason": reason,
+                "page_state_summary": PageStateValidator.describe(elements or []),
+                "elements_count": len(elements or []),
+                "elements": elements or [],
+                "ui_tree": ui_tree,
+            }
+            dump_path.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=str),
+                encoding="utf-8",
+            )
+            logger.warning(
+                "[ui-dump] wrote contact-share diagnostic dump to %s "
+                "(step=%s, reason=%s, elements=%d)",
+                dump_path,
+                step,
+                reason,
+                len(elements or []),
+            )
+            _emit_share_metric(
+                request.device_serial,
+                "contact_share_ui_dump",
+                {
+                    "step": step,
+                    "expected_state": expected_state,
+                    "reason": reason,
+                    "dump_path": str(dump_path),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001 — diagnostics must never break the share flow
+            logger.warning(
+                "[ui-dump] failed to write diagnostic dump (step=%s): %s",
+                step,
+                exc,
+                exc_info=True,
+            )
 
     # ── Database Recording ────────────────────────────────────────
 

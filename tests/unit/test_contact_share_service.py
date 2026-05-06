@@ -5,16 +5,30 @@ Covers:
 - _perform_ui_share sends message when request has send_message_before_share=True
 - _perform_ui_share skips message when send_message_before_share=False
 - _perform_ui_share continues card sharing even if message sending fails
+- Page-state assertion (introduced after 2026-05-06 22:58 fake-success):
+  every UI step is verified by re-reading the screen, mismatches dump the
+  UI tree, abort the flow, and never write to the dedup table.
 """
 
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from wecom_automation.services.contact_share.models import ContactShareRequest
 from wecom_automation.services.contact_share.service import ContactShareService
+
+
+def _state_ok():
+    """Default _assert_page_state stub: every page transition succeeds.
+
+    Most tests don't care about state validation — they want to exercise
+    the surrounding flow under "happy path" conditions. Tests that *do*
+    care simply override this stub via patch.object inside the test body.
+    """
+    return AsyncMock(return_value=True)
 
 
 @pytest.fixture
@@ -60,7 +74,8 @@ class TestContactShareServicePreShareMessage:
         with patch.object(service, "_tap_attach_button", return_value=True), \
              patch.object(service, "_open_contact_card_menu", return_value=True), \
              patch.object(service, "_select_contact_from_picker", return_value=True), \
-             patch.object(service, "_confirm_send", return_value=True):
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_assert_page_state", _state_ok()):
 
             request = ContactShareRequest(
                 device_serial="dev1",
@@ -84,7 +99,8 @@ class TestContactShareServicePreShareMessage:
         with patch.object(service, "_tap_attach_button", return_value=True), \
              patch.object(service, "_open_contact_card_menu", return_value=True), \
              patch.object(service, "_select_contact_from_picker", return_value=True), \
-             patch.object(service, "_confirm_send", return_value=True):
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_assert_page_state", _state_ok()):
 
             request = ContactShareRequest(
                 device_serial="dev1",
@@ -108,7 +124,8 @@ class TestContactShareServicePreShareMessage:
         with patch.object(service, "_tap_attach_button", return_value=True), \
              patch.object(service, "_open_contact_card_menu", return_value=True), \
              patch.object(service, "_select_contact_from_picker", return_value=True), \
-             patch.object(service, "_confirm_send", return_value=True):
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_assert_page_state", _state_ok()):
 
             request = ContactShareRequest(
                 device_serial="dev1",
@@ -132,7 +149,8 @@ class TestContactShareServicePreShareMessage:
         with patch.object(service, "_tap_attach_button", return_value=True), \
              patch.object(service, "_open_contact_card_menu", return_value=True), \
              patch.object(service, "_select_contact_from_picker", return_value=True), \
-             patch.object(service, "_confirm_send", return_value=True):
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_assert_page_state", _state_ok()):
 
             request = ContactShareRequest(
                 device_serial="dev1",
@@ -156,7 +174,8 @@ class TestContactShareServicePreShareMessage:
         with patch.object(service, "_tap_attach_button", return_value=True), \
              patch.object(service, "_open_contact_card_menu", return_value=True), \
              patch.object(service, "_select_contact_from_picker", return_value=True), \
-             patch.object(service, "_confirm_send", return_value=True):
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_assert_page_state", _state_ok()):
 
             request = ContactShareRequest(
                 device_serial="dev1",
@@ -329,7 +348,8 @@ class TestContactSharePreMessageTransactionality:
         with patch.object(service, "_tap_attach_button", return_value=True), \
              patch.object(service, "_open_contact_card_menu", return_value=True), \
              patch.object(service, "_select_contact_from_picker", return_value=False), \
-             patch.object(service, "_confirm_send", return_value=True):
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_assert_page_state", _state_ok()):
 
             request = ContactShareRequest(
                 device_serial="dev1",
@@ -427,6 +447,8 @@ class TestContactSharePickerFallback:
             {"index": 50, "className": "android.widget.EditText", "bounds": "[50,60][700,110]"},
         ]
         elements_for_scroll = [
+            # Picker signature so ScrollContactFinder's context check passes
+            {"index": 1, "resourceId": "com.tencent.wework:id/cth"},
             {"index": 99, "text": "苏南老师", "bounds": "[200,200][800,260]"},
         ]
         # The composite finder reuses adb.get_ui_state across many calls; we
@@ -446,3 +468,142 @@ class TestContactSharePickerFallback:
         assert ok is True
         # Scroll finder taps by the row's index (99)
         assert any(call.args == (99,) for call in mock_wecom.adb.tap.await_args_list)
+
+
+class TestPageStateAssertionRegression:
+    """Regression for the 2026-05-06 22:58 fake-success.
+
+    The share flow used to trust each step's "I tapped something matching"
+    return value. With page-state validation in place, a missed transition
+    must:
+      1. Abort the flow (return False).
+      2. NOT write to ``media_action_contact_shares`` (next image retries).
+      3. Trigger the recovery message if pre-message was already sent.
+      4. Dump the full UI tree to ``logs/contact_share_dump_*.json``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_attach_button_state_check_failure_aborts_and_does_not_record(
+        self, service, mock_wecom, tmp_path, monkeypatch
+    ):
+        # Redirect dump dir into pytest tmp so the test stays clean.
+        monkeypatch.chdir(tmp_path)
+        mock_wecom.send_message = AsyncMock(return_value=(True, None))
+
+        # The chat-screen UI returned by adb won't satisfy is_attach_panel_open,
+        # so _assert_page_state("attach_panel", ...) will fail — exactly the
+        # 22:58 scenario.
+        chat_only = [
+            {"index": 0, "className": "android.widget.EditText"},
+            {"index": 1, "text": "聊天历史"},
+        ]
+        mock_wecom.adb.get_ui_state = AsyncMock(return_value=(None, chat_only))
+
+        record_spy = MagicMock()
+
+        with patch.object(service, "_tap_attach_button", return_value=True), \
+             patch.object(service, "_open_contact_card_menu", return_value=True), \
+             patch.object(service, "_select_contact_from_picker", return_value=True), \
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_record_share", record_spy):
+
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="客户A",
+                contact_name="苏南老师",
+                send_message_before_share=True,
+                pre_share_message_text="可以的小宝，这是名片",
+                recovery_message_on_failure_text="抱歉系统稍后重发，请稍候",
+            )
+            result = await service._perform_ui_share(request)
+
+        assert result is False
+        record_spy.assert_not_called()
+        sent_texts = [call.args[0] for call in mock_wecom.send_message.await_args_list]
+        assert "可以的小宝，这是名片" in sent_texts
+        assert "抱歉系统稍后重发，请稍候" in sent_texts
+
+        dumps = list((tmp_path / "logs").glob("contact_share_dump_*_attach_button.json"))
+        assert dumps, "expected a UI dump for the failed attach_button state check"
+
+    @pytest.mark.asyncio
+    async def test_share_contact_card_does_not_record_on_state_check_failure(
+        self, service, mock_wecom, tmp_path, monkeypatch
+    ):
+        """End-to-end via ``share_contact_card`` — the public entry path
+        must mirror _perform_ui_share's "no record on state-check failure"
+        contract so future callers don't accidentally bypass it.
+        """
+        monkeypatch.chdir(tmp_path)
+        mock_wecom.send_message = AsyncMock(return_value=(True, None))
+        mock_wecom.adb.get_ui_state = AsyncMock(return_value=(None, [
+            {"index": 0, "className": "android.widget.EditText"},
+        ]))
+
+        record_spy = MagicMock()
+        with patch.object(service, "_tap_attach_button", return_value=True), \
+             patch.object(service, "_open_contact_card_menu", return_value=True), \
+             patch.object(service, "_select_contact_from_picker", return_value=True), \
+             patch.object(service, "_confirm_send", return_value=True), \
+             patch.object(service, "_record_share", record_spy):
+
+            request = ContactShareRequest(
+                device_serial="dev1",
+                customer_name="客户A",
+                contact_name="苏南老师",
+            )
+            result = await service.share_contact_card(request)
+
+        assert result is False
+        record_spy.assert_not_called()
+
+
+class TestStrictMatchPreventsFakeSuccess:
+    """The original substring matching let any node containing 'Send' /
+    '名片' / '确定' satisfy the menu/confirm steps. Exact match must put
+    a stop to that — these tests pin the new behaviour at the helper
+    level so a future regression in ContactShareService is impossible
+    without flipping the helper too.
+    """
+
+    def test_substring_default_still_matches(self):
+        from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
+
+        elements = [
+            {"text": "我的名片夹", "index": 1},
+            {"text": "Contact Card", "index": 2},
+        ]
+        substring_hits = find_elements_by_keywords(
+            elements, text_patterns=("名片",)
+        )
+        assert len(substring_hits) == 1
+        assert substring_hits[0]["text"] == "我的名片夹"
+
+    def test_exact_mode_does_not_match_my_card_folder_substring(self):
+        from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
+
+        elements = [
+            {"text": "我的名片夹", "index": 1},
+            {"text": "Contact Card", "index": 2},
+        ]
+        exact_hits = find_elements_by_keywords(
+            elements,
+            text_patterns=("Contact Card", "名片"),
+            text_match_mode="exact",
+        )
+        assert [e["text"] for e in exact_hits] == ["Contact Card"]
+
+    def test_exact_mode_send_does_not_match_send_to_label(self):
+        """The very label that caused 22:58: 'Send to:' on picker title."""
+        from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
+
+        elements = [
+            {"text": "Send to:", "index": 1},
+            {"text": "Sender", "index": 2},
+        ]
+        exact_hits = find_elements_by_keywords(
+            elements,
+            text_patterns=("Send", "SEND", "发送", "确定"),
+            text_match_mode="exact",
+        )
+        assert exact_hits == []

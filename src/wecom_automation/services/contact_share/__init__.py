@@ -4,6 +4,7 @@ from wecom_automation.services.contact_share.models import (
     ContactShareRequest,
     ContactShareResult,
 )
+from wecom_automation.services.contact_share.page_state import PageStateValidator
 from wecom_automation.services.contact_share.service import (
     ContactShareService,
     IContactShareService,
@@ -14,4 +15,5 @@ __all__ = [
     "ContactShareResult",
     "ContactShareService",
     "IContactShareService",
+    "PageStateValidator",
 ]

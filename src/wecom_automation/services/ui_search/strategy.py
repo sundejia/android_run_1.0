@@ -68,12 +68,26 @@ class ScrollContactFinder(ContactFinderStrategy):
     """Scroll through the visible list and match by text prefix.
 
     This is the legacy behavior from ContactShareService._select_contact_from_picker.
+
+    Picker context check
+    --------------------
+    Before scanning elements with ``startswith(contact_name)``, this finder
+    verifies that the current screen actually IS the contact picker. The
+    naive prefix scan was the second half of 22:58's fake-success: when
+    Contact-Card menu wasn't really tapped, the attach panel still on
+    screen would happily contain a text node prefixed with the customer
+    name (chat history items, recent shortcuts, ...) and ScrollContactFinder
+    would tap that, returning True from a flow that never opened a picker.
     """
 
     def __init__(self, max_retries: int = 3) -> None:
         self._max_retries = max_retries
 
     async def find_and_select(self, contact_name: str, adb_service) -> bool:
+        # Lazy import to avoid a hard cycle: contact_share imports ui_search,
+        # and PageStateValidator lives in contact_share.
+        from wecom_automation.services.contact_share.page_state import PageStateValidator
+
         for attempt in range(self._max_retries):
             try:
                 _, elements = await adb_service.get_ui_state(force=True)
@@ -85,6 +99,21 @@ class ScrollContactFinder(ContactFinderStrategy):
             if not elements:
                 await asyncio.sleep(0.5)
                 continue
+
+            if not PageStateValidator.is_contact_picker_open(elements):
+                # Bailing out fast prevents the historical "tap any element
+                # whose text starts with the customer name on whatever page
+                # we happen to be on" misbehavior. CompositeContactFinder
+                # will simply log a miss for this strategy.
+                observed = PageStateValidator.describe(elements)
+                logger.warning(
+                    "ScrollContactFinder: not in contact picker "
+                    "(observed=%s, contact='%s', attempt=%d) — refusing to scan",
+                    observed,
+                    contact_name,
+                    attempt + 1,
+                )
+                return False
 
             for elem in elements:
                 text = (elem.get("text") or "").strip()
