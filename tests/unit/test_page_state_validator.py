@@ -49,6 +49,31 @@ def attach_panel_no_grid_elements() -> list[dict]:
 
 
 @pytest.fixture
+def attach_panel_2026_05_06_build_elements() -> list[dict]:
+    """Real attach-panel snapshot from 720x1612, 2026-05-06 build.
+
+    GridView is ``aij`` (not legacy ``ahe``) and item labels use ``aif``
+    (not legacy ``aha``). Captured verbatim from
+    ``logs/contact_share_dump_*_attach_button.json`` after the page-state
+    envelope correctly caught a missed transition. The plain chat input
+    EditText stays in tree on this build too so chat_screen exclusion
+    must work via the new aij/aif signature.
+    """
+    return [
+        _elem(className="android.widget.EditText", resourceId="com.tencent.wework:id/ih6", index=37),
+        _elem(className="android.widget.GridView", resourceId="com.tencent.wework:id/aij", index=41),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Image", index=43),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Camera", index=45),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Favorites", index=47),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Voice Call", index=49),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Red Packets", index=51),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Document", index=53),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Calendar", index=55),
+        _elem(className="android.widget.TextView", resourceId="com.tencent.wework:id/aif", text="Quick Meeting", index=57),
+    ]
+
+
+@pytest.fixture
 def contact_picker_elements() -> list[dict]:
     """Contact picker (Select Contact screen)."""
     return [
@@ -97,6 +122,31 @@ class TestAttachPanelRecognition:
 
     def test_recognized_via_item_count_when_grid_id_drifted(self, attach_panel_no_grid_elements):
         assert PageStateValidator.is_attach_panel_open(attach_panel_no_grid_elements) is True
+
+    def test_recognized_on_2026_05_06_build_with_aij_aif(
+        self, attach_panel_2026_05_06_build_elements
+    ):
+        """Regression for the 720x1612 2026-05-06 build whose attach-panel
+        signature drifted to ``aij``/``aif``. Without recognising this
+        the page-state envelope rejected a transition that *did* happen
+        and the share aborted right after the + button.
+        """
+        assert (
+            PageStateValidator.is_attach_panel_open(attach_panel_2026_05_06_build_elements)
+            is True
+        )
+
+    def test_chat_screen_excludes_2026_05_06_attach_panel(
+        self, attach_panel_2026_05_06_build_elements
+    ):
+        """The 2026-05-06 attach-panel snapshot still has the chat input
+        EditText in tree. ``is_chat_screen`` must defer to attach_panel
+        recognition just like it does for the legacy build.
+        """
+        assert (
+            PageStateValidator.is_chat_screen(attach_panel_2026_05_06_build_elements)
+            is False
+        )
 
     def test_not_recognized_on_chat_screen(self, chat_screen_elements):
         assert PageStateValidator.is_attach_panel_open(chat_screen_elements) is False

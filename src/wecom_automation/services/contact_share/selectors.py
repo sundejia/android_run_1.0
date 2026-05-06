@@ -28,13 +28,30 @@ ATTACH_RESOURCE_PATTERNS: tuple[str, ...] = ("i9u", "id8", "igu")
 ATTACH_DESC_PATTERNS: tuple[str, ...] = ("更多功能", "more functions", "more")
 
 # ── Attachment menu GridView (for horizontal swipe) ──────────────
-ATTACH_GRID_RESOURCE_PATTERNS: tuple[str, ...] = ("ahe",)
+# Multiple patterns to support different WeCom builds:
+#   * "ahe": legacy (validated 1080x2340 + older 720 builds)
+#   * "aij": validated WeCom Android 720x1612, 2026-05-06 build
+#           (captured from contact_share_dump on the live device)
+# Append-only so older fleet devices keep working.
+ATTACH_GRID_RESOURCE_PATTERNS: tuple[str, ...] = ("ahe", "aij")
+
+# ── Attachment menu item LABELS (the visible text node in each cell) ──
+# All attach-panel item cells share one resourceId for their label TextView.
+# Like the GridView, this drifts between builds:
+#   * "aha": legacy
+#   * "aif": validated WeCom Android 720x1612, 2026-05-06 build
+# This is used for *page-state recognition only* (count ≥ N tells you the
+# attach panel really opened). Do NOT add it to CARD_RESOURCE_PATTERNS —
+# every item shares this id, so substring matching it would tap the wrong
+# cell. Selecting Contact Card must still go through CARD_TEXT_PATTERNS.
+ATTACH_ITEM_RESOURCE_PATTERNS: tuple[str, ...] = ("aha", "aif")
 
 # ── "Contact Card" item in attachment menu page 2 ────────────────
 CARD_TEXT_PATTERNS: tuple[str, ...] = ("Contact Card", "名片", "Personal Card")
 CARD_RESOURCE_PATTERNS: tuple[str, ...] = ()
-# NOTE: "aha" is the resourceId for ALL attachment item labels (Image, Camera,
-# Contact Card, etc.), so it MUST NOT be included here — use text matching only.
+# NOTE: see ATTACH_ITEM_RESOURCE_PATTERNS comment above — the per-item
+# resourceId is shared across every cell, so it MUST NOT be included here.
+# Use exact text matching only for the menu item itself.
 
 # ── "Select Contact(s)" title in contact picker ──────────────────
 CONTACT_PICKER_TITLE_RESOURCE: tuple[str, ...] = ("nca",)

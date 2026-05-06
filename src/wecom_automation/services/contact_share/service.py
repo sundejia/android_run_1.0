@@ -696,7 +696,14 @@ class ContactShareService(IContactShareService):
         return await self._tap_contact_card_menu()
 
     async def _swipe_attach_grid(self) -> bool:
-        """Swipe left on the GridView (ahe) to reveal the next page."""
+        """Swipe left on the attachment GridView to reveal the next page.
+
+        Walks every known GridView resource id (ahe legacy / aij
+        2026-05-06 build / ...) so a build-bumped resource id does not
+        silently break the swipe. The original code hardcoded ``"ahe"``
+        which is exactly why Contact Card on page 2 was unreachable on
+        the 720x1612 device that triggered this whole investigation.
+        """
         try:
             ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
         except Exception as exc:
@@ -706,17 +713,26 @@ class ContactShareService(IContactShareService):
         import re
 
         for elem in elements:
-            if "ahe" in (elem.get("resourceId") or ""):
-                bounds = elem.get("bounds", "")
-                nums = re.findall(r"\d+", bounds)
-                if len(nums) >= 4:
-                    x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
-                    center_y = (y1 + y2) // 2
-                    await self._wecom.adb.swipe(x2 - 30, center_y, x1 + 30, center_y)
-                    logger.debug("Swiped attach grid to reveal next page")
-                    return True
+            rid = (elem.get("resourceId") or "")
+            if not any(grid_id in rid for grid_id in S.ATTACH_GRID_RESOURCE_PATTERNS):
+                continue
+            bounds = elem.get("bounds", "")
+            nums = re.findall(r"\d+", bounds)
+            if len(nums) >= 4:
+                x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
+                center_y = (y1 + y2) // 2
+                await self._wecom.adb.swipe(x2 - 30, center_y, x1 + 30, center_y)
+                logger.debug(
+                    "Swiped attach grid (rid=%s, bounds=%s) to reveal next page",
+                    rid,
+                    bounds,
+                )
+                return True
 
-        logger.warning("Attachment GridView (ahe) not found for swipe")
+        logger.warning(
+            "Attachment GridView not found for swipe (tried %s)",
+            S.ATTACH_GRID_RESOURCE_PATTERNS,
+        )
         return False
 
     async def _tap_contact_card_menu(self) -> bool:

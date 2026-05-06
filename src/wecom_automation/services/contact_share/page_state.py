@@ -136,18 +136,27 @@ class PageStateValidator:
     def is_attach_panel_open(elements: list[dict]) -> bool:
         """Attach panel = the +-button popup with Image / Video / Contact Card.
 
-        Strong signal: GridView (``ahe``) container is in the tree.
-        Fallback: ≥4 attach-item labels (``aha``) — covers builds where the
-        GridView resourceId drifted but item IDs survived.
+        Strong signal: ANY known GridView resource id from
+        ``ATTACH_GRID_RESOURCE_PATTERNS`` is in the tree
+        (``ahe`` legacy / ``aij`` 2026-05-06 build / ...).
+
+        Fallback: ≥4 attach-item label resource ids from
+        ``ATTACH_ITEM_RESOURCE_PATTERNS`` — covers builds where the
+        GridView resourceId drifted but item IDs survived (or vice versa).
+        Captured the hard way from a real device dump: the 720x1612 build
+        on 2026-05-06 uses ``aij``/``aif`` while older code only knew
+        ``ahe``/``aha``, so the page check silently failed even though
+        the panel was clearly open on screen.
         """
         if not elements:
             return False
-        if _has_resource_substring(elements, S.ATTACH_GRID_RESOURCE_PATTERNS[0]):
-            return True
-        # `aha` is the universal label resourceId for every menu item
-        # (Image, Camera, Contact Card, Favorites, ...). Seeing a handful of
-        # them in one snapshot is a high-confidence "attach panel" signal.
-        return _count_resource_substring(elements, "aha") >= 4
+        for grid_id in S.ATTACH_GRID_RESOURCE_PATTERNS:
+            if _has_resource_substring(elements, grid_id):
+                return True
+        for item_id in S.ATTACH_ITEM_RESOURCE_PATTERNS:
+            if _count_resource_substring(elements, item_id) >= 4:
+                return True
+        return False
 
     @staticmethod
     def is_contact_picker_open(elements: list[dict]) -> bool:

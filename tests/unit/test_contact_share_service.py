@@ -607,3 +607,79 @@ class TestStrictMatchPreventsFakeSuccess:
             text_match_mode="exact",
         )
         assert exact_hits == []
+
+
+class TestSwipeAttachGridResolvesByPattern:
+    """`_swipe_attach_grid` used to hardcode ``'ahe'`` as the GridView
+    resource id. The 720x1612, 2026-05-06 build moved it to ``'aij'``,
+    which is exactly why Contact Card on page 2 became unreachable —
+    every share aborted right after the + button.
+
+    These regressions lock the swipe path against future build drifts
+    by walking the full ``ATTACH_GRID_RESOURCE_PATTERNS`` set.
+    """
+
+    @pytest.mark.asyncio
+    async def test_swipes_legacy_ahe_grid(self, service, mock_wecom):
+        mock_wecom.adb.get_ui_state = AsyncMock(
+            return_value=(
+                None,
+                [
+                    {
+                        "resourceId": "com.tencent.wework:id/ahe",
+                        "bounds": "[0,1000][720,1400]",
+                    }
+                ],
+            )
+        )
+        mock_wecom.adb.swipe = AsyncMock()
+
+        result = await service._swipe_attach_grid()
+
+        assert result is True
+        mock_wecom.adb.swipe.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_swipes_2026_05_06_aij_grid(self, service, mock_wecom):
+        """The exact failure case from the contact_share_dump on
+        device 10AE9P1DTT002LE: GridView is ``aij``, not ``ahe``.
+        """
+        mock_wecom.adb.get_ui_state = AsyncMock(
+            return_value=(
+                None,
+                [
+                    {
+                        "resourceId": "com.tencent.wework:id/aij",
+                        "bounds": "[0,1032][720,1442]",
+                    }
+                ],
+            )
+        )
+        mock_wecom.adb.swipe = AsyncMock()
+
+        result = await service._swipe_attach_grid()
+
+        assert result is True
+        mock_wecom.adb.swipe.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_returns_false_when_no_known_grid_id_present(
+        self, service, mock_wecom
+    ):
+        mock_wecom.adb.get_ui_state = AsyncMock(
+            return_value=(
+                None,
+                [
+                    {
+                        "resourceId": "com.tencent.wework:id/something_else",
+                        "bounds": "[0,0][100,100]",
+                    }
+                ],
+            )
+        )
+        mock_wecom.adb.swipe = AsyncMock()
+
+        result = await service._swipe_attach_grid()
+
+        assert result is False
+        mock_wecom.adb.swipe.assert_not_awaited()
