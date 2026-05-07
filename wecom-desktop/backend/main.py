@@ -321,6 +321,7 @@ from routers import boss_greet as _boss_greet  # noqa: E402
 from routers import boss_jobs as _boss_jobs  # noqa: E402
 from routers import boss_messages as _boss_messages  # noqa: E402
 from routers import boss_recruiters as _boss_recruiters  # noqa: E402
+from routers import boss_reengagement as _boss_reengagement  # noqa: E402
 from routers import boss_templates as _boss_templates  # noqa: E402
 
 if _boss_recruiters.boss_features_enabled():
@@ -333,6 +334,8 @@ if _boss_templates.boss_features_enabled():
     app.include_router(_boss_templates.router)
 if _boss_messages.boss_features_enabled():
     app.include_router(_boss_messages.router)
+if _boss_reengagement.boss_features_enabled():
+    app.include_router(_boss_reengagement.router)
 
 
 @app.get("/health")

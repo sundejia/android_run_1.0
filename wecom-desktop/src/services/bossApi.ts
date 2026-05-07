@@ -193,6 +193,53 @@ export interface BossDispatchResponse {
   template_warnings: string[]
 }
 
+export interface BossReengagementSettings {
+  device_serial: string
+  silent_for_days: number
+  cooldown_days: number
+  daily_cap: number
+  template_id: number | null
+  enabled: boolean
+}
+
+export interface BossReengagementSettingsUpdate {
+  silent_for_days?: number
+  cooldown_days?: number
+  daily_cap?: number
+  template_id?: number | null
+  enabled?: boolean
+}
+
+export interface BossEligibleCandidate {
+  candidate_id: number
+  boss_candidate_id: string
+  conversation_id: number
+  last_outbound_at_iso: string
+  silent_for_seconds: number
+}
+
+export interface BossReengagementScanResponse {
+  recruiter_id: number
+  eligible: BossEligibleCandidate[]
+}
+
+export type BossReengagementOutcome =
+  | 'sent'
+  | 'dry_run'
+  | 'skipped_candidate_replied'
+  | 'skipped_blacklisted'
+  | 'skipped_daily_cap'
+  | 'no_eligible'
+  | 'failed'
+
+export interface BossReengagementRunResponse {
+  outcome: BossReengagementOutcome
+  boss_candidate_id: string | null
+  candidate_id: number | null
+  attempt_id: number | null
+  detail: string | null
+}
+
 const BOSS_BASE = `${API_BASE}/api/boss`
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -341,5 +388,45 @@ export const bossApi = {
       body: JSON.stringify({ device_serial: deviceSerial }),
     })
     return jsonOrThrow<BossDispatchResponse>(res)
+  },
+
+  async getReengagementSettings(deviceSerial: string): Promise<BossReengagementSettings> {
+    const res = await fetch(
+      `${BOSS_BASE}/reengagement/settings/${encodeURIComponent(deviceSerial)}`,
+    )
+    return jsonOrThrow<BossReengagementSettings>(res)
+  },
+
+  async updateReengagementSettings(
+    deviceSerial: string,
+    payload: BossReengagementSettingsUpdate,
+  ): Promise<BossReengagementSettings> {
+    const res = await fetch(
+      `${BOSS_BASE}/reengagement/settings/${encodeURIComponent(deviceSerial)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    )
+    return jsonOrThrow<BossReengagementSettings>(res)
+  },
+
+  async scanReengagement(deviceSerial: string): Promise<BossReengagementScanResponse> {
+    const res = await fetch(`${BOSS_BASE}/reengagement/scan`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_serial: deviceSerial }),
+    })
+    return jsonOrThrow<BossReengagementScanResponse>(res)
+  },
+
+  async runReengagement(deviceSerial: string): Promise<BossReengagementRunResponse> {
+    const res = await fetch(`${BOSS_BASE}/reengagement/run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_serial: deviceSerial }),
+    })
+    return jsonOrThrow<BossReengagementRunResponse>(res)
   },
 }
