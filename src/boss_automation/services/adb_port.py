@@ -25,3 +25,12 @@ class AdbPort(Protocol):
     async def get_state(self) -> tuple[dict[str, Any], list[dict[str, Any]]]: ...
 
     async def tap_by_text(self, text: str) -> bool: ...
+
+    async def swipe(
+        self,
+        x1: int,
+        y1: int,
+        x2: int,
+        y2: int,
+        duration_ms: int = 300,
+    ) -> None: ...

@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-07T19:52:00+08:00",
+  "device": {
+    "serial": "EMU-SYNTH-1",
+    "model": "Pixel 7 Pro",
+    "android_version": "14",
+    "screen_width": 1440,
+    "screen_height": 3120
+  },
+  "app": {
+    "package_name": "com.hpbr.bosszhipin",
+    "version_name": "12.140"
+  },
+  "label": "synthetic_empty_state",
+  "page": "jobs_list",
+  "screenshot_path": null,
+  "ui_tree": {
+    "className": "android.widget.FrameLayout",
+    "packageName": "com.hpbr.bosszhipin",
+    "bounds": "[0,0][1440,3120]",
+    "children": [
+      {
+        "className": "android.widget.LinearLayout",
+        "resourceId": "com.hpbr.bosszhipin:id/job_status_tab_bar",
+        "bounds": "[0,180][1440,300]",
+        "children": [
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_open",
+            "text": "开放中",
+            "selected": true,
+            "bounds": "[0,180][480,300]"
+          }
+        ]
+      },
+      {
+        "className": "android.widget.LinearLayout",
+        "resourceId": "com.hpbr.bosszhipin:id/job_list_empty_view",
+        "bounds": "[0,800][1440,1800]",
+        "children": [
+          {
+            "className": "android.widget.ImageView",
+            "resourceId": "com.hpbr.bosszhipin:id/iv_empty_icon",
+            "contentDescription": "空状态图标",
+            "bounds": "[600,900][840,1100]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tv_empty_title",
+            "text": "暂无开放中的职位",
+            "bounds": "[200,1180][1240,1260]"
+          },
+          {
+            "className": "android.widget.Button",
+            "resourceId": "com.hpbr.bosszhipin:id/btn_empty_publish",
+            "text": "立即发布",
+            "bounds": "[480,1400][960,1520]",
+            "clickable": true
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,175 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-07T19:50:00+08:00",
+  "device": {
+    "serial": "EMU-SYNTH-1",
+    "model": "Pixel 7 Pro",
+    "android_version": "14",
+    "screen_width": 1440,
+    "screen_height": 3120
+  },
+  "app": {
+    "package_name": "com.hpbr.bosszhipin",
+    "version_name": "12.140"
+  },
+  "label": "synthetic_open_tab",
+  "page": "jobs_list",
+  "screenshot_path": null,
+  "ui_tree": {
+    "className": "android.widget.FrameLayout",
+    "packageName": "com.hpbr.bosszhipin",
+    "bounds": "[0,0][1440,3120]",
+    "children": [
+      {
+        "className": "android.widget.LinearLayout",
+        "resourceId": "com.hpbr.bosszhipin:id/job_status_tab_bar",
+        "bounds": "[0,180][1440,300]",
+        "children": [
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_open",
+            "text": "开放中",
+            "selected": true,
+            "bounds": "[0,180][480,300]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_closed",
+            "text": "已关闭",
+            "bounds": "[480,180][960,300]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_hidden",
+            "text": "仅我可见",
+            "bounds": "[960,180][1440,300]"
+          }
+        ]
+      },
+      {
+        "className": "androidx.recyclerview.widget.RecyclerView",
+        "resourceId": "com.hpbr.bosszhipin:id/job_list_recycler",
+        "bounds": "[0,300][1440,2960]",
+        "children": [
+          {
+            "className": "android.view.ViewGroup",
+            "resourceId": "com.hpbr.bosszhipin:id/job_card_root",
+            "bounds": "[20,320][1420,720]",
+            "children": [
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_title",
+                "text": "Senior Backend Engineer",
+                "bounds": "[40,340][900,420]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_salary",
+                "text": "30K-60K",
+                "bounds": "[920,340][1400,420]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_location",
+                "text": "上海·浦东新区",
+                "bounds": "[40,440][600,500]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_experience",
+                "text": "5-10年",
+                "bounds": "[620,440][800,500]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_education",
+                "text": "本科",
+                "bounds": "[820,440][960,500]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_id_badge",
+                "text": "ID:JD20260507001",
+                "bounds": "[40,540][600,600]"
+              }
+            ]
+          },
+          {
+            "className": "android.view.ViewGroup",
+            "resourceId": "com.hpbr.bosszhipin:id/job_card_root",
+            "bounds": "[20,740][1420,1140]",
+            "children": [
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_title",
+                "text": "前端工程师",
+                "bounds": "[40,760][900,840]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_salary",
+                "text": "20K-35K·14薪",
+                "bounds": "[920,760][1400,840]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_location",
+                "text": "深圳·南山区",
+                "bounds": "[40,860][600,920]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_experience",
+                "text": "3-5年",
+                "bounds": "[620,860][800,920]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_education",
+                "text": "本科",
+                "bounds": "[820,860][960,920]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_id_badge",
+                "text": "ID:JD20260507002",
+                "bounds": "[40,960][600,1020]"
+              }
+            ]
+          },
+          {
+            "className": "android.view.ViewGroup",
+            "resourceId": "com.hpbr.bosszhipin:id/job_card_root",
+            "bounds": "[20,1160][1420,1560]",
+            "children": [
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_title",
+                "text": "数据分析师",
+                "bounds": "[40,1180][900,1260]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_salary",
+                "text": "面议",
+                "bounds": "[920,1180][1400,1260]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_location",
+                "text": "北京·海淀区",
+                "bounds": "[40,1280][600,1340]"
+              },
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_job_id_badge",
+                "text": "ID:JD20260507003",
+                "bounds": "[40,1380][600,1440]"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
