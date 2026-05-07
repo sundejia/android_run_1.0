@@ -320,6 +320,7 @@ app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 from routers import boss_greet as _boss_greet  # noqa: E402
 from routers import boss_jobs as _boss_jobs  # noqa: E402
 from routers import boss_messages as _boss_messages  # noqa: E402
+from routers import boss_monitoring as _boss_monitoring  # noqa: E402
 from routers import boss_recruiters as _boss_recruiters  # noqa: E402
 from routers import boss_reengagement as _boss_reengagement  # noqa: E402
 from routers import boss_templates as _boss_templates  # noqa: E402
@@ -336,6 +337,8 @@ if _boss_messages.boss_features_enabled():
     app.include_router(_boss_messages.router)
 if _boss_reengagement.boss_features_enabled():
     app.include_router(_boss_reengagement.router)
+if _boss_monitoring.boss_features_enabled():
+    app.include_router(_boss_monitoring.router)
 
 
 @app.get("/health")

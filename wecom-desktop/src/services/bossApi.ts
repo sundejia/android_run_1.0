@@ -240,6 +240,31 @@ export interface BossReengagementRunResponse {
   detail: string | null
 }
 
+export interface BossAttemptCounters {
+  sent: number
+  cancelled: number
+  failed: number
+}
+
+export interface BossRecruiterSummary {
+  recruiter_id: number
+  device_serial: string
+  name: string | null
+  company: string | null
+  position: string | null
+  jobs_by_status: Record<string, number>
+  candidates_by_status: Record<string, number>
+  greet_attempts_last_24h: BossAttemptCounters
+  reengagement_attempts_last_24h: BossAttemptCounters
+  silent_candidates_eligible: number
+}
+
+export interface BossMonitoringSummaryResponse {
+  generated_at_iso: string
+  window_hours: number
+  recruiters: BossRecruiterSummary[]
+}
+
 const BOSS_BASE = `${API_BASE}/api/boss`
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -428,5 +453,10 @@ export const bossApi = {
       body: JSON.stringify({ device_serial: deviceSerial }),
     })
     return jsonOrThrow<BossReengagementRunResponse>(res)
+  },
+
+  async getMonitoringSummary(): Promise<BossMonitoringSummaryResponse> {
+    const res = await fetch(`${BOSS_BASE}/monitoring/summary`)
+    return jsonOrThrow<BossMonitoringSummaryResponse>(res)
   },
 }
