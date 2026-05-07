@@ -66,7 +66,7 @@ WeCom 会将最近使用过的附件选项提升到第一页，因此 `_open_con
 | 附件菜单 GridView | **`ahe`**（旧）, **`aij`**（720×1612 某 build） | 左滑翻页的目标容器 |
 | 附件项 label（仅状态识别） | **`aha`**（旧）, **`aif`**（新） | 每项一行文案；**不能**单独用于点「名片」 |
 | 名片菜单项 | （共用 label id） | **必须用 `CARD_TEXT_PATTERNS` 精确文本** |
-| 选择器标题 / 列表 | `nca`, `cth` 等 | 见 `selectors.py` |
+| 选择器标题 / 列表 | **`nca`** / **`cth`**（旧）；**`nle`** / **`cwa`**（2026-05-07 build） | `CONTACT_PICKER_*` in `selectors.py`；标题文案 **`Select Contact(s)`** 通过前缀匹配识别 |
 | 确认发送 | `dak` / `blz` / `i_2` 等 + 精确文本 | 见 `selectors.py` |
 
 ## 架构

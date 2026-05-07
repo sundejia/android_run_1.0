@@ -55,8 +55,19 @@ CARD_RESOURCE_PATTERNS: tuple[str, ...] = ()
 # Use exact text matching only for the menu item itself.
 
 # ── "Select Contact(s)" title in contact picker ──────────────────
-CONTACT_PICKER_TITLE_RESOURCE: tuple[str, ...] = ("nca",)
-CONTACT_PICKER_LIST_RESOURCE: tuple[str, ...] = ("cth",)
+# Multiple patterns to support different WeCom builds — append-only just
+# like ATTACH_RESOURCE_PATTERNS so older fleet devices keep working.
+#   * "nca": legacy WeCom Android picker title resourceId.
+#   * "nle": validated WeCom Android 720x1612, 2026-05-07 build (captured
+#           from logs/contact_share_dump_20260507_134355_*_contact_card_menu.json
+#           where Contact Card was correctly tapped but the page-state
+#           envelope still rejected the picker because the title rid had
+#           drifted from "nca" to "nle").
+CONTACT_PICKER_TITLE_RESOURCE: tuple[str, ...] = ("nca", "nle")
+# List container that holds the contact rows.
+#   * "cth": legacy.
+#   * "cwa": validated 2026-05-07 build alongside "nle".
+CONTACT_PICKER_LIST_RESOURCE: tuple[str, ...] = ("cth", "cwa")
 
 # ── "Send" button in the confirmation dialog ─────────────────────
 SEND_TEXT_PATTERNS: tuple[str, ...] = ("Send", "SEND", "发送", "确定")

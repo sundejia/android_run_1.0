@@ -867,3 +867,80 @@ class TestSwipeAttachGridAvoidsEdgeGestureZone:
         assert (start_x - end_x) >= 240, (
             f"narrow-grid swipe distance only {start_x - end_x}px"
         )
+
+
+class TestAssertPageStateContactPicker2026_05_07Build:
+    """End-to-end regression for the 2026-05-07 contact-picker drift.
+
+    On this WeCom build the picker title's resourceId moved to ``nle``
+    and the list container moved to ``cwa``; the title text became
+    ``Select Contact(s)`` (with a literal ``(s)`` suffix). The validator
+    only knew the legacy ``nca``/``cth`` IDs and a fixed catalog of
+    title strings, so every share that *did* reach the picker page
+    aborted at the post-Contact-Card state assertion. Customers got the
+    apology recovery message instead of the actual card.
+
+    Captured from
+    ``logs/contact_share_dump_20260507_134355_516273_contact_card_menu.json``.
+    """
+
+    @pytest.mark.asyncio
+    async def test_assert_contact_picker_passes_for_nle_cwa_build(
+        self, service, mock_wecom
+    ):
+        ui_tree_obj = object()
+        elements = [
+            {
+                "className": "android.widget.TextView",
+                "resourceId": "com.tencent.wework:id/nle",
+                "text": "Select Contact(s)",
+                "bounds": "[20,81][302,127]",
+                "index": 4,
+            },
+            {
+                "className": "android.widget.ListView",
+                "resourceId": "com.tencent.wework:id/cwa",
+                "bounds": "[0,152][720,1612]",
+                "index": 7,
+            },
+            {"text": "Customer", "bounds": "[112,178][260,221]", "index": 10},
+            {"text": "Company Contacts", "bounds": "[112,274][400,317]", "index": 13},
+            {
+                "text": "★ Starred Contact",
+                "resourceId": "com.tencent.wework:id/gpa",
+                "bounds": "[0,344][720,402]",
+                "index": 15,
+            },
+            {
+                "text": "Frequent Contacts",
+                "resourceId": "com.tencent.wework:id/nef",
+                "bounds": "[28,529][285,567]",
+                "index": 19,
+            },
+        ]
+        mock_wecom.adb.get_ui_state = AsyncMock(return_value=(ui_tree_obj, elements))
+
+        request = ContactShareRequest(
+            device_serial="10AE9P1DTT002LE",
+            customer_name="B2604250558-(保底正常)",
+            contact_name="孙德家",
+            send_message_before_share=False,
+            pre_share_message_text="",
+        )
+
+        with patch.object(service, "_dump_full_ui_for_diagnosis") as mock_dump, \
+             patch(
+                 "wecom_automation.services.contact_share.service._STATE_STABILIZATION_DELAY",
+                 0,
+             ):
+            ok = await service._assert_page_state(
+                "contact_picker",
+                step="contact_card_menu",
+                request=request,
+            )
+
+        assert ok is True, (
+            "PageStateValidator must accept the 2026-05-07 build picker "
+            "(nle title + cwa list + 'Select Contact(s)' label)"
+        )
+        mock_dump.assert_not_called()

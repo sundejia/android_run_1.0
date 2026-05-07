@@ -43,6 +43,20 @@ If `_open_contact_card_menu` cannot find the Contact Card item after trying the 
 
 This closed the gap where failures returned **before** `_assert_page_state`, so no dump was produced.
 
+### Contact picker page-state drift (fixed 2026-05-07, post-swipe)
+
+**Symptom:** After Contact Card was tapped, the **contact picker** was visibly on screen (`Select Contact(s)`, list sections like “Company Contacts”), but `_assert_page_state("contact_picker", ...)` failed with `observed=unknown`. Logs showed `fail_contact_card_menu_state_check` and triggered the recovery apology message — same UX as “could not open picker”, yet the UI dump proved the picker **had** opened.
+
+**Cause:** `PageStateValidator.is_contact_picker_open` only recognized legacy picker signatures (`nca` title, `cth` list) plus an **exact** catalog of title strings. On build observed **2026-05-07** (same device `10AE9P1DTT002LE`), WeCom uses **`nle`** for the title row and **`cwa`** for the list container, and the title text is **`Select Contact(s)`** (literal parentheses-s suffix). None of these matched the old predicates.
+
+**Fix:**
+
+- `selectors.py`: append-only **`nle`** / **`cwa`** alongside **`nca`** / **`cth`**.
+- `page_state.py`: title fallback matches **`startswith`** prefixes (`Select Contact`, `选择联系人`, …) instead of a brittle exact list — still **not** substring-on-full-tree (avoids “Select All” style false positives).
+- Tests: fixtures mirror production dumps; `_assert_page_state` regression test in `test_contact_share_service.py`.
+
+**Non-destructive E2E check:** `scripts/e2e_verify_contact_picker_state.py` (requires `adb forward tcp:<port> tcp:<port>`, DroidRun on device, WeCom on Messages/chat). Asserts `attach_panel` then **`contact_picker`** after opening Contact Card; **does not** tap Send — backs out with `go_back` twice.
+
 ### Edge-safe attach-grid swipe (`service.py`)
 
 `_swipe_attach_grid` no longer uses a **30px** inset from both edges (that sat inside OEM edge-gesture regions). It now:
@@ -70,15 +84,23 @@ uv run pytest tests/unit/test_contact_share_service.py tests/unit/test_page_stat
   tests/unit/test_contact_finder_strategy.py tests/unit/test_auto_contact_share_action.py -q
 ```
 
+Device smoke (optional — **does not send** a card):
+
+```bash
+adb forward tcp:8080 tcp:8080   # match Config droidrun_port
+uv run python scripts/e2e_verify_contact_picker_state.py --serial <ADB_SERIAL>
+```
+
 Full suite:
 
 ```bash
 uv run pytest tests/unit/ -q
 ```
 
-## Related feature doc
+## Related documentation
 
-See [Auto Contact Share](../features/auto-contact-share.md) for end-user flow, settings, and file map.
+- [Auto Contact Share](../features/auto-contact-share.md) — end-user flow, settings, and file map.
+- [Resolved bug: contact picker page-state drift](../04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md) — `nle`/`cwa`, `Select Contact(s)`, E2E script.
 
 ## Contact picker search button (magnifier)
 

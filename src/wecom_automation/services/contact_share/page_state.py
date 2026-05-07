@@ -16,10 +16,15 @@ between steps. Each predicate is intentionally cheap (one O(n) pass over
 the flat clickable list) so it can be called between every UI action
 without dominating step latency.
 
-Signature catalog (validated on real device 2026-05-06):
+Signature catalog (validated on real devices 2026-05-06 / 2026-05-07):
 
-  attach_panel       : resourceId contains ``ahe`` (GridView container)
-  contact_picker     : resourceId contains ``nca`` (title) OR ``cth`` (list)
+  attach_panel       : resourceId contains ``ahe`` (legacy) or ``aij``
+                       (2026-05-06 build) — GridView container
+  contact_picker     : resourceId contains ``nca`` (legacy title) /
+                       ``nle`` (2026-05-07 title) OR ``cth`` (legacy list) /
+                       ``cwa`` (2026-05-07 list); fallback title text
+                       starts with "Select Contact" / "选择联系人"
+                       (covers "Select Contact(s)" with literal parens-s)
   confirm_send_dialog: Send button AND Cancel button both visible
                        (resource ``dak`` + ``dah`` OR Button class with
                        text "Send/Cancel/发送/取消")
@@ -101,6 +106,32 @@ def _find_text_exact(elements: Iterable[dict], texts: tuple[str, ...]) -> dict |
     return None
 
 
+def _find_text_prefix(elements: Iterable[dict], prefixes: tuple[str, ...]) -> dict | None:
+    """Find an element whose text starts with one of ``prefixes`` (case-insensitive).
+
+    Used for *title* recognition where the suffix drifts between WeCom
+    builds (``Select Contact`` vs ``Select Contact(s)`` vs ``Select Contacts``).
+    Exact-match catalogs proved fragile — every release we'd lose the
+    fallback the moment WeCom appended a token. Prefix matching is still
+    narrow enough to avoid false positives because the prefixes themselves
+    (``Select Contact``, ``选择联系人``) only appear on the picker screen.
+
+    Do NOT extend this helper to substring matching — substring would
+    re-introduce the very class of fake-success bug the validator was
+    built to catch.
+    """
+    normalized = tuple(p.lower() for p in prefixes)
+    for elem in elements or []:
+        if not isinstance(elem, dict):
+            continue
+        text = _text(elem).lower()
+        if not text:
+            continue
+        if any(text.startswith(prefix) for prefix in normalized):
+            return elem
+    return None
+
+
 def _has_edittext(elements: Iterable[dict]) -> bool:
     for elem in elements or []:
         if not isinstance(elem, dict):
@@ -110,12 +141,20 @@ def _has_edittext(elements: Iterable[dict]) -> bool:
     return False
 
 
-_PICKER_TITLE_TEXTS: tuple[str, ...] = (
-    "Select Contact",
-    "Select a Contact",
-    "选择联系人",
-    "选择联系人:",
-    "Select",
+# Prefix-based title catalog — each entry is matched against the start
+# of an element's text (case-insensitive). The 2026-05-07 build ships
+# the title as ``Select Contact(s)`` with a literal ``(s)`` suffix; older
+# builds still use the singular ``Select Contact`` / ``选择联系人``.
+# Matching by prefix means we recognize both without enumerating every
+# pluralization variant WeCom ships next.
+#
+# Do NOT add the bare token ``Select`` — too generic, would also match
+# ``Select All`` and any future "Select X" toolbar action that happens
+# to land in the tree.
+_PICKER_TITLE_TEXT_PREFIXES: tuple[str, ...] = (
+    "Select Contact",      # English: "Select Contact", "Select Contact(s)", "Select Contacts"
+    "Select a Contact",    # English variant on a few older builds
+    "选择联系人",            # Chinese (also matches "选择联系人:" with colon suffix)
 )
 
 
@@ -162,15 +201,21 @@ class PageStateValidator:
     def is_contact_picker_open(elements: list[dict]) -> bool:
         """Contact picker = the "Select Contact" screen pushed by Contact Card.
 
-        Strong signal: ``nca`` title OR ``cth`` list resourceId present.
-        Fallback: title text contains "Select Contact" / "选择联系人".
+        Strong signal: any title resourceId from ``CONTACT_PICKER_TITLE_RESOURCE``
+        (legacy ``nca`` / 2026-05-07 ``nle`` / ...) OR any list-container
+        resourceId from ``CONTACT_PICKER_LIST_RESOURCE`` (legacy ``cth`` /
+        2026-05-07 ``cwa`` / ...).
+
+        Fallback: title text starts with "Select Contact" or "选择联系人".
+        Prefix matching covers ``Select Contact(s)`` (with literal
+        parens-s suffix) without enumerating every WeCom plural variant.
         """
         if not elements:
             return False
         for needle in S.CONTACT_PICKER_TITLE_RESOURCE + S.CONTACT_PICKER_LIST_RESOURCE:
             if _has_resource_substring(elements, needle):
                 return True
-        return _find_text_exact(elements, _PICKER_TITLE_TEXTS) is not None
+        return _find_text_prefix(elements, _PICKER_TITLE_TEXT_PREFIXES) is not None
 
     @staticmethod
     def is_confirm_send_dialog_open(elements: list[dict]) -> bool:

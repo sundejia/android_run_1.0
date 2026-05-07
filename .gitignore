@@ -75,6 +75,8 @@ avatars/
 *.db-wal
 *.db-shm
 *.db.backup
+# Literal filename created if ``:memory:`` is used as a filesystem path by mistake
+:memory:
 
 # Track main conversation database
 # NOTE: Database files are now ignored to avoid committing large data files

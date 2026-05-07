@@ -85,6 +85,72 @@ def contact_picker_elements() -> list[dict]:
 
 
 @pytest.fixture
+def contact_picker_2026_05_07_build_elements() -> list[dict]:
+    """Real contact-picker snapshot from 720x1612, 2026-05-07 build.
+
+    Title resourceId is ``nle`` (not legacy ``nca``) and the list container
+    is ``cwa`` (not legacy ``cth``). Title text is plural ``Select Contact(s)``
+    rather than the singular forms previously matched.
+
+    Captured verbatim from
+    ``logs/contact_share_dump_20260507_134355_516273_contact_card_menu.json``
+    where ``Contact Card`` was correctly tapped — the picker pushed onto
+    the screen exactly as expected — but PageStateValidator returned
+    ``unknown`` because every recognition signal still pointed at the
+    legacy build's strings/resourceIds. The whole flow then aborted into
+    the recovery message path even though the picker was right there.
+    """
+    return [
+        _elem(
+            className="android.widget.TextView",
+            resourceId="com.tencent.wework:id/nle",
+            text="Select Contact(s)",
+            bounds="[20,81][302,127]",
+            index=4,
+        ),
+        _elem(
+            className="android.widget.ListView",
+            resourceId="com.tencent.wework:id/cwa",
+            bounds="[0,152][720,1612]",
+            index=7,
+        ),
+        _elem(text="Customer", bounds="[112,178][260,221]", index=10),
+        _elem(text="Company Contacts", bounds="[112,274][400,317]", index=13),
+        _elem(
+            text="★ Starred Contact",
+            resourceId="com.tencent.wework:id/gpa",
+            bounds="[0,344][720,402]",
+            index=15,
+        ),
+        _elem(
+            text="Frequent Contacts",
+            resourceId="com.tencent.wework:id/nef",
+            bounds="[28,529][285,567]",
+            index=19,
+        ),
+        _elem(text="爱吃汉堡不加酱", bounds="[132,692][356,735]", index=22),
+        _elem(text="B2305170741-[重复(保底正常)]", bounds="[132,887][443,930]", index=26),
+    ]
+
+
+@pytest.fixture
+def contact_picker_with_only_plural_title_text() -> list[dict]:
+    """Picker page where neither ``nca``/``cth`` nor ``nle``/``cwa`` is present
+    in any resourceId, so recognition has to fall back to the title text.
+
+    The real-world picker title is ``Select Contact(s)`` with a literal
+    ``(s)`` suffix. The legacy validator only matched a fixed catalog of
+    exact strings (``Select Contact`` / ``Select a Contact`` / ``Select`` /
+    ``选择联系人`` / ``选择联系人:``) and would silently miss this build.
+    """
+    return [
+        _elem(text="Select Contact(s)", index=0),
+        _elem(text="Customer", index=1),
+        _elem(text="Company Contacts", index=2),
+    ]
+
+
+@pytest.fixture
 def confirm_send_dialog_elements() -> list[dict]:
     """Confirm-send dialog with both Send and Cancel buttons (Button class)."""
     return [
@@ -163,11 +229,57 @@ class TestContactPickerRecognition:
         elements = [_elem(text="选择联系人", index=0)]
         assert PageStateValidator.is_contact_picker_open(elements) is True
 
+    def test_recognized_on_2026_05_07_build_with_nle_cwa(
+        self, contact_picker_2026_05_07_build_elements
+    ):
+        """Regression for the 720x1612 2026-05-07 build whose contact-picker
+        signature drifted to ``nle`` (title) / ``cwa`` (list). Without
+        recognising this signature the page-state envelope rejected a
+        transition that *did* happen — Contact Card was tapped, the picker
+        was pushed, but the share aborted into the recovery message path.
+
+        Captured from ``logs/contact_share_dump_20260507_134355_*``.
+        """
+        assert (
+            PageStateValidator.is_contact_picker_open(
+                contact_picker_2026_05_07_build_elements
+            )
+            is True
+        )
+
+    def test_recognized_via_select_contacts_plural_title_text(
+        self, contact_picker_with_only_plural_title_text
+    ):
+        """The real picker title on the 2026-05-07 build is the plural
+        form ``Select Contact(s)`` with a literal ``(s)`` suffix. The
+        validator's text fallback must accept this even when the title /
+        list resourceIds are unknown — otherwise we keep losing share
+        flows the moment WeCom renames a single resourceId.
+        """
+        assert (
+            PageStateValidator.is_contact_picker_open(
+                contact_picker_with_only_plural_title_text
+            )
+            is True
+        )
+
     def test_not_recognized_on_attach_panel(self, attach_panel_elements):
         assert PageStateValidator.is_contact_picker_open(attach_panel_elements) is False
 
     def test_not_recognized_on_chat_screen(self, chat_screen_elements):
         assert PageStateValidator.is_contact_picker_open(chat_screen_elements) is False
+
+    def test_chat_screen_excludes_2026_05_07_picker(
+        self, contact_picker_2026_05_07_build_elements
+    ):
+        """The new picker fixture lacks an EditText, so chat_screen must
+        never claim it. Pin this to keep the disjointness invariant
+        from drifting alongside the picker fix.
+        """
+        assert (
+            PageStateValidator.is_chat_screen(contact_picker_2026_05_07_build_elements)
+            is False
+        )
 
 
 class TestConfirmSendDialogRecognition:
