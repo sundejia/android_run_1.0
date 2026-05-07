@@ -102,6 +102,7 @@ uv run pytest tests/unit/ -q
 
 - [Auto Contact Share](../features/auto-contact-share.md) — end-user flow, settings, and file map.
 - [Resolved bug: contact picker page-state drift](../04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md) — `nle`/`cwa`, `Select Contact(s)`, E2E script.
+- [Resolved bug: picker search `nmf` vs close `nma`](../04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md) — magnifier vs close button; confirm `de2`/`de5`.
 
 ## Contact picker search button (magnifier)
 
