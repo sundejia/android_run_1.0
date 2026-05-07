@@ -4,6 +4,9 @@ This is the playbook every contributor follows when adding a new BOSS
 feature. It is the ground truth referenced from `openspec/AGENTS.md`
 and `docs/00-boss-pivot/README.md`.
 
+See also **`docs/development/boss-tdd-workflow.md`** for a shorter checklist
+(ops-oriented). Both documents stay in sync on milestones and commands.
+
 ## The Loop
 
 ```
@@ -28,8 +31,14 @@ After capture, inspect the JSON to confirm:
 - `app.package_name` matches a known BOSS package.
 - `device.serial` and `captured_at` are recorded.
 
-Commit the fixture in the same PR as the test that consumes it. Never
-edit a fixture by hand; re-dump instead.
+Commit the fixture in the same PR as the test that consumes it.
+
+Prefer **re-dumping** from a device when validating real UI drift.
+
+**Synthetic fixtures** (hand-authored JSON under `tests/fixtures/boss/`) are
+allowed when they encode a stable parser contract; document in the owning
+test what scenario they represent so reviewers know what changed when the
+file edits.
 
 ## 2. Write The Failing Test
 
@@ -112,6 +121,7 @@ integration` against a connected device.
   id, content description, or text from the dumped tree.
 - Mocking the entire `ADBService` for a parser test; the parser should
   not need any device abstraction.
-- Editing a fixture by hand to make a test pass. The fixture is
-  evidence; if you change it, you change reality.
+- Editing a **dumped** fixture opportunistically to green a test without
+  re-validating against the device or updating the stated scenario in the
+  test. Prefer re-dump or an explicitly labeled synthetic fixture.
 - Adding code without a corresponding new or updated test.

@@ -2,10 +2,18 @@
 
 This directory tracks the migration of this repository from a WeCom
 (企业微信) automation framework to a BOSS 直聘 recruitment automation
-framework. The migration is intentionally incremental: WeCom code keeps
-shipping while the BOSS modules are built alongside it.
+framework. The migration is **incremental**: WeCom code remains in the
+tree; BOSS modules ship alongside it.
 
-## Where things live (M0)
+## Status (2026-05)
+
+**Milestones M0–M6 are complete.** The recruitment loop (recruiter → jobs →
+greet → reply → re-engage) plus ops monitoring and smoke regression is
+implemented and covered by tests.
+
+High-level completion summary: **`docs/implementation/2026-05-07-boss-pivot-m0-m6-complete.md`**.
+
+## Where things live
 
 | Concern | Location |
 |---------|----------|
@@ -13,61 +21,76 @@ shipping while the BOSS modules are built alongside it.
 | BOSS schema | `src/boss_automation/database/schema.py` |
 | BOSS configuration | `src/boss_automation/core/config.py` |
 | BOSS unit tests | `tests/unit/boss/` |
+| BOSS backend API tests | `wecom-desktop/backend/tests/test_boss_*.py` |
 | Real-device UI dump tool | `scripts/dump_boss_ui.py` |
 | Fixture loader | `tests/_fixtures/loader.py` |
 | Captured fixtures | `tests/fixtures/boss/<page>/<scenario>.{json,png}` |
+| Smoke regression script | `scripts/boss_smoke.py` |
 | Theme overrides | `wecom-desktop/src/styles/boss-theme.css` |
+| BOSS Vue views | `wecom-desktop/src/views/boss/` |
 | Tailwind palette | `boss.*` keys in `wecom-desktop/tailwind.config.js` |
 | Change proposals | `openspec/changes/` |
 | OpenSpec workflow | `openspec/AGENTS.md` |
 
-## Roadmap
+## Roadmap (completed)
 
 | Milestone | Theme | Status |
 |-----------|-------|--------|
-| M0 | Pivot foundation, OpenSpec, BOSS schema, dump tooling, CI | in progress |
-| M1 | BOSS app launch + recruiter detection | pending |
-| M2 | Job sync (open/closed jobs per recruiter) | pending |
-| M3 | Candidate ("牛人") greeting executor + quota guard + schedule | pending |
-| M4 | Inbound message reply + resume-driven template selection | pending |
-| M5 | Re-engagement (复聊跟进) | pending |
-| M6 | Ops hardening, scrcpy multi-window, monitoring panel | pending |
+| M0 | Pivot foundation, OpenSpec, BOSS schema, dump tooling, CI | **Done** |
+| M1 | BOSS app launch + recruiter detection + API/list UI | **Done** |
+| M2 | Job sync (open/closed jobs per recruiter) | **Done** |
+| M3 | Candidate ("牛人") greeting executor + quota guard + schedule | **Done** |
+| M4 | Inbound message reply + resume-driven templates + dispatcher | **Done** |
+| M5 | Re-engagement (复聊跟进) | **Done** |
+| M6 | Ops hardening: monitoring summary API, smoke script, dashboard, docs | **Done** |
+
+**Follow-ups (not part of M0–M6):** scrcpy multi-window automation,
+background schedulers for greet/re-engage, optional packaging hardening.
+See `openspec/changes/0007-ops-hardening/design.md`.
+
+## Operator and developer docs
+
+| Audience | Document |
+|----------|----------|
+| First-time setup / endpoints | `docs/guides/boss-zhipin-onboarding.md` |
+| TDD workflow (short checklist) | `docs/development/boss-tdd-workflow.md` |
+| Detailed TDD loop (fixtures, loader) | `docs/00-boss-pivot/tdd-workflow.md` |
 
 ## TDD Discipline
 
-Every commit in this pivot must satisfy:
+Every BOSS change should satisfy:
 
-1. A failing test exists before any production code is written.
-2. `pytest tests/unit/boss/ --cov-fail-under=80` is green.
-3. `ruff check` and `ruff format --check` are green for new code.
-4. Real-device interaction is forbidden in unit tests. Use the dump
-   tool to create JSON fixtures, then write tests that load them.
-5. Integration tests (real device required) live under
-   `tests/integration/` and carry `@pytest.mark.integration`. CI skips
-   them; you run them locally.
+1. A failing test exists before production code (red → green).
+2. `pytest tests/unit/boss/ --cov-fail-under=80` is green for BOSS modules
+   (CI enforces coverage on `src/boss_automation`).
+3. `ruff check` and `ruff format --check` are green for touched Python.
+4. Real-device interaction is forbidden in unit tests. Capture fixtures with
+   `dump_boss_ui.py` or commit **curated synthetic JSON** under
+   `tests/fixtures/boss/` when the contract is stable; document the intent
+   in the owning test file.
+5. Integration tests (real device) live under `tests/integration/` with
+   `@pytest.mark.integration`. CI skips them unless explicitly enabled.
 
 ## Capturing UI Fixtures
 
 ```bash
 uv run scripts/dump_boss_ui.py \
     --serial <ADB-SERIAL> \
-    --page candidate_card \
-    --label first_time_greet
+    --page me_profile \
+    --label has_profile
 ```
 
-Outputs:
-- `tests/fixtures/boss/candidate_card/first_time_greet.json`
-- `tests/fixtures/boss/candidate_card/first_time_greet.png`
+Outputs under `tests/fixtures/boss/` (see `--fixture-root` in the script).
 
-The script refuses to overwrite existing fixtures; pass `--force` to
-intentionally replace one. Use `--dry-run` to see the planned output
-paths without contacting the device.
+The script refuses to overwrite existing fixtures unless `--force` is set.
+Use `--dry-run` to see planned paths without touching the device.
 
 ## Environment Variables
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
-| `BOSS_DEVICE_SERIAL` | ADB device serial for the active BOSS session | unset |
+| `BOSS_FEATURES_ENABLED` | When truthy, mounts `boss_*` FastAPI routers | unset (routers off) |
+| `BOSS_DEVICE_SERIAL` | ADB device serial for CLI / scripts | unset |
 | `BOSS_USE_TCP` | Whether to use the DroidRun TCP bridge | `false` |
 | `BOSS_DROIDRUN_PORT` | Per-device DroidRun port (multi-device must vary) | `8080` |
 | `BOSS_DB_PATH` | Path to the BOSS SQLite file | `<project>/boss_recruitment.db` |
@@ -76,25 +99,23 @@ paths without contacting the device.
 | `BOSS_LOG_FILE` | Optional file sink for logs | unset |
 | `BOSS_TIMEZONE` | Timezone for parsed timestamps | `Asia/Shanghai` |
 
-These never collide with the legacy `WECOM_*` variables, so both stacks
-can run side by side on the same host.
+These never collide with the legacy `WECOM_*` variables.
 
 ## Coexistence With WeCom Code
 
-Until M6, the WeCom package, desktop app, and tests stay in place. The
-BOSS pivot is purely additive at the file system level. CI runs both
-test suites: BOSS tests are blocking, legacy WeCom tests are
-informational (`continue-on-error: true`) so a logfire/opentelemetry
-mismatch in the legacy environment cannot block merges of new BOSS
-work.
+The BOSS pivot is additive at the filesystem level. CI runs both suites:
+BOSS unit tests are blocking where configured; some legacy WeCom tests may
+run as informational depending on workflow (`continue-on-error`) so
+environment-specific issues (e.g. optional deps) do not block BOSS merges.
 
 The two stacks share:
+
 - The host ADB server and connected devices.
-- The Python virtualenv.
+- The Python virtualenv (recommended: `uv`).
 - The Electron / Vite / Tailwind frontend infrastructure.
 
-They do NOT share:
+They do **not** share:
+
 - SQLite files (`wecom_conversations.db` vs `boss_recruitment.db`).
 - Environment variable namespace (`WECOM_*` vs `BOSS_*`).
-- View directories (BOSS views will land under
-  `wecom-desktop/src/views/boss/` in M1+).
+- Feature directories (BOSS UI under `wecom-desktop/src/views/boss/`).

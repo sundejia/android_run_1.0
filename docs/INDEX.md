@@ -1,17 +1,34 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-05-07 (Auto-blacklist: `require_review_pass` flag (default **`false`**) decouples blacklist from rating-server review; AI suppression cross-checked at `_media_action_handled_keys` + `BlacklistChecker` (3 sites); see `04-bugs-and-fixes/resolved/2026-05-07-auto-blacklist-review-data-missing.md`. Earlier 2026-05-07: contact share picker **`nmf`** vs close **`nma`**; confirm dialog **`de2`**/**`de5`**; dry-run E2E `tests/integration/test_full_image_to_card_dry_run_e2e.py`; plus `nle`/`cwa`, attach-grid swipe, `scripts/e2e_verify_contact_picker_state.py`; see `implementation/2026-05-07-contact-share-reliability.md`, `04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md`, `04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md`)
+> Last Updated: 2026-05-07 — BOSS Zhipin pivot **M0–M6 complete** (see `implementation/2026-05-07-boss-pivot-m0-m6-complete.md`, `00-boss-pivot/README.md`). Earlier 2026-05-07: Auto-blacklist `require_review_pass` (default **`false`**); contact share picker **`nmf`** vs close **`nma`**; see `04-bugs-and-fixes/resolved/` and `implementation/2026-05-07-contact-share-reliability.md` as applicable.
 
 ---
 
 ## Quick Navigation
 
 - **[Product Features](#01-product---features-and-user-experience)** - What we build
+- **[BOSS Zhipin pivot](#boss-zhipin-pivot-2026)** - Recruitment automation (additive stack)
 - **[Implementation](#03-implementation-and-architecture)** - How it works
 - **[Bugs & Fixes](#04-bugs-and-fixes)** - Issues and resolutions
 - **[Changelog](#05-changelog-and-upgrades)** - Version history
 - **[Reference](#07-appendix)** - Glossary, tools, setup
+
+---
+
+## BOSS Zhipin pivot (2026)
+
+Additive automation for BOSS 直聘 alongside the legacy WeCom stack. Code:
+`src/boss_automation/`, desktop views `wecom-desktop/src/views/boss/`, DB
+default `boss_recruitment.db`, feature flag `BOSS_FEATURES_ENABLED`.
+
+| Document | Description |
+| -------- | ----------- |
+| [Pivot index](00-boss-pivot/README.md) | Where code lives, env vars, completed roadmap M0–M6 |
+| [M0–M6 completion summary](implementation/2026-05-07-boss-pivot-m0-m6-complete.md) | Deliverables, deferred work, verification pointers |
+| [Operator onboarding](guides/boss-zhipin-onboarding.md) | Device → backend → smoke → dashboard |
+| [TDD workflow (short)](development/boss-tdd-workflow.md) | Red/green loop and test locations |
+| [TDD workflow (detailed)](00-boss-pivot/tdd-workflow.md) | Fixtures, loader, anti-patterns |
 
 ---
 

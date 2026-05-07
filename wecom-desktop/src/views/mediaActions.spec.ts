@@ -53,6 +53,7 @@ describe('Media Actions API', () => {
           enabled: false,
           reason: 'Customer sent media (auto)',
           skip_if_already_blacklisted: true,
+          require_review_pass: false,
         },
         auto_group_invite: {
           enabled: false,
@@ -95,6 +96,7 @@ describe('Media Actions API', () => {
           enabled: false,
           reason: 'Customer sent media (auto)',
           skip_if_already_blacklisted: true,
+          require_review_pass: false,
         },
         auto_group_invite: {
           enabled: false,
@@ -147,6 +149,7 @@ describe('Media Actions API', () => {
             enabled: false,
             reason: 'Customer sent media (auto)',
             skip_if_already_blacklisted: true,
+            require_review_pass: false,
           },
           auto_group_invite: update.auto_group_invite,
           auto_contact_share: defaultContactShare,
@@ -186,6 +189,7 @@ describe('Media Actions API', () => {
             enabled: false,
             reason: 'Customer sent media (auto)',
             skip_if_already_blacklisted: true,
+            require_review_pass: false,
           },
           auto_group_invite: {
             enabled: false,
@@ -267,6 +271,7 @@ describe('MediaAutoActionSettings type', () => {
         enabled: true,
         reason: 'test',
         skip_if_already_blacklisted: false,
+        require_review_pass: false,
       },
       auto_group_invite: {
         enabled: true,

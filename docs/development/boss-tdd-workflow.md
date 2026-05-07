@@ -124,3 +124,9 @@ via `tests/unit/boss/test_boss_smoke.py`.
 - `openspec/changes/0005-message-reply/` — parsers + dispatcher.
 - `openspec/changes/0006-reengagement/` — silent detector + orchestrator.
 - `openspec/changes/0007-ops-hardening/` — monitoring + smoke + docs.
+
+## See also
+
+- `docs/00-boss-pivot/README.md` — pivot index and environment variables.
+- `docs/implementation/2026-05-07-boss-pivot-m0-m6-complete.md` — what
+  shipped in M0–M6 and what was deferred.

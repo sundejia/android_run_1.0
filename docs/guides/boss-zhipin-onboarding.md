@@ -69,17 +69,24 @@ curl http://localhost:8765/api/boss/monitoring/summary
 In a separate shell:
 
 ```bash
-# Dump UI to confirm DroidRun can see the BOSS app:
-uv run python scripts/dump_boss_ui.py --serial <ADB_SERIAL> --tab me
+# Optional: dump the Me-tab UI to a fixture (confirms DroidRun + BOSS app access):
+uv run python scripts/dump_boss_ui.py \
+    --serial <ADB_SERIAL> \
+    --page me_profile \
+    --label has_profile
 
-# Tell the backend to extract the recruiter profile from the device:
-curl -X POST http://localhost:8765/api/boss/recruiters/bootstrap \
+# Persist a recruiter row for this device (M1: operator-supplied snapshot).
+# The body must include at least one of name, company, position, avatar_path.
+curl -X POST "http://localhost:8765/api/boss/recruiters/<ADB_SERIAL>/refresh" \
      -H 'content-type: application/json' \
-     -d '{"device_serial": "<ADB_SERIAL>"}'
+     -d '{"name": "王经理", "company": "示例科技", "position": "HRBP"}'
 ```
 
-The `recruiters` table is now seeded with the BOSS account's name,
-company, and position.
+A future milestone may add an empty-body refresh that scrapes the live
+device; until then, fill fields from the BOSS app UI or from a fixture
+dump you inspect locally.
+
+The `recruiters` table now has a row keyed by `device_serial`.
 
 ## 5. Sync open and closed jobs
 
@@ -138,9 +145,10 @@ shapes.
 |----------|---------|
 | `GET /api/boss/monitoring/summary` | Per-recruiter dashboard counters. |
 | `GET /api/boss/recruiters` | List bound recruiters. |
-| `POST /api/boss/recruiters/bootstrap` | Re-extract recruiter from device. |
+| `GET /api/boss/recruiters/{device_serial}` | Get one recruiter by serial. |
+| `POST /api/boss/recruiters/{device_serial}/refresh` | Upsert recruiter snapshot (body needs ≥1 profile field today). |
 | `POST /api/boss/jobs/sync` | Sync open/closed jobs. |
-| `GET /api/boss/jobs/{recruiter_id}` | List recruiter's jobs. |
+| `GET /api/boss/jobs?recruiter_id=<id>` | List jobs for a recruiter (optional `status_filter`). |
 | `GET / PUT /api/boss/greet/settings/{device_serial}` | Greet config. |
 | `GET / PUT /api/boss/reengagement/settings/{device_serial}` | Reengage config. |
 | `POST /api/boss/reengagement/scan` | Preview eligible candidates. |
