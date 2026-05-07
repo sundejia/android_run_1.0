@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-07T19:31:00+08:00",
+  "device": {
+    "serial": "EMU-SYNTH-1",
+    "model": "Pixel 7 Pro",
+    "android_version": "14",
+    "screen_width": 1440,
+    "screen_height": 3120
+  },
+  "app": {
+    "package_name": "com.hpbr.bosszhipin",
+    "version_name": "12.140"
+  },
+  "label": "synthetic_empty_profile",
+  "page": "me_profile",
+  "screenshot_path": null,
+  "ui_tree": {
+    "className": "android.widget.FrameLayout",
+    "packageName": "com.hpbr.bosszhipin",
+    "bounds": "[0,0][1440,3120]",
+    "children": [
+      {
+        "className": "android.widget.LinearLayout",
+        "resourceId": "com.hpbr.bosszhipin:id/cl_user_info",
+        "bounds": "[0,180][1440,860]",
+        "children": [
+          {
+            "className": "android.widget.ImageView",
+            "resourceId": "com.hpbr.bosszhipin:id/iv_user_avatar",
+            "contentDescription": "默认头像",
+            "bounds": "[60,200][260,400]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tv_user_name",
+            "text": "",
+            "bounds": "[300,220][1380,300]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tv_user_position",
+            "text": "",
+            "bounds": "[300,310][1380,380]"
+          }
+        ]
+      },
+      {
+        "className": "android.widget.LinearLayout",
+        "resourceId": "com.hpbr.bosszhipin:id/main_tab_bar",
+        "bounds": "[0,2960][1440,3120]",
+        "children": [
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_mine",
+            "text": "我",
+            "contentDescription": "我 tab",
+            "bounds": "[1080,2960][1440,3120]"
+          }
+        ]
+      }
+    ]
+  }
+}

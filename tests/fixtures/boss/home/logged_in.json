@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-07T19:32:00+08:00",
+  "device": {
+    "serial": "EMU-SYNTH-1",
+    "model": "Pixel 7 Pro",
+    "android_version": "14",
+    "screen_width": 1440,
+    "screen_height": 3120
+  },
+  "app": {
+    "package_name": "com.hpbr.bosszhipin",
+    "version_name": "12.140"
+  },
+  "label": "synthetic_home_logged_in",
+  "page": "home",
+  "screenshot_path": null,
+  "ui_tree": {
+    "className": "android.widget.FrameLayout",
+    "packageName": "com.hpbr.bosszhipin",
+    "bounds": "[0,0][1440,3120]",
+    "children": [
+      {
+        "className": "android.widget.RelativeLayout",
+        "resourceId": "com.hpbr.bosszhipin:id/main_content",
+        "bounds": "[0,0][1440,2960]",
+        "children": [
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tv_main_title",
+            "text": "推荐牛人",
+            "bounds": "[60,180][1380,260]"
+          },
+          {
+            "className": "androidx.recyclerview.widget.RecyclerView",
+            "resourceId": "com.hpbr.bosszhipin:id/recommended_candidate_list",
+            "bounds": "[0,300][1440,2900]",
+            "children": []
+          }
+        ]
+      },
+      {
+        "className": "android.widget.LinearLayout",
+        "resourceId": "com.hpbr.bosszhipin:id/main_tab_bar",
+        "bounds": "[0,2960][1440,3120]",
+        "children": [
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_home",
+            "text": "首页",
+            "contentDescription": "首页 tab",
+            "bounds": "[0,2960][360,3120]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_job",
+            "text": "招聘",
+            "contentDescription": "招聘 tab",
+            "bounds": "[360,2960][720,3120]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_chat",
+            "text": "消息",
+            "contentDescription": "消息 tab",
+            "bounds": "[720,2960][1080,3120]"
+          },
+          {
+            "className": "android.widget.TextView",
+            "resourceId": "com.hpbr.bosszhipin:id/tab_mine",
+            "text": "我",
+            "contentDescription": "我 tab",
+            "bounds": "[1080,2960][1440,3120]"
+          }
+        ]
+      }
+    ]
+  }
+}
