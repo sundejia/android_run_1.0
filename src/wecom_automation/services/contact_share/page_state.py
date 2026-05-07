@@ -34,7 +34,7 @@ state would also be "chat_screen" and the validator would be useless.
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 from wecom_automation.services.contact_share import selectors as S
 

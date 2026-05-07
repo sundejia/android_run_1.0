@@ -1,15 +1,16 @@
 """
 UI element selector patterns for WeCom contact card sharing.
 
-Validated on real device (WeCom Android, 720x1612 resolution).
+Validated on real device (WeCom Android, 720x1612 resolution among others).
 
-Flow: chat → tap attach button (i9u/id8/...) → swipe left on GridView (ahe)
-      → tap "Contact Card" (aha) → select contact → tap "Send" (dak)
+Flow: chat → tap attach button (see ``ATTACH_RESOURCE_PATTERNS``) → swipe left
+      on GridView (see ``ATTACH_GRID_RESOURCE_PATTERNS``: legacy ``ahe`` or
+      newer ``aij``) → tap Contact Card by **exact text** (``CARD_TEXT_PATTERNS``;
+      **not** by shared label rid ``aha``/``aif``) → select contact → tap Send.
 
-Resource IDs for the attach button drift between WeCom builds, so we keep a
-list of known IDs and rely on a position-based fallback when none match. New
-IDs should be appended (not replaced) here so we stay backwards-compatible
-with older devices in the fleet.
+Resource IDs for the attach button and attach-panel widgets drift between WeCom
+builds, so patterns are **append-only** lists and we fall back to position when
+no attach pattern matches. Removing an old token breaks older fleet devices.
 """
 
 from __future__ import annotations

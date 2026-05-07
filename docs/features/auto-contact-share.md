@@ -1,8 +1,9 @@
 # Auto Contact Share (自动推送主管名片)
 
-> **状态**: 已实现  
-> **日期**: 2026-04-30  
-> **关联**: [Media Auto-Actions](media-auto-actions.md) — 第三個注冊到 MediaEventBus 的 IMediaAction
+> **状态**: 已实现（持续按机型 / WeCom 版本演进）  
+> **日期**: 2026-04-30（初版）；**关键可靠性修订**: 2026-05-06 ~ 2026-05-07  
+> **关联**: [Media Auto-Actions](media-auto-actions.md) — 第三个注册到 MediaEventBus 的 `IMediaAction`  
+> **实现备忘**: [Contact share reliability (2026-05)](../implementation/2026-05-07-contact-share-reliability.md)
 
 ## 功能概述
 
@@ -10,60 +11,63 @@
 
 - 支持按客服(kefu)配置不同主管（`kefu_overrides` 映射），未配置则 fallback 到全局 `contact_name`
 - 与 review-gate 审核门控无缝集成：开启审核时需审核通过才推送；关闭时直接推送
-- 幂等表保证每个客户只推一次
-- 同步 + 实时监控两条链路均触发
+- 幂等表保证每个客户只推一次（配置允许时）
+- 同步 + 实时监控两条链路均可触发
+- **可选**：发送名片前先发送一段话术；若名片流程失败且已发送话术，可发送**兜底话术**（见 `ContactShareRequest.recovery_message_on_failure_text` 与实现）
 
-## UI 自动化流程（真机验证）
+## UI 自动化流程（真机验证 + 多版本兼容）
 
-在 720×1612 分辨率设备上验证通过的完整流程：
+在 **720×1612** 等设备上验证；不同 WeCom build 的 `resourceId` 可能不同，下列 ID **均为 append-only 列表中的观测值**，旧机型保留旧 token。
 
 ```
 1. navigate_to_chat(customer)           → WeComService
-2. tap i9u (附件按钮, 右下角)           → 打开附件面板
-3. find "Contact Card" (自适应)          → 先查当前页，未找到则左滑 GridView 再查
-4. tap ndb (搜索按钮, 右上角第二)        → 打开搜索输入框
-5. input contact_name → select result   → 搜索并选中联系人
-6. tap "Send" (dak/blz)                → 确认发送
+2. _tap_attach_button()               → 匹配 ATTACH_RESOURCE_PATTERNS（如 i9u / id8 / igu）或位置启发式
+3. _assert_page_state(attach_panel)   → PageStateValidator：确认附件面板已打开
+4. _open_contact_card_menu()          → 当前页精确匹配 Contact Card 文案；否则 _swipe_attach_grid() 后重试
+5. _assert_page_state(contact_picker) → 确认已进入选人界面
+6. _select_contact_from_picker()      → SearchContactFinder / CompositeContactFinder 等策略
+7. _confirm_send()                    → 精确匹配 Send，避免 “Send to:” 等误触
+8. _record_share()（成功路径）        → 幂等表（若适用）
 ```
 
-### 自适应页查找
+### 附件面板与「第二页」名片入口
 
-WeCom 会将最近使用过的附件选项提升到第一页。`_open_contact_card_menu()` 实现了自适应逻辑：
+WeCom 会将最近使用过的附件选项提升到第一页，因此 `_open_contact_card_menu()`：
 
-1. 先尝试在当前页查找 "Contact Card" 并点击（快速路径）
-2. 若未找到，左滑 GridView (`ahe`) 到下一页再重试（慢速路径）
+1. **快速路径**：在当前附件网格页用 **精确文本**匹配 `CARD_TEXT_PATTERNS`（见下）并点击。
+2. **慢速路径**：在附件菜单 **GridView** 上 **向左滑动**，翻到下一页后再匹配。
 
-**重要**：Contact Card 的匹配使用**文本精确匹配**（"Contact Card" / "名片" / "Personal Card"），不能用 resourceId `aha` —— `aha` 是附件面板中所有项目标签共用的 resourceId（Image、Camera、Contact Card 等的标签 rid 均为 `aha`）。
+**人工操作要点（与自动化一致）**：在 `+` 弹出的网格上滑动时，**不要紧贴屏幕左右边缘滑动**，否则会触发系统返回/边缘手势，网格不会翻页。自动化侧通过 **加大边缘内缩与滑动时长** 缓解（见实现备忘）。
 
-### 联系人选择器搜索（SearchContactFinder）
+### 文本与 resourceId 的使用规则
 
-选择器打开后有两种联系人定位策略：
+| 用途 | 规则 |
+|------|------|
+| **Contact Card 菜单项** | 仅用 **精确文本**匹配 `CARD_TEXT_PATTERNS`（`Contact Card` / `名片` / `Personal Card` 等）。**不要**用附件项通用 label 的 `resourceId` 作为唯一键——同一 build 下多项共享同一 label id（legacy `aha`，新 build `aif`）。 |
+| **附件面板是否打开** | 可用 GridView（`ahe` 或 `aij`）或 **≥4** 个附件 label 节点（`aha` 或 `aif`）作为 `PageStateValidator` 信号。 |
+| **发送按钮** | 精确匹配 `Send` / `发送` 等，避免匹配到 “Send to:” 等标签。 |
 
-1. **ScrollContactFinder**（旧）：滚动列表，按文本前缀匹配 — 适合联系人少的场景
-2. **SearchContactFinder**（新）：点击搜索按钮 → 输入搜索词 → 从结果中匹配 — 适合联系人多的场景
+### 自适应页查找与联系人选择
 
-搜索流程：
+- **SearchContactFinder**（推荐）：点击搜索 → 输入姓名 → 选结果（联系人多时更稳）。
+- **ScrollContactFinder**：仅在确认 **联系人选择器已打开** 后滚动列表；否则拒绝扫描，避免误点附件面板等区域。
+- **CompositeContactFinder**：组合策略，按配置回退。
 
-1. 点击右上角第二按钮 `ndb` 打开搜索输入框（EditText, rid `lba`）
-2. 输入联系人名称，等待结果列表刷新
-3. 在搜索输入框下方区域匹配结果（排除 EditText 本身）
-4. 选中第一个匹配项
+搜索流程要点：
 
-**注意**：不要点击 `nd7`（最右上角）——那是关闭/返回按钮，会关闭整个选择器。
+1. 点击右上角区域 **搜索** 按钮（历史上常用 `ndb`；**不要**点最角落的关闭类按钮如 `nd7`）。
+2. 在出现的 **EditText** 中输入名称，在结果区匹配（排除输入框自身）。
 
-### 真机 Resource ID 映射
+### 真机 Resource ID 映射（参考，非穷举）
 
-| 步骤 | ResId | Text | 说明 |
-|------|-------|------|------|
-| 附件按钮 | `i9u` | — | 聊天输入区最右侧图标 |
-| 附件菜单 GridView | `ahe` | — | 需左滑翻到第二页 |
-| 名片菜单项 | `aha` | "Contact Card" | 第二页，**必须用文本匹配**（aha 为所有标签共用） |
-| 选择器标题 | `nca` | "Select Contact(s)" | — |
-| 选择器列表 | `cth` | — | ListView |
-| **搜索按钮** | `ndb` | — | 右上角第二按钮（⚠️ 不是 nd7） |
-| 搜索输入框 | `lba` | "Search" | 点击 ndb 后出现的 EditText |
-| 确认发送 | `dak` / `blz` / `i_2` | "Send" / "SEND" | 确认对话框，大小写均可 |
-| 取消 | `dah` | "Cancel" | 确认对话框 |
+| 步骤 | ResId（示例） | 说明 |
+|------|---------------|------|
+| 附件按钮 | `i9u`, `id8`, **`igu`** | 多版本；未命中时用右下角位置启发式 |
+| 附件菜单 GridView | **`ahe`**（旧）, **`aij`**（720×1612 某 build） | 左滑翻页的目标容器 |
+| 附件项 label（仅状态识别） | **`aha`**（旧）, **`aif`**（新） | 每项一行文案；**不能**单独用于点「名片」 |
+| 名片菜单项 | （共用 label id） | **必须用 `CARD_TEXT_PATTERNS` 精确文本** |
+| 选择器标题 / 列表 | `nca`, `cth` 等 | 见 `selectors.py` |
+| 确认发送 | `dak` / `blz` / `i_2` 等 + 精确文本 | 见 `selectors.py` |
 
 ## 架构
 
@@ -72,7 +76,7 @@ WeCom 会将最近使用过的附件选项提升到第一页。`_open_contact_ca
     ↓
 MessageProcessor._maybe_emit_media_event()
     ↓
-[review-gate 开启] → pending_reviews → rating-server → webhook → ReviewGate
+[review-gate 开启] → pending_reviews → … → ReviewGate
 [review-gate 关闭] → 直接 emit
     ↓
 MediaEventBus.emit(event, settings)
@@ -88,13 +92,21 @@ AutoContactShareAction.execute()
   ├── ContactShareService.share_contact_card()
   │     ├── navigate_to_chat()
   │     ├── _tap_attach_button()
-  │     ├── _swipe_attach_page2()
-  │     ├── _tap_contact_card_menu()
+  │     ├── _assert_page_state(attach_panel)
+  │     ├── _open_contact_card_menu()  ← 内含 _tap_contact_card_menu / _swipe_attach_grid
+  │     ├── _assert_page_state(contact_picker)
   │     ├── _select_contact_from_picker(contact_name)
   │     ├── _confirm_send()
-  │     └── _record_share()  ← 写入幂等表
-  └── finally: restore_navigation()  ← 必定恢复私聊列表
+  │     └── _record_share()  ← 成功时写入幂等表
+  └── finally: restore_navigation()  ← 尽量恢复私聊列表
 ```
+
+### 可观测性与诊断
+
+- **指标**：`contact_share_attempt`、`contact_share_ui_dump` 等（见 `metrics_logger` 调用处）。
+- **UI dump**：状态断言失败或 Contact Card 菜单阶段彻底失败时，可能写入  
+  `logs/contact_share_dump_<timestamp>_<step>.json`（含完整 `elements` + `ui_tree`）。
+- **桌面端**：媒体动作页可配置 `contact_name`，并提供「测试可达性」等能力（见后端 `media_actions` 路由与 `MediaActionsView.vue`）。
 
 ## 设置结构
 
@@ -118,10 +130,12 @@ AutoContactShareAction.execute()
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `enabled` | boolean | 功能开关 |
-| `contact_name` | string | 全局默认主管名（精确匹配联系人选择器中的显示名前缀） |
+| `contact_name` | string | 全局默认主管名（须能在企业通讯录中搜到；详见页面提示与测试接口） |
 | `skip_if_already_shared` | boolean | 幂等：已推过则跳过 |
-| `cooldown_seconds` | int | 冷却时间（预留，当前为 0 = 仅推一次） |
+| `cooldown_seconds` | int | 冷却时间（预留） |
 | `kefu_overrides` | object | 按客服配置不同主管，key 为 kefu_name |
+
+更细的 UI 字段（如发送前话术、失败兜底话术）以 `ContactShareRequest` / 设置加载为准。
 
 ## 数据库
 
@@ -141,50 +155,39 @@ CREATE INDEX IF NOT EXISTS idx_contact_shares_lookup
     ON media_action_contact_shares (device_serial, customer_name, contact_name);
 ```
 
+若曾因「假成功」写入错误行，可使用仓库内一次性清理脚本（见 `scripts/cleanup_fake_contact_share_2026_05_06.py`，使用前阅读脚本说明）。
+
 ## 文件清单
 
-### 新建
+### 核心模块
 
 | 文件 | 说明 |
 |------|------|
 | `src/wecom_automation/services/contact_share/__init__.py` | 模块导出 |
 | `src/wecom_automation/services/contact_share/models.py` | `ContactShareRequest`, `ContactShareResult` |
-| `src/wecom_automation/services/contact_share/selectors.py` | UI 元素关键词（真机验证） |
-| `src/wecom_automation/services/contact_share/service.py` | `IContactShareService` + `ContactShareService` |
-| `src/wecom_automation/services/ui_search/__init__.py` | ui_search 模块导出 |
-| `src/wecom_automation/services/ui_search/selectors.py` | 选择器搜索 UI 关键词（含 ndb） |
-| `src/wecom_automation/services/ui_search/ui_helpers.py` | 纯函数：bounds 解析、布局排序、搜索按钮/输入框/结果匹配 |
-| `src/wecom_automation/services/ui_search/strategy.py` | `ScrollContactFinder` + `SearchContactFinder` 策略模式 |
+| `src/wecom_automation/services/contact_share/selectors.py` | UI 模式（附件 / 网格 / 文案） |
+| `src/wecom_automation/services/contact_share/page_state.py` | `PageStateValidator` |
+| `src/wecom_automation/services/contact_share/service.py` | `ContactShareService` |
+| `src/wecom_automation/services/ui_search/` | 联系人查找策略与工具 |
 | `src/wecom_automation/services/media_actions/actions/auto_contact_share.py` | `AutoContactShareAction` |
-| `tests/unit/test_auto_contact_share_action.py` | 23 个单元测试 |
-| `tests/unit/test_ui_search_helpers.py` | ui_helpers 单元测试 |
-| `tests/unit/test_contact_finder_strategy.py` | ContactFinder 策略单元测试 |
-| `tests/integration/test_contact_search_e2e.py` | 真机端到端测试（8 步流程） |
 
-### 修改
+### 测试（单元）
 
-| 文件 | 说明 |
+| 路径 | 说明 |
 |------|------|
-| `src/wecom_automation/services/media_actions/settings_loader.py` | 添加 `auto_contact_share` 默认值 + 合并逻辑 |
-| `src/wecom_automation/services/media_actions/factory.py` | 注册 `AutoContactShareAction` |
+| `tests/unit/test_auto_contact_share_action.py` | Action 与总线集成 |
+| `tests/unit/test_contact_share_service.py` | 分享服务（预发话术、状态断言、滑动几何、诊断等） |
+| `tests/unit/test_page_state_validator.py` | 页面状态识别 |
+| `tests/unit/test_contact_finder_strategy.py` | 查找策略与 Composite / 滚动守卫 |
+| `tests/unit/test_ui_search_helpers.py` | `find_elements_by_keywords` 匹配模式等 |
 
-## 测试
-
-| 范围 | 路径 |
-|------|------|
-| Action 单元测试 | `tests/unit/test_auto_contact_share_action.py` |
-| UI 搜索辅助函数 | `tests/unit/test_ui_search_helpers.py` |
-| 联系人查找策略 | `tests/unit/test_contact_finder_strategy.py` |
-| 事件总线 + 工厂 | `tests/unit/test_media_actions_factory.py`（已更新：3 个 action） |
-| 设置加载 | `tests/unit/test_media_actions_settings_loader.py` |
-| **真机端到端** | `tests/integration/test_contact_search_e2e.py`（需设备连接） |
+可选真机：`tests/integration/test_contact_search_e2e.py`（需设备）。
 
 ## 注意事项
 
-- `contact_name` 支持双向子串匹配：联系人文本包含搜索词，或搜索词包含联系人文本均可
-- 附件菜单默认显示第一页（Image/Camera 等必须左滑才能看到 Contact Card）
-- 名片菜单项匹配**必须用文本**，不能用 resourceId `aha`（所有附件标签共用）
-- 联系人选择器中，搜索按钮是 `ndb`（右上第二），**不是** `nd7`（最右上，关闭按钮）
-- 搜索时 `screen_width` 必须使用设备实际分辨率（默认 1080 会导致左边界过滤错误）
-- `restore_navigation()` 在 `finally` 块中调用，保证即使 UI 自动化中途失败也会恢复到私聊列表
-- 与 `AutoGroupInviteAction` 和 `AutoBlacklistAction` 并行运行在同一个 `MediaEventBus` 上，单动作异常不阻塞其他动作
+- `contact_name` 必须在企业通讯录中可搜索；仅出现在客户列表里的备注名可能无法分享。
+- 附件网格翻页：**避免边缘滑动**；自动化使用加大边缘内缩与滑动时长（见 [实现备忘](../implementation/2026-05-07-contact-share-reliability.md)）。
+- 名片菜单项必须用 **精确文本**匹配；禁止依赖共享 `resourceId` 作为唯一选择器。
+- 联系人选择器中搜索按钮与关闭按钮不要混淆（避免误关选择器）。
+- `restore_navigation()` 在 `finally` 中尽力执行，保证失败后仍尝试回到可扫描列表状态。
+- 重大 selector 变更后：跑单元测试 + 真机冒烟；失败时优先查看 **`logs/contact_share_dump_*.json`**。

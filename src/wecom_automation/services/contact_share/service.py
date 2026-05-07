@@ -768,14 +768,48 @@ class ContactShareService(IContactShareService):
                 ),
             )
 
+    # ── Swipe-tuning constants ───────────────────────────────────────
+    # Android 10+ uses the bottom-edge / left-edge / right-edge gesture
+    # zones (≈20–48dp wide depending on OEM) for back/home/recents. A
+    # swipe that *starts* inside any of those zones gets stolen by the
+    # system before the GridView ever sees it. The original 30px inset
+    # sat squarely inside the zone on the 720x1612 device, so swiping
+    # to flip to attach-panel page 2 silently no-op'd and Contact Card
+    # was permanently unreachable. 100px buys a comfortable margin on
+    # every aspect ratio we care about while still leaving 500px+ of
+    # actual swipe distance in a 720-wide grid.
+    _ATTACH_SWIPE_EDGE_MARGIN_PX: int = 100
+    # 300ms (the previous default) is fast enough for Android to also
+    # interpret as a back-fling near the edges. 600ms reliably reads as
+    # a content scroll across builds.
+    _ATTACH_SWIPE_DURATION_MS: int = 600
+    # Hard floor on swipe distance — if applying the edge margin would
+    # leave us with less than this many pixels of travel, we shrink the
+    # margin instead. Below ~200px the GridView often doesn't commit to
+    # the next page.
+    _ATTACH_SWIPE_MIN_DISTANCE_PX: int = 240
+
     async def _swipe_attach_grid(self) -> bool:
         """Swipe left on the attachment GridView to reveal the next page.
 
-        Walks every known GridView resource id (ahe legacy / aij
-        2026-05-06 build / ...) so a build-bumped resource id does not
-        silently break the swipe. The original code hardcoded ``"ahe"``
-        which is exactly why Contact Card on page 2 was unreachable on
-        the 720x1612 device that triggered this whole investigation.
+        Two failure modes this guards against:
+
+        1. **Resource-id drift** — walks every known GridView id from
+           ``ATTACH_GRID_RESOURCE_PATTERNS`` (``ahe`` legacy / ``aij``
+           2026-05-06 build / ...). The original code hardcoded ``ahe``
+           which is exactly why the swipe path silently broke on the
+           720x1612 device.
+        2. **Android edge-gesture zones** — the original swipe started
+           30px from the right edge and ended 30px from the left edge,
+           both inside the system back-gesture region. The OS swallowed
+           the gesture and the GridView never paged. This now insets
+           by ``_ATTACH_SWIPE_EDGE_MARGIN_PX`` (100px) and lengthens
+           the duration so the gesture cannot be misread as a back
+           fling. See dump
+           ``logs/contact_share_dump_20260507_124309_*_contact_card_menu.json``
+           for the canonical evidence: post-swipe still showed only
+           page 1 items, page-state still ``attach_panel``, GridView
+           had only 8 children → swipe never actually paged.
         """
         try:
             ui_tree, elements = await self._wecom.adb.get_ui_state(force=True)
@@ -791,16 +825,41 @@ class ContactShareService(IContactShareService):
                 continue
             bounds = elem.get("bounds", "")
             nums = re.findall(r"\d+", bounds)
-            if len(nums) >= 4:
-                x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
-                center_y = (y1 + y2) // 2
-                await self._wecom.adb.swipe(x2 - 30, center_y, x1 + 30, center_y)
-                logger.debug(
-                    "Swiped attach grid (rid=%s, bounds=%s) to reveal next page",
-                    rid,
-                    bounds,
-                )
-                return True
+            if len(nums) < 4:
+                continue
+            x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
+            grid_width = max(1, x2 - x1)
+            center_y = (y1 + y2) // 2
+
+            margin = self._ATTACH_SWIPE_EDGE_MARGIN_PX
+            # Preserve a usable swipe distance even on absurdly narrow
+            # grids — drop margin before sacrificing distance.
+            if grid_width - 2 * margin < self._ATTACH_SWIPE_MIN_DISTANCE_PX:
+                margin = max(0, (grid_width - self._ATTACH_SWIPE_MIN_DISTANCE_PX) // 2)
+
+            start_x = x2 - margin
+            end_x = x1 + margin
+            await self._wecom.adb.swipe(
+                start_x,
+                center_y,
+                end_x,
+                center_y,
+                duration_ms=self._ATTACH_SWIPE_DURATION_MS,
+            )
+            logger.debug(
+                "Swiped attach grid (rid=%s, bounds=%s, "
+                "from=(%d,%d) to=(%d,%d), margin=%d, duration_ms=%d) "
+                "to reveal next page",
+                rid,
+                bounds,
+                start_x,
+                center_y,
+                end_x,
+                center_y,
+                margin,
+                self._ATTACH_SWIPE_DURATION_MS,
+            )
+            return True
 
         logger.warning(
             "Attachment GridView not found for swipe (tried %s)",

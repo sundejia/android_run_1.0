@@ -1,7 +1,7 @@
 # Media Auto-Actions（客户发图/视频后的自动动作）
 
 > **状态**: 已实现  
-> **最后更新**: 2026-04-12（多机型：`ui_parser` 启发式 + 选择器扩展；`WeComService` 滚动区按真机分辨率缩放、拉群步骤内用 UI 树根 bounds 刷新宽高并以**比例阈值**匹配无文案控件；关键步骤 **3 次重试**；DroidRun 多设备端口；实时自动拉群后 **恢复私聊列表**；详见 [多机型可靠性](../implementation/2026-04-12-auto-group-invite-multi-device-reliability.md)、[多分辨率与端口](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)、[私聊导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)）
+> **最后更新**: 2026-05-07（自动推送名片：`ContactShareService` 多版本附件面板 ID、`PageStateValidator`、附件网格**边缘安全滑动**、失败 UI dump；见 [Auto Contact Share](auto-contact-share.md)、[实现备忘](../implementation/2026-05-07-contact-share-reliability.md)。拉群多机型：仍见 [多机型可靠性](../implementation/2026-04-12-auto-group-invite-multi-device-reliability.md)、[多分辨率与端口](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)、[私聊导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)）
 
 ## 功能概述
 
@@ -9,7 +9,7 @@
 
 1. **自动拉黑**：将客户写入控制库 `blacklist` 表（与现有黑名单页、同步过滤逻辑一致）。
 2. **自动拉群**：在安卓端通过 `GroupInviteWorkflowService` + `WeComService` 执行完整拉群与可选的建群后首条消息发送；消息内容与群名均支持模板变量（见下文「拉群实现状态」与 [实现说明](../implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md)）。
-3. **自动推送主管名片**：在安卓端通过 `ContactShareService` + `WeComService` 自动向客户发送指定联系人的企业微信名片（Work Card）；支持按客服(kefu)配置不同主管。（见 [Auto Contact Share](auto-contact-share.md)）
+3. **自动推送主管名片**：在安卓端通过 `ContactShareService` + `WeComService` 自动向客户发送指定联系人的企业微信名片（Work Card）；支持按客服(kefu)配置不同主管；失败时可写诊断 dump（`logs/contact_share_dump_*.json`）。详见 [Auto Contact Share](auto-contact-share.md) 与 [Contact share reliability](../implementation/2026-05-07-contact-share-reliability.md)。
 
 配置在桌面端 **Media Auto-Actions** 页面（路由 `/media-actions`，侧栏 📸），设置持久化在控制库 `settings` 表中，类别键为 `media_auto_actions`。
 
@@ -107,6 +107,7 @@
 | 范围                   | 路径                                                                                                      |
 | ---------------------- | --------------------------------------------------------------------------------------------------------- |
 | 事件总线与动作         | `tests/unit/test_media_event_bus.py`, `test_auto_blacklist_action.py`, `test_auto_group_invite_action.py`, `test_auto_contact_share_action.py` |
+| 名片分享服务与页面状态 | `tests/unit/test_contact_share_service.py`, `tests/unit/test_page_state_validator.py`, `tests/unit/test_contact_finder_strategy.py` |
 | Processor + 总线集成   | `tests/unit/test_media_action_integration.py`                                                             |
 | 设置加载               | `tests/unit/test_media_actions_settings_loader.py`                                                        |
 | 拉群工作流/兼容层      | `tests/unit/test_group_invite_workflow.py`, `tests/unit/test_group_chat_service.py`                       |
@@ -125,7 +126,8 @@
 
 ## 相关文档
 
-- [Auto Contact Share (自动推送主管名片)](auto-contact-share.md) — 名片分享 UI 流程、per-kefu 配置、幂等表、真机验证的 Resource ID
+- [Auto Contact Share (自动推送主管名片)](auto-contact-share.md) — 名片分享 UI 流程、per-kefu 配置、幂等表、多版本 Resource ID、页面状态校验与诊断 dump
+- [Contact share reliability (2026-05)](../implementation/2026-05-07-contact-share-reliability.md) — 假成功治理、附件面板 `aij`/`aif`、边缘手势区与滑动参数、测试索引
 - [安卓拉群工作流实现说明](../implementation/2026-04-04-android-group-invite-workflow.md) — 模块划分、时序、配置与限制（含建群后 `restore_navigation`）
 - [自动拉群后私聊列表导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md) — 实时跟进场景根因与三层修复
 - [自定义建群后消息与聊天页菜单兼容](../implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) — 模板、API/UI 对齐、`test-trigger` 语义、真机验证说明

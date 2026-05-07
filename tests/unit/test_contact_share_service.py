@@ -12,7 +12,6 @@ Covers:
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -783,3 +782,88 @@ class TestSwipeAttachGridResolvesByPattern:
 
         assert result is False
         mock_wecom.adb.swipe.assert_not_awaited()
+
+
+class TestSwipeAttachGridAvoidsEdgeGestureZone:
+    """Regression for 12:43:09 dump on 10AE9P1DTT002LE: the prior
+    swipe started 30px from the right edge and ended 30px from the
+    left edge — both inside Android's system back-gesture zones
+    (≈20–48dp). The OS swallowed the gesture, the GridView never
+    paged, and Contact Card on page 2 stayed unreachable forever.
+
+    These tests pin three properties of the new geometry:
+    1. start_x is far enough from the right edge to clear the zone,
+    2. end_x is far enough from the left edge to clear the zone,
+    3. duration is long enough to read as a content scroll, not a
+       back-fling.
+    """
+
+    @pytest.mark.asyncio
+    async def test_swipe_starts_and_ends_outside_edge_gesture_zone(
+        self, service, mock_wecom
+    ):
+        # Real bounds from the 720x1612 dump that exposed the bug.
+        mock_wecom.adb.get_ui_state = AsyncMock(
+            return_value=(
+                None,
+                [
+                    {
+                        "resourceId": "com.tencent.wework:id/aij",
+                        "bounds": "[0,1134][720,1544]",
+                    }
+                ],
+            )
+        )
+        mock_wecom.adb.swipe = AsyncMock()
+
+        result = await service._swipe_attach_grid()
+
+        assert result is True
+        mock_wecom.adb.swipe.assert_awaited_once()
+        args, kwargs = mock_wecom.adb.swipe.await_args
+        start_x, _start_y, end_x, _end_y = args[0], args[1], args[2], args[3]
+
+        # Both endpoints must be ≥ 100px from the screen edges so the
+        # system gesture detector doesn't claim the swipe.
+        assert 720 - start_x >= 100, f"start_x={start_x} too close to right edge"
+        assert end_x >= 100, f"end_x={end_x} too close to left edge"
+        # Distance must remain large enough to commit a page change.
+        assert (start_x - end_x) >= 240, (
+            f"swipe distance only {start_x - end_x}px — likely won't flip page"
+        )
+        # Duration must be slow enough to not be misread as a fling.
+        assert kwargs.get("duration_ms", 0) >= 500, kwargs
+
+    @pytest.mark.asyncio
+    async def test_narrow_grid_shrinks_margin_to_preserve_swipe_distance(
+        self, service, mock_wecom
+    ):
+        """If a freakishly narrow grid would leave <240px of swipe
+        travel after the 100px margin, the implementation drops the
+        margin instead of producing a no-op swipe. This protects the
+        legacy 1080x*** case if anyone ever swaps in a smaller layout.
+        """
+        # Grid is 280px wide — applying full 100px margin both sides
+        # would leave only 80px of travel.
+        mock_wecom.adb.get_ui_state = AsyncMock(
+            return_value=(
+                None,
+                [
+                    {
+                        "resourceId": "com.tencent.wework:id/aij",
+                        "bounds": "[0,1000][280,1300]",
+                    }
+                ],
+            )
+        )
+        mock_wecom.adb.swipe = AsyncMock()
+
+        result = await service._swipe_attach_grid()
+
+        assert result is True
+        args, _ = mock_wecom.adb.swipe.await_args
+        start_x, _, end_x, _ = args[0], args[1], args[2], args[3]
+        # Swipe distance must remain at least the configured floor.
+        assert (start_x - end_x) >= 240, (
+            f"narrow-grid swipe distance only {start_x - end_x}px"
+        )

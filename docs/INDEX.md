@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-05-01 (Remote chatbot SQLite recovery notes；见 `analysis/2026-05-01-remote-wecom-chat-sqlite-recovery.md`)
+> Last Updated: 2026-05-07 (Contact share reliability / attach-panel swipe geometry；见 `implementation/2026-05-07-contact-share-reliability.md`)
 
 ---
 
@@ -31,7 +31,7 @@
 
 | Feature                                                                                                            | Status      | Date       | Description                                                                                                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------------------------------------ | ----------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Auto Contact Share (自动推送主管名片)](features/auto-contact-share.md)                                            | ✅ Complete | 2026-04-30 | `AutoContactShareAction` on MediaEventBus; per-kefu supervisor config; 6-step UI automation validated on real device; idempotency via `media_action_contact_shares` table; 23 unit tests                                                                                   |
+| [Auto Contact Share (自动推送主管名片)](features/auto-contact-share.md)                                            | ✅ Complete | 2026-05-07 | `AutoContactShareAction`; multi-build selectors (`ahe`/`aij`, `aha`/`aif`, attach `igu`); `PageStateValidator` + strict match + UI dumps; edge-safe attach-grid swipe; diagnostics on Contact Card miss; idempotency via `media_action_contact_shares`; unit tests in `test_contact_share_service` / `test_page_state_validator` / action tests                                                                         |
 | [AI Circuit Breaker Health-Check Lockup Fix](bugs/2026-04-27-circuit-breaker-skip-reply.md)                        | ✅ Complete | 2026-04-28 | Severity-aware `force_open` policy in `PeriodicAIHealthChecker`: `inference_timeout` is warn-only, `service_down`/`inference_error` require N consecutive probes, `unreachable` still trips immediately; 18 new TDD tests across `circuit_breaker` + `ai_health_checker`   |
 | [Sidecar log stream reconnect & heartbeat](04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md) | ✅ Complete | 2026-04-21 | Pinia `logs.ts` exponential reconnect; app-level ping/pong; uvicorn WS ping; dead log callback pruning; `/ws/sync` aligned; Vitest + pytest regressions                                                                                                                    |
 | [Sidecar review timeout defaults](sidecar/sidecar-review-timeout-defaults.md)                                      | ✅ Complete | 2026-04-15 | Daytime `sidecar_timeout` default 60 s (was 300 s); night 30 s unchanged; API/client/router fallbacks aligned                                                                                                                                                              |
