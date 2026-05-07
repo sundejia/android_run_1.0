@@ -85,7 +85,7 @@ See [Auto Contact Share](../features/auto-contact-share.md) for end-user flow, s
 After tapping **Contact Card**, `SearchContactFinder` must tap the header search control before typing `contact_name`.
 
 - **Position fallback bug (fixed 2026-05-07)**: `find_search_button` used to restrict header candidates to `bounds.top <= screen_height * 0.08`. On **720×1612**, that is only ~**129px** — real toolbars often place the magnifier lower (status bar + title row). Keyword miss + empty fallback meant **no tap on search**, while users saw the picker open correctly.
-- **Fix**: widen the header vertical band (`max(22% of height, 180px)`), slightly relax horizontal start (`>= 45%` width), improve `find_search_input` when multiple `EditText` nodes exist (prefer search hints / upper-screen fields; ignore a lone bottom composer).
+- **Fix** (matches `ui_helpers.find_search_button` in code): header fallback uses `bounds[1] <= max(int(screen_height * 0.22), 180)` and `bounds[0] >= screen_width * 0.45`; `find_search_input` prefers search-labelled / upper-screen `EditText` and returns `None` for a lone composer in the lower half so the magnifier path runs first.
 
 ## Operational notes
 

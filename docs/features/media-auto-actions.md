@@ -1,7 +1,7 @@
 # Media Auto-Actions（客户发图/视频后的自动动作）
 
 > **状态**: 已实现  
-> **最后更新**: 2026-05-07（自动推送名片：`ContactShareService` 多版本附件面板 ID、`PageStateValidator`、附件网格**边缘安全滑动**、失败 UI dump；见 [Auto Contact Share](auto-contact-share.md)、[实现备忘](../implementation/2026-05-07-contact-share-reliability.md)。拉群多机型：仍见 [多机型可靠性](../implementation/2026-04-12-auto-group-invite-multi-device-reliability.md)、[多分辨率与端口](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)、[私聊导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)）
+> **最后更新**: 2026-05-07（自动推送名片：`ContactShareService` 多版本附件面板 ID、`PageStateValidator`、附件网格**边缘安全滑动**、选人界面 **放大镜** 标题栏启发式（`ui_helpers.find_search_button` / `find_search_input`）、失败 UI dump；见 [Auto Contact Share](auto-contact-share.md)、[实现备忘](../implementation/2026-05-07-contact-share-reliability.md)。拉群多机型：仍见 [多机型可靠性](../implementation/2026-04-12-auto-group-invite-multi-device-reliability.md)、[多分辨率与端口](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)、[私聊导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)）
 
 ## 功能概述
 
