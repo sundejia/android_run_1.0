@@ -71,8 +71,18 @@ CONTACT_PICKER_LIST_RESOURCE: tuple[str, ...] = ("cth", "cwa")
 
 # ── "Send" button in the confirmation dialog ─────────────────────
 SEND_TEXT_PATTERNS: tuple[str, ...] = ("Send", "SEND", "发送", "确定")
-SEND_RESOURCE_PATTERNS: tuple[str, ...] = ("dak", "blz", "i_2")
+# Substrings matched against resourceId for the confirm-dialog Send button.
+# Append-only — new builds rename, old ones keep working.
+#
+# 2026-05-07 (720x1612 build): the confirm dialog is rendered as plain
+# TextView (NOT Button / NOT ImageView) with rid=de5 for Send and rid=de2
+# for Cancel. Without "de5" here, ContactShareService._confirm_send falls
+# back to text-substring matching ("Send"), which previously matched the
+# picker's "Send to:" label and dialog detection silently failed.
+SEND_RESOURCE_PATTERNS: tuple[str, ...] = ("dak", "blz", "i_2", "de5")
 
 # ── "Cancel" button in the confirmation dialog ───────────────────
 CANCEL_TEXT_PATTERNS: tuple[str, ...] = ("Cancel", "取消")
-CANCEL_RESOURCE_PATTERNS: tuple[str, ...] = ("dah",)
+# Substrings matched against resourceId for the confirm-dialog Cancel button.
+# 2026-05-07 build: TextView with rid=de2 (paired with rid=de5 for Send).
+CANCEL_RESOURCE_PATTERNS: tuple[str, ...] = ("dah", "de2")

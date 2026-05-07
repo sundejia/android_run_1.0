@@ -55,7 +55,7 @@ WeCom 会将最近使用过的附件选项提升到第一页，因此 `_open_con
 
 搜索流程要点：
 
-1. 点击右上角区域 **搜索 / 放大镜** 按钮（历史上常用 `ndb`；**不要**点最角落的关闭类按钮如 `nd7`）。自动化使用关键词 + **顶部标题栏启发式**：旧实现把候选限制在屏幕顶部 **8%** 高度内，在 **720×1612** 等机型上会漏掉实际位于约 **150–220px** 的图标，表现为「已进入选人界面但从没点到搜索」。现已放宽标题栏带高度，并在多个 `EditText` 并存时优先带「搜索」提示或上半屏输入框。
+1. 点击右上角区域 **搜索 / 放大镜** 按钮（历史上常用 `ndb`；keyword 列表含 **`nmf`**（720×1612 某 build 实测为放大镜）；**不要**点最角落的关闭类按钮 **`nd7`** / **`nma`**——后者误触会直接关掉选人界面返回会话）。自动化使用关键词优先命中 **`nmf`**，并把 **`nma`** 列入位置启发式的排除表；另配合 **顶部标题栏启发式**（已将顶部候选带从过窄的 8% 放宽）。多个 `EditText` 并存时优先带「搜索」提示或上半屏输入框。
 2. 在出现的 **EditText** 中输入名称，在结果区匹配（排除输入框自身）。
 
 ### 真机 Resource ID 映射（参考，非穷举）
@@ -67,7 +67,9 @@ WeCom 会将最近使用过的附件选项提升到第一页，因此 `_open_con
 | 附件项 label（仅状态识别） | **`aha`**（旧）, **`aif`**（新） | 每项一行文案；**不能**单独用于点「名片」 |
 | 名片菜单项 | （共用 label id） | **必须用 `CARD_TEXT_PATTERNS` 精确文本** |
 | 选择器标题 / 列表 | **`nca`** / **`cth`**（旧）；**`nle`** / **`cwa`**（2026-05-07 build） | `CONTACT_PICKER_*` in `selectors.py`；标题文案 **`Select Contact(s)`** 通过前缀匹配识别 |
-| 确认发送 | `dak` / `blz` / `i_2` 等 + 精确文本 | 见 `selectors.py` |
+| 选择器顶栏：搜索 vs 关闭 | **`nmf`**（放大镜，应点）；**`nma`**（关闭，勿当搜索） | `ui_search/selectors.py` 的 `PICKER_SEARCH_RESOURCE_PATTERNS`；`find_search_button` 排除 `nma`/`nd7` |
+| 确认发送 | `dak` / `blz` / `i_2`；**`de5`**（2026-05-07 build，`TextView`） | `contact_share/selectors.py`；新 build 上 Send/Cancel 可能为 **`de5`** / **`de2`** 的 `TextView`，非 `Button` |
+| 确认取消 | **`dah`**；**`de2`**（与 `de5` 成对） | 同上；`PageStateValidator` 需 resource 或 Button 文本双路径 |
 
 ## 架构
 
@@ -179,9 +181,12 @@ CREATE INDEX IF NOT EXISTS idx_contact_shares_lookup
 | `tests/unit/test_contact_share_service.py` | 分享服务（预发话术、状态断言、滑动几何、诊断等） |
 | `tests/unit/test_page_state_validator.py` | 页面状态识别 |
 | `tests/unit/test_contact_finder_strategy.py` | 查找策略与 Composite / 滚动守卫 |
-| `tests/unit/test_ui_search_helpers.py` | `find_elements_by_keywords` 匹配模式等 |
+| `tests/unit/test_ui_search_helpers.py` | `find_search_button` / `nmf`·`nma` 回归、`find_elements_by_keywords` 等 |
 
-可选真机：`tests/integration/test_contact_search_e2e.py`（需设备）。
+可选真机：
+
+- `tests/integration/test_contact_search_e2e.py` — 联系人搜索至发送（会真点 Send，慎用）。
+- `tests/integration/test_full_image_to_card_dry_run_e2e.py` — **完整链路 dry-run**：话术渲染模拟 + 真机附件→名片→搜索→**确认框出现后仅点 Cancel**，不发送消息（见 [实现备忘](../implementation/2026-05-07-contact-share-reliability.md)）。
 
 ## 注意事项
 

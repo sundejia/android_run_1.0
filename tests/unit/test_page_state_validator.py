@@ -170,6 +170,25 @@ def confirm_send_dialog_imageview_elements() -> list[dict]:
 
 
 @pytest.fixture
+def confirm_send_dialog_2026_05_07_textview_elements() -> list[dict]:
+    """2026-05-07 (720x1612) build: confirm dialog uses TextView + de2/de5.
+
+    Captured live from the device with a real Contact Card flow ending at the
+    'Send to:' confirmation modal. Neither Button-class detection nor the
+    legacy dak/dah resource ids match — only de2 (Cancel) + de5 (Send) do.
+    Recipient/title TextViews (de8/fu5) are kept to keep the fixture
+    realistic so the predicate cannot accidentally pass on Send/Cancel
+    text alone.
+    """
+    return [
+        _elem(resourceId="com.tencent.wework:id/de8", className="android.widget.TextView", text="Send to:", index=0),
+        _elem(resourceId="com.tencent.wework:id/fu5", className="android.widget.TextView", text="客户A", index=1),
+        _elem(resourceId="com.tencent.wework:id/de2", className="android.widget.TextView", text="Cancel", index=2),
+        _elem(resourceId="com.tencent.wework:id/de5", className="android.widget.TextView", text="Send", index=3),
+    ]
+
+
+@pytest.fixture
 def chat_screen_elements() -> list[dict]:
     """Plain chat screen — input field, no panel, no picker, no dialog."""
     return [
@@ -289,6 +308,24 @@ class TestConfirmSendDialogRecognition:
     def test_recognized_via_dak_dah_resource_ids(self, confirm_send_dialog_imageview_elements):
         assert (
             PageStateValidator.is_confirm_send_dialog_open(confirm_send_dialog_imageview_elements)
+            is True
+        )
+
+    def test_recognized_via_de2_de5_textview_2026_05_07_build(
+        self, confirm_send_dialog_2026_05_07_textview_elements
+    ):
+        """2026-05-07 build: TextView + de2/de5 must satisfy the predicate.
+
+        Regression for the dry-run E2E where the dialog was clearly visible
+        on screen (Cancel was tappable in the next step) but
+        is_confirm_send_dialog_open() returned False because:
+          * no Button-class element existed (TextView only)
+          * dak/dah resource ids were absent (renamed to de5/de2)
+        """
+        assert (
+            PageStateValidator.is_confirm_send_dialog_open(
+                confirm_send_dialog_2026_05_07_textview_elements
+            )
             is True
         )
 

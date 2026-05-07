@@ -109,6 +109,8 @@ ignore = [
 "wecom-desktop/backend/scripts/*" = ["E402"]  # Path setup before imports
 "wecom-desktop/backend/services/followup/response_detector.py" = ["E402"]  # Path setup before imports
 "wecom-desktop/backend/tests/test_logs_ws.py" = ["E402"]  # sys.path bootstrap before router imports
+"tests/integration/test_contact_search_e2e.py" = ["E402"]  # sys.path bootstrap before imports
+"tests/integration/test_full_image_to_card_dry_run_e2e.py" = ["E402"]  # sys.path bootstrap before imports
 
 [tool.ruff.format]
 quote-style = "double"

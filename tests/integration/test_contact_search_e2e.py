@@ -16,7 +16,6 @@ from __future__ import annotations
 import argparse
 import asyncio
 import os
-import subprocess
 import sys
 import time
 from dataclasses import dataclass, field
@@ -80,7 +79,9 @@ def _log_elements(elements: list[dict], label: str = "Elements") -> None:
         idx = elem.get("index", "?")
         bounds = elem.get("bounds", "")
         clickable = elem.get("clickable", "")
-        logger.info(f"  [{i}] idx={idx} cls={cls} click={clickable} text='{text[:50]}' desc='{desc[:30]}' rid='{rid}' bounds={bounds}")
+        logger.info(
+            f"  [{i}] idx={idx} cls={cls} click={clickable} text='{text[:50]}' desc='{desc[:30]}' rid='{rid}' bounds={bounds}"
+        )
 
 
 async def test_contact_search(serial: str, contact_name: str, port: int) -> list[StepResult]:
@@ -116,22 +117,35 @@ async def test_contact_search(serial: str, contact_name: str, port: int) -> list
 
         # 从聊天列表选第一个客户进入聊天
         ui_tree, elements = await wecom.adb.get_ui_state(force=True)
-        from wecom_automation.services.contact_share import selectors as S
-        # 查找第一个有用户名的可点击元素（排除底部导航栏）
+        # 会话列表昵称行的 resourceId 在不同 build 上为 hrr 或 hzj（720×1612 实测 hzj）
+        _SKIP_ROW_PREFIXES = (
+            "Messages",
+            "Emails",
+            "Doc",
+            "Workspace",
+            "Contacts",
+            "Private Chats",
+            "Meeting",
+            "Cal",
+        )
         for elem in elements:
             text = (elem.get("text") or "").strip()
-            rid = elem.get("resourceId", "")
-            if text and "hrr" in rid:
-                idx = elem.get("index")
-                if idx is not None:
-                    # 获取用户名（去除消息预览部分）
-                    name = text.split("\n")[0][:20] if text else ""
-                    print(f"  尝试进入聊天: {name}")
-                    await wecom.adb.tap(int(idx))
-                    await asyncio.sleep(2.0)
-                    screen = await wecom.get_current_screen()
-                    print(f"  进入后屏幕: {screen}")
-                    break
+            rid = elem.get("resourceId") or ""
+            first_line = text.split("\n")[0].strip() if text else ""
+            if not text or any(first_line.startswith(p) for p in _SKIP_ROW_PREFIXES):
+                continue
+            if not ("hrr" in rid or "hzj" in rid):
+                continue
+            idx = elem.get("index")
+            if idx is None:
+                continue
+            name = first_line[:40]
+            print(f"  尝试进入聊天: {name}")
+            await wecom.adb.tap(int(idx))
+            await asyncio.sleep(2.0)
+            screen = await wecom.get_current_screen()
+            print(f"  进入后屏幕: {screen}")
+            break
 
     screen = await wecom.get_current_screen()
     print(f"  最终屏幕: {screen}")
@@ -246,7 +260,7 @@ async def _test_tap_attach(wecom: WeComService) -> tuple[bool, str]:
                     await wecom.adb.tap(int(idx))
                     return True, f"Tapped attach button (index={idx})"
         except Exception as exc:
-            logger.warning(f"Attach tap attempt {attempt+1} failed: {exc}")
+            logger.warning(f"Attach tap attempt {attempt + 1} failed: {exc}")
         await asyncio.sleep(0.5)
     return False, "Could not find/tap attachment button"
 
@@ -272,20 +286,30 @@ async def _test_open_contact_card(wecom: WeComService) -> tuple[bool, str]:
         except Exception:
             pass
 
-        # Swipe left on GridView
+        # Swipe left on GridView — align with ContactShareService (ahe legacy / aij new build + edge margin)
         try:
             import re
+
             ui_tree, elements = await wecom.adb.get_ui_state(force=True)
+            margin, dur_ms, min_dist = 100, 600, 240
             for elem in elements:
-                if "ahe" in (elem.get("resourceId") or ""):
-                    bounds = elem.get("bounds", "")
-                    nums = re.findall(r"\d+", bounds)
-                    if len(nums) >= 4:
-                        x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
-                        cy = (y1 + y2) // 2
-                        await wecom.adb.swipe(x2 - 60, cy, x1 + 60, cy, duration_ms=400)
-                        await asyncio.sleep(2.5)
-                        break
+                rid = elem.get("resourceId") or ""
+                if not any(g in rid for g in S.ATTACH_GRID_RESOURCE_PATTERNS):
+                    continue
+                bounds = elem.get("bounds", "")
+                nums = re.findall(r"\d+", bounds)
+                if len(nums) < 4:
+                    continue
+                x1, y1, x2, y2 = int(nums[0]), int(nums[1]), int(nums[2]), int(nums[3])
+                grid_w = max(1, x2 - x1)
+                cy = (y1 + y2) // 2
+                m = margin
+                if grid_w - 2 * m < min_dist:
+                    m = max(0, (grid_w - min_dist) // 2)
+                sx, ex = x2 - m, x1 + m
+                await wecom.adb.swipe(sx, cy, ex, cy, duration_ms=dur_ms)
+                await asyncio.sleep(2.5)
+                break
         except Exception as exc:
             logger.warning(f"Swipe failed: {exc}")
 
@@ -294,11 +318,11 @@ async def _test_open_contact_card(wecom: WeComService) -> tuple[bool, str]:
 
 async def _test_probe_picker_ui(wecom: WeComService) -> tuple[bool, str]:
     """Probe the contact picker UI to log search button/input elements."""
+    from wecom_automation.services.ui_search import selectors as S
     from wecom_automation.services.ui_search.ui_helpers import (
         find_search_button,
         find_search_input,
     )
-    from wecom_automation.services.ui_search import selectors as S
 
     try:
         ui_tree, elements = await wecom.adb.get_ui_state(force=True)
@@ -319,12 +343,16 @@ async def _test_probe_picker_ui(wecom: WeComService) -> tuple[bool, str]:
 
         details = []
         if search_btn:
-            details.append(f"Search button found: idx={search_btn.get('index')} text='{search_btn.get('text')}' bounds={search_btn.get('bounds')}")
+            details.append(
+                f"Search button found: idx={search_btn.get('index')} text='{search_btn.get('text')}' bounds={search_btn.get('bounds')}"
+            )
         else:
             details.append("No search button found by keywords")
 
         if search_input:
-            details.append(f"Search input found: idx={search_input.get('index')} cls={search_input.get('className')} bounds={search_input.get('bounds')}")
+            details.append(
+                f"Search input found: idx={search_input.get('index')} cls={search_input.get('className')} bounds={search_input.get('bounds')}"
+            )
         else:
             details.append("No search input found")
 
@@ -363,7 +391,7 @@ async def _test_confirm_send(wecom: WeComService) -> tuple[bool, str]:
     from wecom_automation.services.contact_share import selectors as S
     from wecom_automation.services.ui_search.ui_helpers import find_elements_by_keywords
 
-    for attempt in range(3):
+    for _attempt in range(3):
         try:
             ui_tree, elements = await wecom.adb.get_ui_state(force=True)
             # Prefer resource-based matching to avoid "Send to:" false positives
@@ -413,7 +441,7 @@ async def _dismiss_permission_dialogs(wecom: WeComService) -> None:
         try:
             ui_tree, elements = await wecom.adb.get_ui_state(force=True)
             for elem in elements:
-                rid = (elem.get("resourceId") or "")
+                rid = elem.get("resourceId") or ""
                 text = (elem.get("text") or "").lower()
                 if "permission_allow_all" in rid or "allow" in text:
                     idx = elem.get("index")
@@ -463,6 +491,11 @@ async def main():
     print(f"\n  结果: {passed}/{total} 步骤通过")
 
     all_passed = all(s.passed for s in steps)
+    # 完整跑通为 8 个 StepResult（门户 + 7 个后续）；提前 return 时 steps 过短，不得报成功
+    full_run = len(steps) >= 8
+    if not full_run:
+        print(f"\n  [ABORT] 仅完成 {len(steps)}/8 步，视为失败。")
+        return 1
     return 0 if all_passed else 1
 
 

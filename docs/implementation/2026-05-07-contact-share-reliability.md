@@ -81,7 +81,8 @@ Relevant unit tests (run from repo root):
 
 ```bash
 uv run pytest tests/unit/test_contact_share_service.py tests/unit/test_page_state_validator.py \
-  tests/unit/test_contact_finder_strategy.py tests/unit/test_auto_contact_share_action.py -q
+  tests/unit/test_contact_finder_strategy.py tests/unit/test_auto_contact_share_action.py \
+  tests/unit/test_ui_search_helpers.py -q
 ```
 
 Device smoke (optional — **does not send** a card):
@@ -108,6 +109,47 @@ After tapping **Contact Card**, `SearchContactFinder` must tap the header search
 
 - **Position fallback bug (fixed 2026-05-07)**: `find_search_button` used to restrict header candidates to `bounds.top <= screen_height * 0.08`. On **720×1612**, that is only ~**129px** — real toolbars often place the magnifier lower (status bar + title row). Keyword miss + empty fallback meant **no tap on search**, while users saw the picker open correctly.
 - **Fix** (matches `ui_helpers.find_search_button` in code): header fallback uses `bounds[1] <= max(int(screen_height * 0.22), 180)` and `bounds[0] >= screen_width * 0.45`; `find_search_input` prefers search-labelled / upper-screen `EditText` and returns `None` for a lone composer in the lower half so the magnifier path runs first.
+
+### Wrong magnifier tap — `nma` vs `nmf` (fixed 2026-05-07, second pass)
+
+On **720×1612** (device `10AE9P1DTT002LE`), the contact-picker top bar is laid out as:
+
+`[Back nlc] [Title nle “Select Contact(s)”] [Search **nmf**] [Close **nma**]`
+
+Observed bounds (examples): `nmf` ≈ `528,56,624,152`; `nma` ≈ `624,56,720,152`.
+
+**Symptom:** Keyword lists did not include `nmf`, so `find_search_button` fell through to the **position heuristic**, which picks the **rightmost** candidate in the top-right band — that was **`nma`**, which **closes the picker** and returns to chat. `SearchContactFinder` then reported `could not open search input` even though the picker had been correct.
+
+**Fix (append-only):**
+
+- `src/wecom_automation/services/ui_search/selectors.py`: `PICKER_SEARCH_RESOURCE_PATTERNS` includes **`nmf`** so the keyword pass wins before position fallback.
+- `src/wecom_automation/services/ui_search/ui_helpers.py`: `_EXCLUDE_RIDS` includes **`nma`** alongside legacy **`nd7`** so neither close button can be chosen as the “search” control.
+
+Regression: `tests/unit/test_ui_search_helpers.py` (`test_prefers_nmf_over_nma_on_2026_05_07_picker`, `test_excludes_nma_close_button_2026_05_07_build`).
+
+### Confirm-send dialog — `TextView` + `de2` / `de5` (fixed 2026-05-07, third pass)
+
+After selecting a contact, WeCom shows “Send to: …” with **Send** and **Cancel**. On the same build, those controls are **`android.widget.TextView`** nodes with resource ids **`de5`** (Send) and **`de2`** (Cancel), not `android.widget.Button` and not the legacy **`dak`** / **`dah`** pair.
+
+**Symptom:** `PageStateValidator.is_confirm_send_dialog_open` stayed **false** (no Button-class match; no dak/dah resource match), while the dialog was visibly open — dry-run E2E could tap Cancel but failed the “dialog present” assertion.
+
+**Fix:** `src/wecom_automation/services/contact_share/selectors.py` — append **`de5`** to `SEND_RESOURCE_PATTERNS`, **`de2`** to `CANCEL_RESOURCE_PATTERNS` (fallback branch in `page_state.py` already supports send+cancel rid co-presence).
+
+Regression: `tests/unit/test_page_state_validator.py` (`test_recognized_via_de2_de5_textview_2026_05_07_build`).
+
+### Full pipeline dry-run E2E (no messages sent)
+
+Script **`tests/integration/test_full_image_to_card_dry_run_e2e.py`** exercises:
+
+1. `AutoContactShareAction.should_execute` + `render_media_template` (simulated `MediaEvent`).
+2. Real device: attach → Contact Card → **`nmf`** search → select contact → assert confirm dialog (**de2/de5**) → **Cancel** only (no Send).
+
+Requires ADB + DroidRun + WeCom; contact name must exist in org directory.
+
+```bash
+.venv/bin/python tests/integration/test_full_image_to_card_dry_run_e2e.py \
+  --serial <ADB_SERIAL> --port 8080 --contact "<searchable name>"
+```
 
 ## Operational notes
 

@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-05-07 (Contact share: contact-picker `nle`/`cwa` + title prefix `Select Contact(s)`; attach-grid swipe; search magnifier heuristics; E2E `scripts/e2e_verify_contact_picker_state.py`；见 `implementation/2026-05-07-contact-share-reliability.md` / `04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md`)
+> Last Updated: 2026-05-07 (Contact share: picker **`nmf`** vs close **`nma`**; confirm dialog **`de2`**/**`de5`**; dry-run E2E `tests/integration/test_full_image_to_card_dry_run_e2e.py`; plus `nle`/`cwa`, attach-grid swipe, `scripts/e2e_verify_contact_picker_state.py`; see `implementation/2026-05-07-contact-share-reliability.md`, `04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md`, `04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md`)
 
 ---
 
@@ -31,7 +31,7 @@
 
 | Feature                                                                                                            | Status      | Date       | Description                                                                                                                                                                                                                                                                |
 | ------------------------------------------------------------------------------------------------------------------ | ----------- | ---------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| [Auto Contact Share (自动推送主管名片)](features/auto-contact-share.md)                                            | ✅ Complete | 2026-05-07 | `AutoContactShareAction`; multi-build attach panel (`ahe`/`aij`, `aha`/`aif`, `igu`); picker IDs **`nca`/`cth`** + **`nle`/`cwa`**; title prefix match for `Select Contact(s)`; `PageStateValidator` + UI dumps; edge-safe attach-grid swipe; `SearchContactFinder` / `find_search_button` header band `max(22% height, 180px)` + `find_search_input` multi-EditText rules; dedup `media_action_contact_shares`; tests + optional E2E `scripts/e2e_verify_contact_picker_state.py`                                                                         |
+| [Auto Contact Share (自动推送主管名片)](features/auto-contact-share.md)                                            | ✅ Complete | 2026-05-07 | `AutoContactShareAction`; attach panel + swipe; picker **`nle`/`cwa`** + title prefix; search **`nmf`** (exclude close **`nma`**/`nd7`); confirm **`de2`/`de5`** TextView; `PageStateValidator`; dedup; unit tests; E2E `scripts/e2e_verify_contact_picker_state.py` + dry-run `tests/integration/test_full_image_to_card_dry_run_e2e.py` |
 | [AI Circuit Breaker Health-Check Lockup Fix](bugs/2026-04-27-circuit-breaker-skip-reply.md)                        | ✅ Complete | 2026-04-28 | Severity-aware `force_open` policy in `PeriodicAIHealthChecker`: `inference_timeout` is warn-only, `service_down`/`inference_error` require N consecutive probes, `unreachable` still trips immediately; 18 new TDD tests across `circuit_breaker` + `ai_health_checker`   |
 | [Sidecar log stream reconnect & heartbeat](04-bugs-and-fixes/resolved/2026-04-21-sidecar-log-stream-disconnect.md) | ✅ Complete | 2026-04-21 | Pinia `logs.ts` exponential reconnect; app-level ping/pong; uvicorn WS ping; dead log callback pruning; `/ws/sync` aligned; Vitest + pytest regressions                                                                                                                    |
 | [Sidecar review timeout defaults](sidecar/sidecar-review-timeout-defaults.md)                                      | ✅ Complete | 2026-04-15 | Daytime `sidecar_timeout` default 60 s (was 300 s); night 30 s unchanged; API/client/router fallbacks aligned                                                                                                                                                              |
@@ -239,6 +239,7 @@ Resolved issues organized by date.
 #### 2026-05
 
 - [Contact picker page-state drift (`nle`/`cwa`, `Select Contact(s)`)](04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md) - `PageStateValidator` + `selectors` append-only IDs; title prefix fallback; E2E `scripts/e2e_verify_contact_picker_state.py`
+- [Picker search tapped close (`nma`) instead of magnifier (`nmf`)](04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md) - `PICKER_SEARCH_RESOURCE_PATTERNS` + `_EXCLUDE_RIDS`; confirm dialog `de2`/`de5`; dry-run full pipeline E2E
 
 #### 2026-04
 

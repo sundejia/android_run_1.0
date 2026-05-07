@@ -196,14 +196,7 @@ def find_search_input(elements: list[dict]) -> dict | None:
         t = (elem.get("text") or "").lower()
         d = (elem.get("contentDescription") or "").lower()
         r = (elem.get("resourceId") or "").lower()
-        return (
-            "搜索" in t
-            or "search" in t
-            or "搜索" in d
-            or "search" in d
-            or "lba" in r
-            or "search" in r
-        )
+        return "搜索" in t or "search" in t or "搜索" in d or "search" in d or "lba" in r or "search" in r
 
     hinted = [e for e in inputs if _looks_like_search_field(e)]
     if hinted:
@@ -293,9 +286,17 @@ def find_search_button(
 ) -> dict | None:
     """Find a search button with keyword matching + top-right position fallback.
 
-    Excludes nd7 (close/back button) from position heuristic candidates.
+    Excludes close/back buttons from BOTH the keyword match and the position
+    heuristic so the rightmost top-right element does not silently win when
+    the real magnifier id is missing from the keyword list. Known close ids:
+
+      - ``nd7``: legacy close button.
+      - ``nma``: 720x1612 build (2026-05-07) picker close button. Sits at the
+        far right of the picker top bar (e.g. bounds=624,56,720,152 on a
+        720-wide device); tapping it dismisses the picker and returns to
+        chat_screen, breaking the contact-share flow with no recovery.
     """
-    _EXCLUDE_RIDS = ("nd7",)
+    _EXCLUDE_RIDS = ("nd7", "nma")
 
     matches = find_elements_by_keywords(
         elements,
@@ -305,10 +306,7 @@ def find_search_button(
         is_flat_list=is_flat_list,
     )
     # Filter out excluded resource IDs from keyword matches
-    matches = [
-        m for m in matches
-        if not any(ex in (m.get("resourceId") or "").lower() for ex in _EXCLUDE_RIDS)
-    ]
+    matches = [m for m in matches if not any(ex in (m.get("resourceId") or "").lower() for ex in _EXCLUDE_RIDS)]
     if matches:
         return pick_top_right_element(matches)
 

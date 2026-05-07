@@ -359,6 +359,68 @@ class TestFindSearchButton:
         assert result is not None
         assert "ndb" in result.get("resourceId", "")
 
+    def test_excludes_nma_close_button_2026_05_07_build(self):
+        """``nma`` (720×1612 picker close button) must NOT be returned as
+        the search button under any path.
+
+        Regression for the 2026-05-07 dry-run E2E:
+            * picker top bar = [Back nlc] [Title nle] [Search nmf] [Close nma]
+            * keyword pass missed because nmf was not in the patterns
+            * position-fallback picked ``nma`` (rightmost in top-right band)
+            * tapping ``nma`` dismissed the picker → contact share aborted
+
+        Even when the caller passes the close-button id as a resource
+        pattern, the keyword match must filter it out.
+        """
+        elements = [
+            {
+                "text": "",
+                "resourceId": "com.tencent.wework:id/nma",
+                "className": "android.widget.TextView",
+                "bounds": "[624,56][720,152]",
+            },
+        ]
+        result = find_search_button(
+            elements,
+            resource_patterns=("nma",),
+            screen_width=720,
+            screen_height=1612,
+        )
+        assert result is None
+
+    def test_prefers_nmf_over_nma_on_2026_05_07_picker(self):
+        """720×1612 picker top bar: position fallback must pick the real
+        magnifier ``nmf`` (528–624 from left) and reject the close button
+        ``nma`` (624–720) even though both sit in the top-right band.
+        """
+        from wecom_automation.services.ui_search.selectors import (
+            PICKER_SEARCH_RESOURCE_PATTERNS,
+        )
+
+        elements = [
+            {
+                "text": "",
+                "resourceId": "com.tencent.wework:id/nmf",
+                "className": "android.widget.TextView",
+                "bounds": "[528,56][624,152]",
+            },
+            {
+                "text": "",
+                "resourceId": "com.tencent.wework:id/nma",
+                "className": "android.widget.TextView",
+                "bounds": "[624,56][720,152]",
+            },
+        ]
+        result = find_search_button(
+            elements,
+            resource_patterns=PICKER_SEARCH_RESOURCE_PATTERNS,
+            screen_width=720,
+            screen_height=1612,
+        )
+        assert result is not None, "Expected nmf to be matched as the picker search button"
+        assert "nmf" in result.get("resourceId", "")
+        assert "nma" not in result.get("resourceId", "")
+
     def test_position_fallback_finds_icon_below_legacy_8pct_band(self):
         """720×1612: top 8%% (~129px) excluded real headers where the magnifier
         sits around y=150–220 (status bar + thick toolbar). Regression for
