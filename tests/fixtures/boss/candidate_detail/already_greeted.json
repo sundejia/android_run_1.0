@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-07T20:12:00+08:00",
+  "device": {
+    "serial": "EMU-SYNTH-1",
+    "model": "Pixel 7 Pro",
+    "android_version": "14",
+    "screen_width": 1440,
+    "screen_height": 3120
+  },
+  "app": {
+    "package_name": "com.hpbr.bosszhipin",
+    "version_name": "12.140"
+  },
+  "label": "synthetic_already_greeted",
+  "page": "candidate_detail",
+  "screenshot_path": null,
+  "ui_tree": {
+    "className": "android.widget.FrameLayout",
+    "packageName": "com.hpbr.bosszhipin",
+    "bounds": "[0,0][1440,3120]",
+    "children": [
+      {
+        "className": "android.widget.TextView",
+        "resourceId": "com.hpbr.bosszhipin:id/tv_detail_candidate_name",
+        "text": "李雷",
+        "bounds": "[60,140][1000,220]"
+      },
+      {
+        "className": "android.widget.TextView",
+        "resourceId": "com.hpbr.bosszhipin:id/tv_detail_candidate_id_badge",
+        "text": "ID:CAND20260507A",
+        "bounds": "[60,260][600,320]"
+      },
+      {
+        "className": "android.widget.Button",
+        "resourceId": "com.hpbr.bosszhipin:id/btn_continue_chat",
+        "text": "继续沟通",
+        "bounds": "[400,2880][1040,3000]",
+        "clickable": true,
+        "enabled": true
+      },
+      {
+        "className": "android.widget.TextView",
+        "resourceId": "com.hpbr.bosszhipin:id/tv_chat_status",
+        "text": "已沟通",
+        "bounds": "[60,2780][400,2840]"
+      }
+    ]
+  }
+}
