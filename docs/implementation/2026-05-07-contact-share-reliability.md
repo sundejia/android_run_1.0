@@ -80,6 +80,13 @@ uv run pytest tests/unit/ -q
 
 See [Auto Contact Share](../features/auto-contact-share.md) for end-user flow, settings, and file map.
 
+## Contact picker search button (magnifier)
+
+After tapping **Contact Card**, `SearchContactFinder` must tap the header search control before typing `contact_name`.
+
+- **Position fallback bug (fixed 2026-05-07)**: `find_search_button` used to restrict header candidates to `bounds.top <= screen_height * 0.08`. On **720×1612**, that is only ~**129px** — real toolbars often place the magnifier lower (status bar + title row). Keyword miss + empty fallback meant **no tap on search**, while users saw the picker open correctly.
+- **Fix**: widen the header vertical band (`max(22% of height, 180px)`), slightly relax horizontal start (`>= 45%` width), improve `find_search_input` when multiple `EditText` nodes exist (prefer search hints / upper-screen fields; ignore a lone bottom composer).
+
 ## Operational notes
 
 - **Do not swipe the attach grid near screen edges** when debugging manually — same constraint as automation.

@@ -271,6 +271,16 @@ class SearchContactFinder(ContactFinderStrategy):
             )
 
         if not search_btn:
+            logger.warning(
+                "SearchContactFinder: search button not found after keyword + header "
+                "heuristic (screen=%dx%d, elements=%d). On tall headers the magnifier "
+                "can sit below the header band — see find_search_button in "
+                "ui_helpers; extend PICKER_SEARCH_RESOURCE_PATTERNS if your build "
+                "renamed ndb.",
+                self._screen_width,
+                self._screen_height,
+                len(elements or []),
+            )
             return False
 
         # Tap search button

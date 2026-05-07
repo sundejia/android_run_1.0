@@ -358,3 +358,34 @@ class TestFindSearchButton:
         )
         assert result is not None
         assert "ndb" in result.get("resourceId", "")
+
+    def test_position_fallback_finds_icon_below_legacy_8pct_band(self):
+        """720×1612: top 8%% (~129px) excluded real headers where the magnifier
+        sits around y=150–220 (status bar + thick toolbar). Regression for
+        «Contact Card opens but search never tapped».
+        """
+        elements = [
+            {
+                "className": "android.widget.ImageView",
+                "clickable": True,
+                "bounds": "[600,168][690,258]",
+            },
+        ]
+        result = find_search_button(
+            elements,
+            text_patterns=("no_match",),
+            screen_width=720,
+            screen_height=1612,
+        )
+        assert result is not None
+
+    def test_sole_bottom_edittext_not_treated_as_picker_search(self):
+        """Before tapping the magnifier, only the chat composer may be an
+        EditText — do not claim it as the picker search field."""
+        elements = [
+            {
+                "className": "android.widget.EditText",
+                "bounds": "[80,1400][640,1480]",
+            },
+        ]
+        assert find_search_input(elements) is None

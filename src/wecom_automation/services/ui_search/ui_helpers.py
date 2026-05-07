@@ -153,8 +153,34 @@ def pick_first_by_layout(elements: list[dict]) -> dict | None:
     return sorted(elements, key=layout_sort_key)[0]
 
 
+def infer_screen_height_from_elements(elements: list[dict]) -> int:
+    """Best-effort screen height from max bottom edge in the flat tree."""
+    max_bottom = 0
+    for element in elements or []:
+        bounds = parse_element_bounds(element)
+        if bounds and bounds[3] > max_bottom:
+            max_bottom = bounds[3]
+    return max_bottom
+
+
 def find_search_input(elements: list[dict]) -> dict | None:
-    """Find a search input field (EditText or search-keyword element)."""
+    """Find a search input field (EditText or search-keyword element).
+
+    When multiple ``EditText`` nodes exist (chat composer under the sheet +
+    picker search field), **prefer** the field in the upper portion of the
+    screen and nodes whose hint/resource suggests search — otherwise the
+    legacy ``pick_first_by_layout`` would still pick the mathematically
+    topmost node, which can be wrong if the accessibility layer lists the
+    chat bar before the overlay field.
+
+    If the only ``EditText`` sits in the **lower half** of the screen, treat
+    it as the chat input (not the picker field that appears only after
+    tapping the magnifier) and return ``None`` so ``find_search_button``
+    runs next.
+    """
+    screen_h = infer_screen_height_from_elements(elements)
+    upper_cut = int(screen_h * 0.42) if screen_h else 0
+
     inputs: list[dict] = []
     for element in elements:
         class_name = (element.get("className") or "").lower()
@@ -165,6 +191,38 @@ def find_search_input(elements: list[dict]) -> dict | None:
             inputs.append(element)
     if not inputs:
         return None
+
+    def _looks_like_search_field(elem: dict) -> bool:
+        t = (elem.get("text") or "").lower()
+        d = (elem.get("contentDescription") or "").lower()
+        r = (elem.get("resourceId") or "").lower()
+        return (
+            "搜索" in t
+            or "search" in t
+            or "搜索" in d
+            or "search" in d
+            or "lba" in r
+            or "search" in r
+        )
+
+    hinted = [e for e in inputs if _looks_like_search_field(e)]
+    if hinted:
+        return pick_first_by_layout(hinted)
+
+    if screen_h > 0 and len(inputs) > 1:
+        upper_only = []
+        for element in inputs:
+            bounds = parse_element_bounds(element)
+            if bounds and bounds[1] < upper_cut:
+                upper_only.append(element)
+        if upper_only:
+            return pick_first_by_layout(upper_only)
+
+    if len(inputs) == 1 and screen_h > 0:
+        bounds = parse_element_bounds(inputs[0])
+        if bounds and bounds[1] > int(screen_h * 0.55):
+            return None
+
     return pick_first_by_layout(inputs)
 
 
@@ -254,14 +312,21 @@ def find_search_button(
     if matches:
         return pick_top_right_element(matches)
 
+    # Header band must include OEM status bars + thick toolbars. The old
+    # 8% cutoff (~129px on a 1612-tall phone) dropped real search icons
+    # when WeCom moved the picker header down (user saw Contact Card open
+    # but automation never tapped the magnifier — keyword miss + empty
+    # header_candidates). 22% matches practical toolbar stacks while
+    # still excluding the chat list body.
+    _header_bottom = max(int(screen_height * 0.22), 180)
     header_candidates = [
         element
         for element in elements
         if isinstance(element, dict)
         and any(token in (element.get("className") or "").lower() for token in ("image", "button", "textview"))
         and (bounds := parse_element_bounds(element))
-        and bounds[1] <= screen_height * 0.08
-        and bounds[0] >= screen_width * 0.52
+        and bounds[1] <= _header_bottom
+        and bounds[0] >= screen_width * 0.45
         and not any(ex in (element.get("resourceId") or "").lower() for ex in _EXCLUDE_RIDS)
     ]
     if header_candidates:
