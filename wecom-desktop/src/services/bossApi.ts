@@ -110,6 +110,89 @@ export interface BossGreetTestRunResponse {
   detail: string | null
 }
 
+export type BossTemplateScenario = 'first_greet' | 'reply' | 'reengage'
+
+export interface BossTemplate {
+  id: number
+  name: string
+  scenario: BossTemplateScenario
+  content: string
+  is_default: boolean
+  variables_json: string | null
+}
+
+export interface BossTemplatesListResponse {
+  templates: BossTemplate[]
+}
+
+export interface BossTemplateCreateRequest {
+  name: string
+  scenario: BossTemplateScenario
+  content: string
+  is_default?: boolean
+  variables_json?: string | null
+}
+
+export interface BossTemplateUpdateRequest {
+  content?: string
+  is_default?: boolean
+  variables_json?: string | null
+}
+
+export interface BossTemplatePreviewRequest {
+  content: string
+  context: Record<string, string | null>
+  max_length?: number
+}
+
+export interface BossTemplatePreviewResponse {
+  text: string
+  warnings: string[]
+}
+
+export interface BossConversation {
+  id: number
+  recruiter_id: number
+  candidate_id: number
+  unread_count: number
+  last_direction: string | null
+}
+
+export interface BossConversationsListResponse {
+  recruiter_id: number
+  conversations: BossConversation[]
+}
+
+export interface BossMessage {
+  id: number
+  direction: 'in' | 'out'
+  content_type: string
+  text: string | null
+  sent_at_iso: string
+  sent_by: string | null
+  template_id: number | null
+}
+
+export interface BossMessagesListResponse {
+  conversation_id: number
+  messages: BossMessage[]
+}
+
+export type BossDispatchOutcome =
+  | 'sent_template'
+  | 'sent_ai'
+  | 'skipped_no_unread'
+  | 'skipped_blacklisted'
+  | 'halted_unknown_ui'
+
+export interface BossDispatchResponse {
+  outcome: BossDispatchOutcome
+  boss_candidate_id: string | null
+  candidate_name: string | null
+  text_sent: string | null
+  template_warnings: string[]
+}
+
 const BOSS_BASE = `${API_BASE}/api/boss`
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -196,5 +279,67 @@ export const bossApi = {
       body: JSON.stringify({ device_serial: deviceSerial }),
     })
     return jsonOrThrow<BossGreetTestRunResponse>(res)
+  },
+
+  async listTemplates(scenario: BossTemplateScenario): Promise<BossTemplatesListResponse> {
+    const params = new URLSearchParams({ scenario })
+    const res = await fetch(`${BOSS_BASE}/templates/?${params.toString()}`)
+    return jsonOrThrow<BossTemplatesListResponse>(res)
+  },
+
+  async createTemplate(payload: BossTemplateCreateRequest): Promise<BossTemplate> {
+    const res = await fetch(`${BOSS_BASE}/templates/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return jsonOrThrow<BossTemplate>(res)
+  },
+
+  async updateTemplate(id: number, payload: BossTemplateUpdateRequest): Promise<BossTemplate> {
+    const res = await fetch(`${BOSS_BASE}/templates/${id}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return jsonOrThrow<BossTemplate>(res)
+  },
+
+  async deleteTemplate(id: number): Promise<void> {
+    const res = await fetch(`${BOSS_BASE}/templates/${id}`, { method: 'DELETE' })
+    if (!res.ok && res.status !== 204) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`${res.status} ${res.statusText}: ${text || '(empty body)'}`)
+    }
+  },
+
+  async previewTemplate(payload: BossTemplatePreviewRequest): Promise<BossTemplatePreviewResponse> {
+    const res = await fetch(`${BOSS_BASE}/templates/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return jsonOrThrow<BossTemplatePreviewResponse>(res)
+  },
+
+  async listConversations(recruiterId: number): Promise<BossConversationsListResponse> {
+    const res = await fetch(
+      `${BOSS_BASE}/messages/recruiters/${recruiterId}/conversations`,
+    )
+    return jsonOrThrow<BossConversationsListResponse>(res)
+  },
+
+  async listMessages(conversationId: number): Promise<BossMessagesListResponse> {
+    const res = await fetch(`${BOSS_BASE}/messages/conversations/${conversationId}`)
+    return jsonOrThrow<BossMessagesListResponse>(res)
+  },
+
+  async dispatchReply(deviceSerial: string): Promise<BossDispatchResponse> {
+    const res = await fetch(`${BOSS_BASE}/messages/dispatch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_serial: deviceSerial }),
+    })
+    return jsonOrThrow<BossDispatchResponse>(res)
   },
 }

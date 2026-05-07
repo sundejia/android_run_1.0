@@ -319,7 +319,9 @@ app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 # legacy backend behavior stays bit-for-bit identical when the flag is off).
 from routers import boss_greet as _boss_greet  # noqa: E402
 from routers import boss_jobs as _boss_jobs  # noqa: E402
+from routers import boss_messages as _boss_messages  # noqa: E402
 from routers import boss_recruiters as _boss_recruiters  # noqa: E402
+from routers import boss_templates as _boss_templates  # noqa: E402
 
 if _boss_recruiters.boss_features_enabled():
     app.include_router(_boss_recruiters.router)
@@ -327,6 +329,10 @@ if _boss_jobs.boss_features_enabled():
     app.include_router(_boss_jobs.router)
 if _boss_greet.boss_features_enabled():
     app.include_router(_boss_greet.router)
+if _boss_templates.boss_features_enabled():
+    app.include_router(_boss_templates.router)
+if _boss_messages.boss_features_enabled():
+    app.include_router(_boss_messages.router)
 
 
 @app.get("/health")

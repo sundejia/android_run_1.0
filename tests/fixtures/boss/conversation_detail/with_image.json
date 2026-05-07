@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-07T20:52:00+08:00",
+  "device": {
+    "serial": "EMU-SYNTH-1",
+    "model": "Pixel 7 Pro",
+    "android_version": "14",
+    "screen_width": 1440,
+    "screen_height": 3120
+  },
+  "app": {
+    "package_name": "com.hpbr.bosszhipin",
+    "version_name": "12.140"
+  },
+  "label": "synthetic_with_image",
+  "page": "conversation_detail",
+  "screenshot_path": null,
+  "ui_tree": {
+    "className": "android.widget.FrameLayout",
+    "packageName": "com.hpbr.bosszhipin",
+    "bounds": "[0,0][1440,3120]",
+    "children": [
+      {
+        "className": "android.widget.TextView",
+        "resourceId": "com.hpbr.bosszhipin:id/tv_chat_title",
+        "text": "韩梅梅"
+      },
+      {
+        "className": "android.widget.TextView",
+        "resourceId": "com.hpbr.bosszhipin:id/tv_chat_candidate_id_badge",
+        "text": "ID:CAND20260507B"
+      },
+      {
+        "className": "androidx.recyclerview.widget.RecyclerView",
+        "resourceId": "com.hpbr.bosszhipin:id/chat_message_recycler",
+        "children": [
+          {
+            "className": "android.view.ViewGroup",
+            "resourceId": "com.hpbr.bosszhipin:id/message_row_in",
+            "children": [
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_message_text",
+                "text": "你好"
+              }
+            ]
+          },
+          {
+            "className": "android.view.ViewGroup",
+            "resourceId": "com.hpbr.bosszhipin:id/message_row_in",
+            "children": [
+              {
+                "className": "android.widget.ImageView",
+                "resourceId": "com.hpbr.bosszhipin:id/iv_message_image",
+                "contentDescription": "图片消息"
+              }
+            ]
+          },
+          {
+            "className": "android.view.ViewGroup",
+            "resourceId": "com.hpbr.bosszhipin:id/message_row_out",
+            "children": [
+              {
+                "className": "android.widget.TextView",
+                "resourceId": "com.hpbr.bosszhipin:id/tv_message_text",
+                "text": "收到您的简历啦"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}
