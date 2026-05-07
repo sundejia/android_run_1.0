@@ -45,6 +45,8 @@ Converted all hardcoded pixel bounds to ratio-based calculations:
 | `_find_search_button` fallback    | `bounds[1] <= 160, bounds[0] >= 560` | `bounds[1] <= sh * 0.08, bounds[0] >= sw * 0.52` |
 | `_find_member_result_candidates`  | `bounds[0] < 150`                    | `bounds[0] < sw * 0.14`                          |
 
+**Note — not contact-share picker**: The `_find_search_button` row refers to **`WeComService` / 拉群加成员** search UI inside `wecom_automation/services/wecom_service.py`. The **自动推送名片** flow uses a separate helper, `wecom_automation/services/ui_search/ui_helpers.py::find_search_button`, which was widened in 2026-05 for **720×1612** picker headers (`max(sh * 0.22, 180)` vertically, `sw * 0.45` horizontally); see [contact-share reliability](../implementation/2026-05-07-contact-share-reliability.md). Do not assume these tables describe the same thresholds.
+
 ### 2. Per-Device DroidRun Port (3 files)
 
 - **`realtime_reply_manager.py`**: Allocates unique port via `PortAllocator().allocate(serial)`, passes `--tcp-port` to subprocess, releases on stop.
