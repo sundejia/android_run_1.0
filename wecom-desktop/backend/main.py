@@ -317,6 +317,7 @@ app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
 
 # BOSS Zhipin pivot routers (gated by BOSS_FEATURES_ENABLED env var so the
 # legacy backend behavior stays bit-for-bit identical when the flag is off).
+from routers import boss_greet as _boss_greet  # noqa: E402
 from routers import boss_jobs as _boss_jobs  # noqa: E402
 from routers import boss_recruiters as _boss_recruiters  # noqa: E402
 
@@ -324,6 +325,8 @@ if _boss_recruiters.boss_features_enabled():
     app.include_router(_boss_recruiters.router)
 if _boss_jobs.boss_features_enabled():
     app.include_router(_boss_jobs.router)
+if _boss_greet.boss_features_enabled():
+    app.include_router(_boss_greet.router)
 
 
 @app.get("/health")

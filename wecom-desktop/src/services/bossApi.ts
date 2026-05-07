@@ -65,6 +65,51 @@ export interface BossJobSyncResponse {
   errors: string[]
 }
 
+export interface BossGreetWindow {
+  weekdays: number[]
+  start_minute: number
+  end_minute: number
+  timezone: string
+}
+
+export interface BossGreetQuota {
+  per_day: number
+  per_hour: number
+  per_job: number | null
+}
+
+export interface BossGreetSettings {
+  device_serial: string
+  enabled: boolean
+  window: BossGreetWindow
+  quota: BossGreetQuota
+}
+
+export interface BossGreetSettingsUpdate {
+  enabled?: boolean
+  window?: BossGreetWindow
+  quota?: BossGreetQuota
+}
+
+export type BossGreetOutcome =
+  | 'sent'
+  | 'skipped_already_greeted'
+  | 'skipped_blacklisted'
+  | 'skipped_quota_day'
+  | 'skipped_quota_hour'
+  | 'skipped_quota_job'
+  | 'skipped_outside_window'
+  | 'skipped_no_candidates'
+  | 'halted_risk_control'
+  | 'halted_unknown_ui'
+
+export interface BossGreetTestRunResponse {
+  outcome: BossGreetOutcome
+  boss_candidate_id: string | null
+  candidate_name: string | null
+  detail: string | null
+}
+
 const BOSS_BASE = `${API_BASE}/api/boss`
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -120,5 +165,36 @@ export const bossApi = {
       body: JSON.stringify(payload),
     })
     return jsonOrThrow<BossJobSyncResponse>(res)
+  },
+
+  async getGreetSettings(deviceSerial: string): Promise<BossGreetSettings> {
+    const res = await fetch(
+      `${BOSS_BASE}/greet/settings/${encodeURIComponent(deviceSerial)}`,
+    )
+    return jsonOrThrow<BossGreetSettings>(res)
+  },
+
+  async updateGreetSettings(
+    deviceSerial: string,
+    payload: BossGreetSettingsUpdate,
+  ): Promise<BossGreetSettings> {
+    const res = await fetch(
+      `${BOSS_BASE}/greet/settings/${encodeURIComponent(deviceSerial)}`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      },
+    )
+    return jsonOrThrow<BossGreetSettings>(res)
+  },
+
+  async greetTestRun(deviceSerial: string): Promise<BossGreetTestRunResponse> {
+    const res = await fetch(`${BOSS_BASE}/greet/test-run`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ device_serial: deviceSerial }),
+    })
+    return jsonOrThrow<BossGreetTestRunResponse>(res)
   },
 }
