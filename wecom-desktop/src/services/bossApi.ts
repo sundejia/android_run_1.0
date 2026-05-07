@@ -28,6 +28,43 @@ export interface BossRecruiterRefreshPayload {
   avatar_path?: string
 }
 
+export type BossJobStatus = 'open' | 'closed' | 'hidden' | 'draft'
+
+export interface BossJob {
+  id: number
+  recruiter_id: number
+  boss_job_id: string
+  title: string
+  status: BossJobStatus
+  salary_min: number | null
+  salary_max: number | null
+  location: string | null
+  education: string | null
+  experience: string | null
+}
+
+export interface BossJobListResponse {
+  jobs: BossJob[]
+  total: number
+}
+
+export interface BossJobSyncRequest {
+  device_serial: string
+  tabs?: BossJobStatus[]
+}
+
+export interface BossJobSyncTabResult {
+  tab: BossJobStatus
+  count: number
+}
+
+export interface BossJobSyncResponse {
+  recruiter_id: number
+  total_jobs: number
+  per_tab: BossJobSyncTabResult[]
+  errors: string[]
+}
+
 const BOSS_BASE = `${API_BASE}/api/boss`
 
 async function jsonOrThrow<T>(res: Response): Promise<T> {
@@ -62,5 +99,26 @@ export const bossApi = {
       },
     )
     return jsonOrThrow<BossRecruiter>(res)
+  },
+
+  async listJobs(recruiterId: number, statusFilter?: BossJobStatus): Promise<BossJobListResponse> {
+    const params = new URLSearchParams({ recruiter_id: String(recruiterId) })
+    if (statusFilter) params.set('status_filter', statusFilter)
+    const res = await fetch(`${BOSS_BASE}/jobs?${params.toString()}`)
+    return jsonOrThrow<BossJobListResponse>(res)
+  },
+
+  async getJob(jobId: number): Promise<BossJob> {
+    const res = await fetch(`${BOSS_BASE}/jobs/${jobId}`)
+    return jsonOrThrow<BossJob>(res)
+  },
+
+  async syncJobs(payload: BossJobSyncRequest): Promise<BossJobSyncResponse> {
+    const res = await fetch(`${BOSS_BASE}/jobs/sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+    return jsonOrThrow<BossJobSyncResponse>(res)
   },
 }
