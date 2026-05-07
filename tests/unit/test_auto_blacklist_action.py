@@ -215,7 +215,14 @@ class TestAutoBlacklistExecute:
 
 
 class TestAutoBlacklistReviewGate:
-    """The gate keeps blacklist + group_invite aligned: only act on portrait media."""
+    """The gate keeps blacklist + group_invite aligned: only act on portrait media.
+
+    These tests exercise the *legacy* gated mode, which now requires
+    ``require_review_pass=True`` to opt back in. The default standalone
+    behaviour (``require_review_pass=False``) is covered separately in
+    ``TestAutoBlacklistRequireReviewPassDefault`` to ensure the rating
+    pipeline is only consulted when explicitly opted into.
+    """
 
     def _settings(self, *, gate_enabled: bool, skip_already: bool = True) -> dict:
         return {
@@ -224,6 +231,7 @@ class TestAutoBlacklistReviewGate:
                 "enabled": True,
                 "reason": "auto",
                 "skip_if_already_blacklisted": skip_already,
+                "require_review_pass": True,
             },
             "review_gate": {"enabled": gate_enabled},
         }
@@ -356,4 +364,112 @@ class TestAutoBlacklistReviewGate:
             "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
         ) as mock_eval:
             assert await action.should_execute(_make_event(), self._settings(gate_enabled=False)) is True
+            mock_eval.assert_not_called()
+
+
+class TestAutoBlacklistRequireReviewPassDefault:
+    """Default mode (require_review_pass=False) — the user-facing semantics:
+    customer-sent media → blacklist immediately, no rating-server dependency.
+
+    This locks in the 2026-05-07 fix where the action would silently skip
+    every customer because review data was missing while the deployment
+    had never opted into the rating pipeline. See
+    docs/04-bugs-and-fixes/resolved/2026-05-07-auto-blacklist-review-data-missing.md
+    """
+
+    @pytest.mark.asyncio
+    async def test_default_blacklists_image_without_calling_evaluator(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        settings = _default_settings(enabled=True)
+        # No require_review_pass key → defaults to False.
+        assert "require_review_pass" not in settings["auto_blacklist"]
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(message_type="image"), settings) is True
+            mock_eval.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_default_blacklists_video_without_calling_evaluator(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        settings = _default_settings(enabled=True)
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(message_type="video"), settings) is True
+            mock_eval.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_default_blacklists_even_when_review_data_missing(self):
+        """Regression for 2026-05-07: WARNING 'Skipping auto-blacklist: review
+        data missing' silenced auto-blacklist for every deployment without
+        review_gate. Defaulting require_review_pass=False makes that path
+        unreachable unless the operator explicitly opts in.
+        """
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        # Settings shape from a real production install before the fix:
+        # gate_enabled=False, no require_review_pass override, no review row.
+        settings = {
+            "enabled": True,
+            "auto_blacklist": {
+                "enabled": True,
+                "reason": "Customer sent media (auto)",
+                "skip_if_already_blacklisted": True,
+            },
+            "review_gate": {"enabled": False},
+        }
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(message_type="image"), settings) is True
+            mock_eval.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_explicit_false_skips_evaluator(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        settings = _default_settings(enabled=True, require_review_pass=False)
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), settings) is True
+            mock_eval.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_disabled_blocks_default_path_too(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=False)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        settings = _default_settings(enabled=False)
+
+        assert await action.should_execute(_make_event(), settings) is False
+
+    @pytest.mark.asyncio
+    async def test_already_blacklisted_short_circuits_default_path(self):
+        writer = MagicMock()
+        writer.is_blacklisted_by_name = MagicMock(return_value=True)
+        action = AutoBlacklistAction(blacklist_writer=writer, db_path="/db.sqlite")
+
+        settings = _default_settings(enabled=True)
+
+        with patch(
+            "wecom_automation.services.media_actions.actions.auto_blacklist.evaluate_gate_pass",
+        ) as mock_eval:
+            assert await action.should_execute(_make_event(), settings) is False
             mock_eval.assert_not_called()

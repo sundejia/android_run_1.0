@@ -4,6 +4,18 @@ AutoBlacklistAction - automatically add customer to blacklist on media detection
 When a customer sends an image or video, this action adds them to the
 blacklist with a configurable reason. Supports idempotency via
 skip_if_already_blacklisted.
+
+By default the action operates in **standalone mode**: any customer who
+sends an image/video is blacklisted immediately, without consulting the
+image-rating-server review pipeline. This matches the typical product
+expectation ("发图/视频 → 拉黑") and works for deployments that have not
+opted into review_gate.
+
+When ``auto_blacklist.require_review_pass`` is true, the action falls back
+to the legacy **gated mode**: it consults the persisted review verdict
+(``portrait`` + ``decision``) via ``evaluate_gate_pass`` and only
+blacklists when the same gate that triggers auto-group-invite passes,
+so the two actions stay aligned.
 """
 
 from __future__ import annotations
@@ -31,10 +43,13 @@ class AutoBlacklistAction(IMediaAction):
     database operations. Optionally checks existing blacklist status
     to avoid duplicate entries.
 
-    When ``db_path`` is provided, the action consults the persisted
-    image-rating-server review (portrait + decision) and only blacklists
-    customers whose media passes the same gate that triggers
-    auto-group-invite, so the two actions stay aligned.
+    Review-pipeline coupling is governed by the
+    ``auto_blacklist.require_review_pass`` setting (default ``False``).
+    When ``True`` and ``db_path`` is provided, the action defers to
+    ``evaluate_gate_pass`` so it stays aligned with auto-group-invite.
+    When ``False`` (the default), the action ignores the review pipeline
+    entirely — the moment a media MediaEvent reaches it and idempotency
+    checks pass, the customer is blacklisted.
     """
 
     def __init__(self, blacklist_writer, db_path: str | None = None) -> None:
@@ -71,7 +86,13 @@ class AutoBlacklistAction(IMediaAction):
             except Exception as exc:
                 logger.warning("Failed to check blacklist status: %s", exc)
 
-        if self._db_path is not None:
+        # Review-pipeline coupling is OFF by default. Customers who send
+        # media are blacklisted immediately — no dependency on
+        # image-rating-server. Only flip ``require_review_pass=True``
+        # when the deployment runs the rating pipeline AND wants
+        # blacklist to mirror auto-group-invite's portrait/decision gate.
+        require_review = bool(bl_settings.get("require_review_pass", False))
+        if require_review and self._db_path is not None:
             gate_enabled = bool(settings.get("review_gate", {}).get("enabled", False))
             decision = evaluate_gate_pass(
                 message_id=event.message_id,

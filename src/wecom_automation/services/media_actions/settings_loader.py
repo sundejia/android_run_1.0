@@ -21,6 +21,11 @@ DEFAULT_MEDIA_AUTO_ACTION_SETTINGS: dict[str, Any] = {
         "enabled": False,
         "reason": "Customer sent media (auto)",
         "skip_if_already_blacklisted": True,
+        # When False (default) the action blacklists any media-sending
+        # customer immediately. When True, blacklist defers to the
+        # image-rating-server review verdict via evaluate_gate_pass and
+        # mirrors the gate used by auto-group-invite.
+        "require_review_pass": False,
     },
     "auto_group_invite": {
         "enabled": False,

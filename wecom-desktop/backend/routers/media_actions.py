@@ -30,6 +30,7 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "enabled": False,
         "reason": "Customer sent media (auto)",
         "skip_if_already_blacklisted": True,
+        "require_review_pass": False,
     },
     "auto_group_invite": {
         "enabled": False,
@@ -71,6 +72,11 @@ class AutoBlacklistSettings(BaseModel):
     enabled: bool = False
     reason: str = "Customer sent media (auto)"
     skip_if_already_blacklisted: bool = True
+    # False (default): customer media → blacklist immediately, no review-pipeline
+    # dependency. True: defer to the image-rating-server review verdict so the
+    # blacklist gate mirrors auto-group-invite. Only flip on when rating pipeline
+    # is actually deployed.
+    require_review_pass: bool = False
 
 
 class AutoGroupInviteSettings(BaseModel):

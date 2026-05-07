@@ -259,6 +259,11 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
             "enabled": False,
             "reason": "Customer sent media (auto)",
             "skip_if_already_blacklisted": True,
+            # False (default): customer-sent media → blacklist immediately.
+            # True: defer to the image-rating-server review verdict so the
+            # blacklist gate mirrors auto-group-invite. Flip on only when the
+            # rating pipeline is actually wired in.
+            "require_review_pass": False,
         },
         "自动拉黑子配置",
         False,

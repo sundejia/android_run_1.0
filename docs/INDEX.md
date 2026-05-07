@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-05-07 (Contact share: picker **`nmf`** vs close **`nma`**; confirm dialog **`de2`**/**`de5`**; dry-run E2E `tests/integration/test_full_image_to_card_dry_run_e2e.py`; plus `nle`/`cwa`, attach-grid swipe, `scripts/e2e_verify_contact_picker_state.py`; see `implementation/2026-05-07-contact-share-reliability.md`, `04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md`, `04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md`)
+> Last Updated: 2026-05-07 (Auto-blacklist: `require_review_pass` flag (default **`false`**) decouples blacklist from rating-server review; AI suppression cross-checked at `_media_action_handled_keys` + `BlacklistChecker` (3 sites); see `04-bugs-and-fixes/resolved/2026-05-07-auto-blacklist-review-data-missing.md`. Earlier 2026-05-07: contact share picker **`nmf`** vs close **`nma`**; confirm dialog **`de2`**/**`de5`**; dry-run E2E `tests/integration/test_full_image_to_card_dry_run_e2e.py`; plus `nle`/`cwa`, attach-grid swipe, `scripts/e2e_verify_contact_picker_state.py`; see `implementation/2026-05-07-contact-share-reliability.md`, `04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md`, `04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md`)
 
 ---
 
@@ -240,6 +240,7 @@ Resolved issues organized by date.
 
 - [Contact picker page-state drift (`nle`/`cwa`, `Select Contact(s)`)](04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md) - `PageStateValidator` + `selectors` append-only IDs; title prefix fallback; E2E `scripts/e2e_verify_contact_picker_state.py`
 - [Picker search tapped close (`nma`) instead of magnifier (`nmf`)](04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md) - `PICKER_SEARCH_RESOURCE_PATTERNS` + `_EXCLUDE_RIDS`; confirm dialog `de2`/`de5`; dry-run full pipeline E2E
+- [Auto-blacklist permanently skipped because of missing review data](04-bugs-and-fixes/resolved/2026-05-07-auto-blacklist-review-data-missing.md) - new `auto_blacklist.require_review_pass` flag (default `false`) decouples standalone blacklist from `evaluate_gate_pass`; verifies AI suppression covers both current round (`_media_action_handled_keys`) and later rounds (`BlacklistChecker.is_blacklisted` × 3 sites); registration order in `factory.py` keeps contact share unaffected
 
 #### 2026-04
 

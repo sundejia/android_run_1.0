@@ -45,6 +45,9 @@ class TestGetSettings:
         assert "auto_contact_share" in data
         assert "review_gate" in data
         assert data["auto_blacklist"]["enabled"] is False
+        # Regression: 2026-05-07 fix locks the default to False so deployments
+        # without the image-rating pipeline still get auto-blacklist working.
+        assert data["auto_blacklist"]["require_review_pass"] is False
         assert data["auto_group_invite"]["enabled"] is False
         assert data["auto_group_invite"]["send_test_message_after_create"] is True
         assert data["auto_group_invite"]["test_message_text"] == "测试"

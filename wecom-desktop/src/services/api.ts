@@ -855,6 +855,10 @@ export interface AutoBlacklistSettings {
   enabled: boolean
   reason: string
   skip_if_already_blacklisted: boolean
+  // false (default): blacklist immediately on customer media; no dependency on
+  // the image-rating-server review pipeline. true: defer to the review verdict
+  // so blacklist mirrors the auto-group-invite gate.
+  require_review_pass: boolean
 }
 
 export interface AutoGroupInviteSettings {

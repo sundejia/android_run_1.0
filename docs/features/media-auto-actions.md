@@ -32,7 +32,7 @@
 | 键                  | 类型    | 说明                                                                                                                                                                                                    |
 | ------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `enabled`           | boolean | 总开关                                                                                                                                                                                                  |
-| `auto_blacklist`    | json    | `enabled`, `reason`, `skip_if_already_blacklisted`                                                                                                                                                      |
+| `auto_blacklist`    | json    | `enabled`, `reason`, `skip_if_already_blacklisted`, `require_review_pass`（默认 `false`，`true` 时与 `auto_group_invite` 共用 review 关卡）                                                                                                                                                      |
 | `auto_group_invite` | json    | `enabled`, `group_members`, `group_name_template`, `skip_if_group_exists`, `member_source`, `send_test_message_after_create`, `test_message_text`, `post_confirm_wait_seconds`, `duplicate_name_policy` |
 | `auto_contact_share` | json  | `enabled`, `contact_name`, `skip_if_already_shared`, `cooldown_seconds`, `kefu_overrides`（详见 [Auto Contact Share](auto-contact-share.md)）                                                                                                                      |
 
@@ -101,6 +101,23 @@
 ## 黑名单扩展
 
 `BlacklistWriter.is_blacklisted_by_name(device_serial, customer_name)` 用于自动拉黑前的去重判断（`blacklist_service.py`）。
+
+### 触发位置与 AI 回复截断（2026-05-07）
+
+`AutoBlacklistAction` 在 `MediaEventBus` 注册顺序中**最后**执行（`contact_share → group_invite → blacklist`，见 `services/media_actions/factory.py`）。这个顺序保证：
+
+- **不影响发名片链路**：`AutoContactShareAction` 在 `AutoBlacklistAction` 之前完成；即便后者改变行为也不会回退/挤掉名片
+- **本轮 AI 回复被截断**：`response_detector` 中 `suppress_ai_actions = {"auto_group_invite", "auto_blacklist"}`；只要拉黑成功，客户键被加入 `_media_action_handled_keys`，本轮的 `_process_unread_user_with_wait` / `_interactive_wait_loop` 跳过 AI
+- **后续轮次也截断**：客户被写入 `blacklist` 表后，`response_detector` 在 3 处都会 `BlacklistChecker.is_blacklisted(..., fail_closed=True)` 直接 skip：处理用户前（line 1155）、最终发送前（line 3143）、回复路径兜底（line 3296）
+
+### `require_review_pass` 开关（2026-05-07 修复）
+
+新增 `auto_blacklist.require_review_pass`（默认 `false`）控制是否依赖 image-rating-server 的 portrait/decision 评审：
+
+- **`false`（默认 / 推荐）**：客户发图/视频立即拉黑。**不依赖** rating 服务。这是大多数部署的预期语义（"发图就拉"），也是 2026-05-07 之前 `WARNING Skipping auto-blacklist: review data missing` 永久跳过 bug 的修复方向。
+- **`true`（旧行为，仅 review pipeline 已部署时启用）**：保留与 `auto_group_invite` 对齐的 portrait/decision 关卡，使用 `evaluate_gate_pass` 共享同一份 review 判决；缺数据时跳过并记 WARNING。
+
+详见 [resolved bug: 2026-05-07 auto-blacklist review data missing](../04-bugs-and-fixes/resolved/2026-05-07-auto-blacklist-review-data-missing.md)。
 
 ## 测试
 

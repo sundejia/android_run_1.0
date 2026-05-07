@@ -44,6 +44,15 @@ def test_load_defaults_when_no_db_table():
     assert out == DEFAULT_MEDIA_AUTO_ACTION_SETTINGS
 
 
+def test_auto_blacklist_default_does_not_require_review_pass():
+    """Regression for 2026-05-07: defaulting require_review_pass=False keeps
+    auto-blacklist usable on deployments that never opted into the
+    image-rating-server review pipeline. Flipping the default would silently
+    re-introduce the 'Skipping auto-blacklist: review data missing' bug."""
+    out = load_media_auto_action_settings(":memory:")
+    assert out["auto_blacklist"]["require_review_pass"] is False
+
+
 def test_load_merges_stored_rows():
     fd, p = tempfile.mkstemp(suffix=".db")
     os.close(fd)
