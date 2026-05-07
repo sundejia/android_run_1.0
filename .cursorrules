@@ -1,4 +1,10 @@
-# Cursor Rules for WeCom Automation Project
+# Cursor Rules for WeCom + BOSS Zhipin Automation Project
+
+> **Pivot status (2026-05 onward)**: this repo is migrating from WeCom
+> to BOSS 直聘 recruitment automation. New work goes under
+> `src/boss_automation/` and `tests/unit/boss/`. See
+> `docs/00-boss-pivot/README.md` and `openspec/AGENTS.md` for the
+> workflow. Both stacks coexist until M6.
 
 ## Test Organization
 
@@ -6,8 +12,10 @@
 
 ### Python Tests
 
-- **Unit tests**: `tests/unit/test_<module>.py`
-- **Integration tests**: `tests/integration/test_<feature>.py`
+- **BOSS unit tests** (new work): `tests/unit/boss/test_<module>.py`
+- **WeCom unit tests** (legacy): `tests/unit/test_<module>.py`
+- **Integration tests**: `tests/integration/test_<feature>.py` (must be
+  marked `@pytest.mark.integration`)
 - **Backend API tests**: `wecom-desktop/backend/tests/test_<api>.py`
 
 ### Rules

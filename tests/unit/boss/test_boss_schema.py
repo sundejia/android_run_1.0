@@ -224,9 +224,7 @@ class TestForeignKeyCascades:
 
 
 class TestSchemaIntrospectionHelpers:
-    def test_list_existing_tables_returns_required_tables_after_ensure(
-        self, db_path: str
-    ) -> None:
+    def test_list_existing_tables_returns_required_tables_after_ensure(self, db_path: str) -> None:
         ensure_schema(db_path)
         tables = list_existing_tables(db_path)
         assert REQUIRED_TABLES.issubset(tables)

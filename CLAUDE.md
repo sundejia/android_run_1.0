@@ -28,6 +28,30 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Pivot Notice (2026-05 onward)
+
+This repository is mid-pivot from a WeCom (企业微信) automation
+framework to a BOSS 直聘 recruitment automation framework. The pivot is
+incremental and additive; both stacks coexist until M6.
+
+- New BOSS Python code: `src/boss_automation/`
+- New BOSS unit tests: `tests/unit/boss/`
+- New BOSS docs: `docs/00-boss-pivot/`
+- Change proposals: `openspec/changes/0001-pivot-foundation/` (M0),
+  `0002-recruiter-bootstrap/` (M1, pending), and so on.
+- Real-device UI fixtures: `tests/fixtures/boss/<page>/<scenario>.json`
+  captured via `scripts/dump_boss_ui.py`.
+- BOSS env vars: `BOSS_DEVICE_SERIAL`, `BOSS_USE_TCP`,
+  `BOSS_DROIDRUN_PORT`, `BOSS_DB_PATH`, `BOSS_DEBUG`, `BOSS_LOG_FILE`,
+  `BOSS_TIMEZONE`, `BOSS_OUTPUT_DIR`. Default DB path is
+  `boss_recruitment.db` next to the existing `wecom_conversations.db`.
+- TDD is mandatory for every BOSS commit. See
+  `docs/00-boss-pivot/tdd-workflow.md`.
+
+CI (`.github/workflows/ci.yml`) gates BOSS unit tests at 80% coverage
+(blocking) and runs WeCom legacy tests as informational
+(`continue-on-error`) until they are stabilized in the new venv.
+
 ## Development Environment
 
 **IMPORTANT: This project is developed on WINDOWS.**

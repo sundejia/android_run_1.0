@@ -20,6 +20,28 @@ Keep this managed block so 'openspec update' can refresh the instructions.
 
 <!-- OPENSPEC:END -->
 
+## Project Context (2026-05 onward): BOSS Zhipin Pivot
+
+This repository is mid-pivot from a WeCom (企业微信) automation framework
+to a BOSS 直聘 recruitment automation framework. Until M6 (see
+`openspec/changes/0001-pivot-foundation/design.md`) the WeCom and BOSS
+stacks coexist:
+
+- New BOSS work goes under `src/boss_automation/` and
+  `tests/unit/boss/`. WeCom code under `src/wecom_automation/` keeps
+  shipping until each capability is replaced.
+- BOSS-specific recruitment views go under
+  `wecom-desktop/src/views/boss/` (created in M1).
+- Two SQLite files coexist: `wecom_conversations.db` and
+  `boss_recruitment.db`. Use `BOSS_DB_PATH` to override the BOSS path.
+- Two env-var namespaces: `WECOM_*` (legacy) and `BOSS_*` (new). Never
+  cross-read.
+- TDD is mandatory for BOSS code. See `docs/00-boss-pivot/tdd-workflow.md`
+  for the loop and `openspec/AGENTS.md` for the change-proposal format.
+- Real-device interaction is forbidden in unit tests. Capture fixtures
+  with `scripts/dump_boss_ui.py` and load them via
+  `tests/_fixtures/loader.py`.
+
 ## Sidecar Guardrails
 
 ### Single Source Of Truth For Active Target
