@@ -18,6 +18,28 @@ export default {
           muted: '#8B949E',
           accent: '#58A6FF',
         },
+        // BOSS Zhipin recruitment palette
+        // Designed for a sober, trustworthy feel suitable for HR / hiring
+        // contexts. Keep contrast ratios AA-compliant against both light
+        // and dark surfaces.
+        boss: {
+          primary: '#1F4E8C',     // deep indigo - primary actions
+          'primary-soft': '#3169B0',
+          secondary: '#0F2D52',   // headers and deep panels
+          accent: '#C97E2B',      // amber - alerts, quotas
+          'accent-soft': '#E0A961',
+          success: '#2F8F5C',
+          warning: '#D6A12C',
+          danger: '#B8423C',
+          dark: '#0F1521',
+          darker: '#080C14',
+          surface: '#161E2D',
+          'surface-soft': '#1F2837',
+          border: '#2A3346',
+          text: '#E5E9F0',
+          'text-muted': '#9AA5BA',
+          highlight: '#FFD58A',
+        },
         chart: {
           emerald: '#10B981',
           blue: '#3B82F6',
@@ -32,6 +54,9 @@ export default {
       fontFamily: {
         sans: ['JetBrains Mono', 'SF Mono', 'Menlo', 'monospace'],
         display: ['Space Grotesk', 'system-ui', 'sans-serif'],
+        // Recruitment views use Inter for high-density text panels.
+        body: ['Inter', 'PingFang SC', 'Noto Sans CJK SC', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'SF Mono', 'Menlo', 'monospace'],
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',

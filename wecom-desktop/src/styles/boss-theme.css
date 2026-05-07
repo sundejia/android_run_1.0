@@ -1,0 +1,116 @@
+/*
+ * BOSS Zhipin recruitment theme overrides.
+ *
+ * Loaded by views under the BOSS module (M1+). Lives alongside the
+ * existing WeCom styles without overriding them so both stacks render
+ * correctly during the pivot. Apply by wrapping the relevant view in
+ * a `.boss-scope` element:
+ *
+ *   <div class="boss-scope min-h-screen bg-boss-dark text-boss-text">
+ *     ...
+ *   </div>
+ */
+
+@import url("https://rsms.me/inter/inter.css");
+
+.boss-scope {
+  --boss-primary: #1f4e8c;
+  --boss-primary-soft: #3169b0;
+  --boss-secondary: #0f2d52;
+  --boss-accent: #c97e2b;
+  --boss-success: #2f8f5c;
+  --boss-warning: #d6a12c;
+  --boss-danger: #b8423c;
+  --boss-dark: #0f1521;
+  --boss-darker: #080c14;
+  --boss-surface: #161e2d;
+  --boss-border: #2a3346;
+  --boss-text: #e5e9f0;
+  --boss-text-muted: #9aa5ba;
+
+  font-family:
+    "Inter", "PingFang SC", "Noto Sans CJK SC", system-ui, sans-serif;
+  letter-spacing: 0.005em;
+  color: var(--boss-text);
+}
+
+.boss-scope .boss-card {
+  background-color: var(--boss-surface);
+  border: 1px solid var(--boss-border);
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.02) inset;
+}
+
+.boss-scope .boss-button-primary {
+  background-color: var(--boss-primary);
+  color: var(--boss-text);
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-weight: 600;
+  transition:
+    background-color 0.15s ease-in-out,
+    transform 0.05s ease-in-out;
+}
+
+.boss-scope .boss-button-primary:hover {
+  background-color: var(--boss-primary-soft);
+}
+
+.boss-scope .boss-button-primary:active {
+  transform: translateY(1px);
+}
+
+.boss-scope .boss-status-pill {
+  display: inline-flex;
+  align-items: center;
+  font-size: 12px;
+  padding: 2px 10px;
+  border-radius: 9999px;
+  background-color: rgba(31, 78, 140, 0.18);
+  color: var(--boss-text);
+  border: 1px solid rgba(31, 78, 140, 0.4);
+}
+
+.boss-scope .boss-status-pill[data-status="open"] {
+  background-color: rgba(47, 143, 92, 0.18);
+  border-color: rgba(47, 143, 92, 0.5);
+}
+
+.boss-scope .boss-status-pill[data-status="closed"] {
+  background-color: rgba(154, 165, 186, 0.18);
+  border-color: rgba(154, 165, 186, 0.4);
+  color: var(--boss-text-muted);
+}
+
+.boss-scope .boss-status-pill[data-status="warning"] {
+  background-color: rgba(214, 161, 44, 0.18);
+  border-color: rgba(214, 161, 44, 0.5);
+  color: var(--boss-accent);
+}
+
+.boss-scope .boss-status-pill[data-status="danger"] {
+  background-color: rgba(184, 66, 60, 0.18);
+  border-color: rgba(184, 66, 60, 0.5);
+  color: #f4a39e;
+}
+
+.boss-scope .boss-section-title {
+  font-size: 14px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--boss-text-muted);
+  margin-bottom: 8px;
+}
+
+.boss-scope .boss-data-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+
+.boss-scope .boss-divider {
+  height: 1px;
+  background-color: var(--boss-border);
+  margin: 16px 0;
+}
