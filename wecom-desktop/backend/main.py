@@ -340,6 +340,39 @@ if _boss_reengagement.boss_features_enabled():
 if _boss_monitoring.boss_features_enabled():
     app.include_router(_boss_monitoring.router)
 
+# Inject the production AdbPort factory into every BOSS router that needs
+# real device access. Test suites override this via each router's
+# set_adb_port_factory(); without this block the defaults raise 503.
+if _boss_recruiters.boss_features_enabled():
+    import os as _boss_os  # noqa: E402 - kept local to avoid polluting module scope
+
+    from boss_automation.services.adb_port import AdbPort as _BossAdbPort  # noqa: E402
+    from boss_automation.services.droidrun_adapter import (  # noqa: E402
+        DroidRunAdapter as _BossDroidRunAdapter,
+    )
+
+    _boss_use_tcp = _boss_os.environ.get("BOSS_USE_TCP", "").strip().lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
+    try:
+        _boss_droidrun_port = int(_boss_os.environ.get("BOSS_DROIDRUN_PORT", "8080"))
+    except ValueError:
+        _boss_droidrun_port = 8080
+
+    def _boss_adb_port_factory(serial: str) -> _BossAdbPort:
+        return _BossDroidRunAdapter(
+            serial=serial,
+            use_tcp=_boss_use_tcp,
+            droidrun_port=_boss_droidrun_port,
+        )
+
+    _boss_jobs.set_adb_port_factory(_boss_adb_port_factory)
+    _boss_greet.set_adb_port_factory(_boss_adb_port_factory)
+    _boss_messages.set_adb_port_factory(_boss_adb_port_factory)
+
 
 @app.get("/health")
 async def health_check():

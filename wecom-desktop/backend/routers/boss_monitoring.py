@@ -63,6 +63,7 @@ class MonitoringSummaryResponse(BaseModel):
     generated_at_iso: str
     window_hours: int = 24
     recruiters: list[RecruiterSummary] = Field(default_factory=list)
+    device_resilience: dict[str, dict[str, int]] = Field(default_factory=dict)
 
 
 # --------- Dependency wiring ----------------------------------------
@@ -161,7 +162,27 @@ def summary(db_path: str = Depends(get_db_path)) -> MonitoringSummaryResponse:
     return MonitoringSummaryResponse(
         generated_at_iso=now.isoformat(),
         recruiters=results,
+        device_resilience=_collect_device_resilience(),
     )
+
+
+def _collect_device_resilience() -> dict[str, dict[str, int]]:
+    """Expose per-device portal-resilience counters.
+
+    Imported lazily so the monitoring endpoint keeps working even when
+    DroidRun is not installed (e.g. unit-only CI envs). Returns an
+    empty dict on any import failure rather than breaking the summary.
+    """
+    try:
+        from boss_automation.services.droidrun_adapter import (
+            get_resilience_metrics,
+        )
+    except Exception:  # noqa: BLE001
+        return {}
+    try:
+        return get_resilience_metrics()
+    except Exception:  # noqa: BLE001
+        return {}
 
 
 # --------- Helpers --------------------------------------------------

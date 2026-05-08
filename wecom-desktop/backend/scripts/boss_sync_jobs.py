@@ -42,43 +42,11 @@ from boss_automation.core.config import get_default_db_path  # noqa: E402
 from boss_automation.database.job_repository import JobRepository  # noqa: E402
 from boss_automation.parsers.job_list_parser import JobStatus  # noqa: E402
 from boss_automation.services.adb_port import AdbPort  # noqa: E402
+from boss_automation.services.droidrun_adapter import DroidRunAdapter  # noqa: E402
 from boss_automation.services.job_sync_orchestrator import (  # noqa: E402
     JobSyncOrchestrator,
     JobSyncProgress,
 )
-
-
-class _DroidRunAdapter:
-    """Adapt droidrun.AdbTools to the BOSS ``AdbPort`` Protocol.
-
-    Imported lazily so unit tests of this script (when added later)
-    can avoid importing droidrun.
-    """
-
-    def __init__(self, serial: str, *, use_tcp: bool, droidrun_port: int) -> None:
-        from droidrun import AdbTools  # type: ignore[import-untyped]
-
-        self._adb = AdbTools(serial=serial, use_tcp=use_tcp, remote_tcp_port=droidrun_port)
-
-    async def start_app(self, package_name: str) -> None:
-        await self._adb.start_app(package_name)
-
-    async def get_state(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-        state = await self._adb.get_state()
-        if not state:
-            return {}, []
-        tree = state[0] if state else {}
-        elements = state[1] if len(state) > 1 else []
-        return tree, elements
-
-    async def tap_by_text(self, text: str) -> bool:
-        try:
-            return bool(await self._adb.tap_by_text(text))
-        except Exception:  # noqa: BLE001 - tap may raise on unreachable device
-            return False
-
-    async def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
-        await self._adb.swipe(x1, y1, x2, y2, duration_ms)
 
 
 def _parse_tabs(raw: str | None) -> Sequence[JobStatus]:
@@ -108,7 +76,7 @@ async def _run(
 ) -> int:
     repo = JobRepository(db_path)
     try:
-        adb: AdbPort = _DroidRunAdapter(serial=serial, use_tcp=use_tcp, droidrun_port=droidrun_port)
+        adb: AdbPort = DroidRunAdapter(serial=serial, use_tcp=use_tcp, droidrun_port=droidrun_port)
     except Exception as exc:  # noqa: BLE001
         _emit("error", stage="adb_init", message=str(exc))
         return 3
