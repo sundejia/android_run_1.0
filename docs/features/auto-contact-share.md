@@ -1,8 +1,8 @@
 # Auto Contact Share (自动推送主管名片)
 
-> **状态**: 已实现（持续按机型 / WeCom 版本演进）  
-> **日期**: 2026-04-30（初版）；**关键可靠性修订**: 2026-05-06 ~ 2026-05-07  
-> **关联**: [Media Auto-Actions](media-auto-actions.md) — 第三个注册到 MediaEventBus 的 `IMediaAction`  
+> **状态**: 已实现（持续按机型 / WeCom 版本演进）
+> **日期**: 2026-04-30（初版）；**关键可靠性修订**: 2026-05-06 ~ 2026-05-07；**审核门集成**: 2026-05-09
+> **关联**: [Media Auto-Actions](media-auto-actions.md) — 第三个注册到 MediaEventBus 的 `IMediaAction`
 > **实现备忘**: [Contact share reliability (2026-05)](../implementation/2026-05-07-contact-share-reliability.md)
 
 ## 功能概述
@@ -10,7 +10,7 @@
 当客户在会话中发送图片或视频后，系统可按配置自动向该客户推送主管（或指定联系人）的企业微信名片（Work Card）。
 
 - 支持按客服(kefu)配置不同主管（`kefu_overrides` 映射），未配置则 fallback 到全局 `contact_name`
-- 与 review-gate 审核门控无缝集成：开启审核时需审核通过才推送；关闭时直接推送
+- 与 review-gate 审核门控无缝集成：开启审核时需审核通过才推送；关闭时直接推送（通过 `evaluate_gate_pass()` 读取 DB 中的审核结果判定）
 - 幂等表保证每个客户只推一次（配置允许时）
 - 同步 + 实时监控两条链路均可触发
 - **可选**：发送名片前先发送一段话术；若名片流程失败且已发送话术，可发送**兜底话术**（见 `ContactShareRequest.recovery_message_on_failure_text` 与实现）
@@ -76,10 +76,9 @@ WeCom 会将最近使用过的附件选项提升到第一页，因此 `_open_con
 ```
 客户发送图片/视频
     ↓
+ImageMessageHandler / VideoMessageHandler (wait_for_review=True)
+    ↓ 上传到 image-rating-server，等待审核结果写入 DB
 MessageProcessor._maybe_emit_media_event()
-    ↓
-[review-gate 开启] → pending_reviews → … → ReviewGate
-[review-gate 关闭] → 直接 emit
     ↓
 MediaEventBus.emit(event, settings)
     ↓
@@ -87,6 +86,10 @@ AutoContactShareAction.should_execute()
   ├── 全局 enabled
   ├── auto_contact_share.enabled
   ├── event.is_media
+  ├── [review-gate 开启] → evaluate_gate_pass() → 读取 DB 审核结果
+  │     ├── has_data=False → 跳过（审核数据缺失）
+  │     ├── gate_pass=False → 跳过（审核未通过 / 非人像）
+  │     └── gate_pass=True  → 继续
   ├── _resolve_contact_name(event, settings)  ← kefu_overrides 优先
   └── 幂等检查: contact_already_shared()
     ↓

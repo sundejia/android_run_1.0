@@ -131,7 +131,8 @@ def _register_default_actions(bus: MediaEventBus) -> None:
         from wecom_automation.services.contact_share.service import ContactShareService
 
         action = AutoContactShareAction(
-            contact_share_service=ContactShareService(wecom_service=None)
+            contact_share_service=ContactShareService(wecom_service=None),
+            db_path=None,
         )
         bus.register(action)
     except Exception as exc:
@@ -169,6 +170,7 @@ def bind_wecom_service(wecom_service: Any, *, db_path: str | None = None) -> Non
                 action._service = ContactShareService(
                     wecom_service=wecom_service, db_path=db_path
                 )
+                action._db_path = db_path
                 bound += 1
         except Exception as exc:
             logger.warning("Failed to inject WeComService into action %s: %s", name, exc)

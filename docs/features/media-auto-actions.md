@@ -1,7 +1,7 @@
 # Media Auto-Actions（客户发图/视频后的自动动作）
 
 > **状态**: 已实现  
-> **最后更新**: 2026-05-07（自动推送名片：`ContactShareService` 多版本附件面板 ID、`PageStateValidator`、附件网格**边缘安全滑动**、选人界面 **放大镜** 标题栏启发式（`ui_helpers.find_search_button` / `find_search_input`）、失败 UI dump；见 [Auto Contact Share](auto-contact-share.md)、[实现备忘](../implementation/2026-05-07-contact-share-reliability.md)。拉群多机型：仍见 [多机型可靠性](../implementation/2026-04-12-auto-group-invite-multi-device-reliability.md)、[多分辨率与端口](../bugs/2026-04-12-multi-resolution-group-invite-and-droidrun-port-fix.md)、[私聊导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md)）
+> **最后更新**: 2026-05-09（auto_contact_share 新增 `evaluate_gate_pass` 审核门检查：开启 review_gate 时，名片仅在审核通过后推送；与 auto_blacklist / auto_group_invite 共享同一份 `media_review_decision` 判决逻辑）
 
 ## 功能概述
 
@@ -118,6 +118,23 @@
 - **`true`（旧行为，仅 review pipeline 已部署时启用）**：保留与 `auto_group_invite` 对齐的 portrait/decision 关卡，使用 `evaluate_gate_pass` 共享同一份 review 判决；缺数据时跳过并记 WARNING。
 
 详见 [resolved bug: 2026-05-07 auto-blacklist review data missing](../04-bugs-and-fixes/resolved/2026-05-07-auto-blacklist-review-data-missing.md)。
+
+### 自动推送名片审核门集成（2026-05-09）
+
+`AutoContactShareAction` 在 `should_execute()` 中新增 `evaluate_gate_pass()` 检查，与 `auto_blacklist` / `auto_group_invite` 共享同一份 `media_review_decision` 判决逻辑：
+
+- **`review_gate.enabled = true`**：名片仅在审核通过（`is_portrait=True` 且 `decision="合格"`）后推送。审核数据缺失或未通过时跳过并记日志。
+- **`review_gate.enabled = false`**：跳过审核检查，直接执行名片推送（旧行为不变）。
+
+审核数据的可用性依赖于 `ImageMessageHandler` / `VideoMessageHandler` 的 `wait_for_review=True` 设置：handler 先上传图片到 rating server 并等待审核结果写入 DB，然后 `MessageProcessor` 才触发 media event。这保证 `evaluate_gate_pass()` 读取时审核数据已就绪。
+
+三个 action 的审核门集成对比：
+
+| Action | 审核门控制方式 | 默认行为 |
+|--------|---------------|---------|
+| `AutoContactShareAction` | `review_gate.enabled` | 开启时必须审核通过 |
+| `AutoGroupInviteAction` | `review_gate.enabled` | 开启时必须审核通过 |
+| `AutoBlacklistAction` | `auto_blacklist.require_review_pass` | 默认 `false`（不依赖审核） |
 
 ## 测试
 

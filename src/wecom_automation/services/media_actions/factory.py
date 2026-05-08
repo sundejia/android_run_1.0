@@ -80,6 +80,7 @@ def build_media_event_bus(
 
             bus.register(AutoContactShareAction(
                 ContactShareService(wecom_service=wecom_service, db_path=effects_db_path),
+                db_path=effects_db_path,
                 restore_navigation_after_execute=False,
             ))
         except Exception as exc:

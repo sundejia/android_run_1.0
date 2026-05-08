@@ -4,6 +4,11 @@ AutoContactShareAction - automatically share a supervisor's contact card on medi
 When a customer sends an image or video, this action shares a configured
 contact card (名片) with the customer. The contact can be configured per-kefu
 via ``kefu_overrides`` or globally via ``contact_name``.
+
+When ``review_gate.enabled`` is true the action consults the persisted
+image-rating-server review verdict (``portrait`` + ``decision``) via
+``evaluate_gate_pass`` and only sends the card when the gate passes,
+ensuring the contact card is shared only for approved media.
 """
 
 from __future__ import annotations
@@ -18,6 +23,9 @@ from wecom_automation.services.media_actions.interfaces import (
     IMediaAction,
     MediaEvent,
 )
+from wecom_automation.services.media_actions.media_review_decision import (
+    evaluate_gate_pass,
+)
 from wecom_automation.services.media_actions.template_resolver import render_media_template
 
 logger = logging.getLogger(__name__)
@@ -29,15 +37,21 @@ class AutoContactShareAction(IMediaAction):
 
     Requires an IContactShareService instance for the actual UI automation
     and idempotency tracking.
+
+    When ``review_gate.enabled`` is true and ``db_path`` is provided,
+    the action defers to ``evaluate_gate_pass`` so the card is only
+    shared for approved media.
     """
 
     def __init__(
         self,
         contact_share_service: IContactShareService,
         *,
+        db_path: str | None = None,
         restore_navigation_after_execute: bool = True,
     ) -> None:
         self._service = contact_share_service
+        self._db_path = db_path
         self._restore_navigation_after_execute = restore_navigation_after_execute
 
     @property
@@ -89,6 +103,52 @@ class AutoContactShareAction(IMediaAction):
                 event.message_id,
             )
             return False
+
+        # Review gate: when enabled, only share card for approved media.
+        gate_settings = settings.get("review_gate", {}) or {}
+        gate_enabled = bool(gate_settings.get("enabled", False))
+        if gate_enabled and self._db_path is not None:
+            decision = evaluate_gate_pass(
+                message_id=event.message_id,
+                message_type=event.message_type,
+                db_path=self._db_path,
+                gate_enabled=gate_enabled,
+            )
+            if not decision.has_data:
+                logger.warning(
+                    "Skipping auto-contact-share: review data missing "
+                    "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                    "reason=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    event.message_type,
+                    event.message_id,
+                    decision.reason,
+                )
+                return False
+            if not decision.gate_pass:
+                logger.info(
+                    "Skipping auto-contact-share: review gate rejected "
+                    "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                    "reason=%s, details=%s)",
+                    event.device_serial,
+                    event.customer_name,
+                    event.message_type,
+                    event.message_id,
+                    decision.reason,
+                    decision.details,
+                )
+                return False
+            logger.info(
+                "Auto-contact-share gate passed "
+                "(device=%s, customer=%s, message_type=%s, message_id=%s, "
+                "details=%s)",
+                event.device_serial,
+                event.customer_name,
+                event.message_type,
+                event.message_id,
+                decision.details,
+            )
 
         contact_name = self._resolve_contact_name(event, cs)
         if not contact_name:
