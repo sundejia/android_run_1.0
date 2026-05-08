@@ -30,6 +30,27 @@ npm install
 cd ..
 ```
 
+### After moving / renaming the repo (or switching OS)
+
+Python virtualenvs hard-code the interpreter path at creation time.
+If you moved this repo (e.g. Windows `D:\111\android_run_1.0\` →
+macOS `~/Welike Project/boss_android/boss-automation/`) or renamed
+the containing directory, the old `.venv/bin/uvicorn` shebang now
+points at a non-existent interpreter and every `uvicorn`/`pytest`
+entry point breaks. Fix:
+
+```bash
+rm -rf .venv
+uv venv --python 3.11
+source .venv/bin/activate
+uv pip install -e ".[dev]"
+```
+
+If you hit `ImportError: cannot import name 'ReadableLogRecord'` while
+running tests after a rebuild, pass `-p no:logfire -p no:pytest_logfire`
+to skip the stale Logfire plugin (it's bundled by a transitive dep and
+not required for BOSS pipelines).
+
 Verify the install with the smoke script:
 
 ```bash

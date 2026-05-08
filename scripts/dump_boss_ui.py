@@ -35,8 +35,15 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 SRC_PATH = PROJECT_ROOT / "src"
-if str(SRC_PATH) not in sys.path:
-    sys.path.insert(0, str(SRC_PATH))
+# ``tests/_fixtures/loader.py`` is imported below to share the schema
+# constant ``EXPECTED_PACKAGE_NAMES``. Its package lives under the
+# project root (not under ``src/``), so PROJECT_ROOT must be on
+# sys.path as well. Without this, ``python scripts/dump_boss_ui.py``
+# fails with ``ModuleNotFoundError: No module named 'tests'`` unless
+# the caller sets ``PYTHONPATH`` manually.
+for _extra in (PROJECT_ROOT, SRC_PATH):
+    if str(_extra) not in sys.path:
+        sys.path.insert(0, str(_extra))
 
 from tests._fixtures.loader import EXPECTED_PACKAGE_NAMES  # noqa: E402
 

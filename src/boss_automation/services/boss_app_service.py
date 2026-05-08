@@ -25,7 +25,11 @@ from boss_automation.parsers.recruiter_profile_parser import (
 from boss_automation.services.adb_port import AdbPort
 
 DEFAULT_PACKAGE_NAME: Final[str] = "com.hpbr.bosszhipin"
-ME_TAB_TEXT: Final[str] = "我"
+# Tab-label candidates tried in order when we need to force-navigate to
+# the "我" tab. BOSS 12.14x renamed the tab text to "我的"; earlier
+# builds used a bare "我". Trying both keeps M1/M3/M5 working across
+# app versions.
+ME_TAB_TEXT_CANDIDATES: Final[tuple[str, ...]] = ("我的", "我")
 
 
 class BossAppError(Exception):
@@ -80,9 +84,13 @@ class BossAppService:
             return profile
 
         # Not on the "我" tab yet, or the tree did not include the
-        # profile section. Try once more after tapping the tab.
-        tapped = await self._adb.tap_by_text(ME_TAB_TEXT)
-        if not tapped:
+        # profile section. Try each known tab-label variant; if any
+        # tap lands us on the right screen, re-read the UI.
+        for candidate in ME_TAB_TEXT_CANDIDATES:
+            tapped = await self._adb.tap_by_text(candidate)
+            if tapped:
+                break
+        else:
             return None
 
         tree2, _ = await self._adb.get_state()

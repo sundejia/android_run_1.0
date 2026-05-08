@@ -97,14 +97,14 @@ class TestIsLoggedIn:
 class TestGetRecruiterProfile:
     @pytest.mark.asyncio
     async def test_returns_profile_when_already_on_me_tab(self) -> None:
-        adb = FakeAdbPort(trees=[_load_tree("me_profile", "has_profile")])
+        adb = FakeAdbPort(trees=[_load_tree("me_profile", "e2e_test_has_profile")])
         service = BossAppService(adb=adb)
 
         profile = await service.get_recruiter_profile()
 
         assert isinstance(profile, RecruiterProfile)
-        assert profile.name == "王经理"
-        assert profile.company == "ACME 互联网科技有限公司"
+        assert profile.name == "马先生"
+        assert profile.company == "慧莱娱乐"
         # Already on the right tab so no navigation tap should have happened.
         assert adb.tap_text_calls == []
 
@@ -113,7 +113,7 @@ class TestGetRecruiterProfile:
         adb = FakeAdbPort(
             trees=[
                 _load_tree("home", "logged_in"),
-                _load_tree("me_profile", "has_profile"),
+                _load_tree("me_profile", "e2e_test_has_profile"),
             ]
         )
         service = BossAppService(adb=adb)
@@ -121,8 +121,10 @@ class TestGetRecruiterProfile:
         profile = await service.get_recruiter_profile()
 
         assert profile is not None
-        assert profile.name == "王经理"
-        assert "我" in adb.tap_text_calls
+        assert profile.name == "马先生"
+        # Accept either legacy "我" or May-2026 "我的" as the tap label
+        # that navigates to the Me tab.
+        assert any(label in adb.tap_text_calls for label in ("我的", "我"))
 
     @pytest.mark.asyncio
     async def test_raises_login_required_when_logged_out(self) -> None:
