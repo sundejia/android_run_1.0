@@ -23,6 +23,7 @@
   - `AutoContactShareAction` → `ContactShareService`（`actions/auto_contact_share.py` + `contact_share/service.py`）— 详见 [Auto Contact Share](auto-contact-share.md)
 - **独立拉群工作流**：`src/wecom_automation/services/group_invite/` 定义可复用的 `GroupInviteRequest` / `GroupInviteWorkflowService`，由 `GroupChatService` 作为兼容层委托执行，供手动触发和媒体自动触发共用。
 - **同步集成**：`create_sync_orchestrator` / `create_customer_syncer`（`services/sync/factory.py`）在创建 `MessageProcessor` 时，若 DB 中 `media_auto_actions.enabled` 为真，则挂载总线与上述动作，并从同一 DB 加载子配置（`settings_loader.py`）。
+- **实时回复集成**：`response_detector` 调用 `build_media_event_bus(db_path=<设备会话库>, settings_db_path=<控制库>, effects_db_path=<控制库>, ...)`。`db_path` **必须**是会话库，以便审核结果与 `evaluate_gate_pass` 一致；`effects_db_path` 供黑名单、拉群跟踪、名片幂等表使用。详见 [Auto Contact Share 双库语义](auto-contact-share.md#双库语义控制库-vs-设备会话库) 与 [实现备忘](../implementation/2026-05-09-contact-share-review-gate.md)。
 - **消息入口**：`MessageProcessor.process` 在责任链处理完成后，若结果为 `image`/`video` 且消息来自客户，则 `emit` 事件（`services/message/processor.py`）。
 
 ## 设置结构（`settings` 表）

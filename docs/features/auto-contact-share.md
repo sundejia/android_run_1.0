@@ -71,6 +71,17 @@ WeCom 会将最近使用过的附件选项提升到第一页，因此 `_open_con
 | 确认发送 | `dak` / `blz` / `i_2`；**`de5`**（2026-05-07 build，`TextView`） | `contact_share/selectors.py`；新 build 上 Send/Cancel 可能为 **`de5`** / **`de2`** 的 `TextView`，非 `Button` |
 | 确认取消 | **`dah`**；**`de2`**（与 `de5` 成对） | 同上；`PageStateValidator` 需 resource 或 Button 文本双路径 |
 
+## 双库语义（控制库 vs 设备会话库）
+
+桌面 **`wecom_conversations.db`**（控制库）存 `settings`、`blacklist`、`media_action_contact_shares` 等；每台设备的会话数据在 **`device_storage/<serial>/wecom_conversations.db`**（或等价路径）。
+
+`build_media_event_bus(...)` 约定：
+
+- **`db_path`**：传入 **设备会话库**，供 `AutoContactShareAction.db_path` 使用，`evaluate_gate_pass` 在此读取 `images` / `videos` 的 `ai_review_*`。
+- **`effects_db_path`**：传入 **控制库**，供 `ContactShareService` 写 `media_action_contact_shares` 幂等表。
+
+若两者混用，会出现「`image_review_client` 日志显示审核完成，但门控报 `image_row_missing`」——修复说明见 [实现备忘：审核门与 E2E](../implementation/2026-05-09-contact-share-review-gate.md)。
+
 ## 架构
 
 ```
@@ -108,6 +119,7 @@ AutoContactShareAction.execute()
 
 ### 可观测性与诊断
 
+- **审核门 + 名片**：`image_review_client: review completed`、`Auto-contact-share gate passed` / `Skipping auto-contact-share: review gate rejected`、`Shared contact card`（详见 [实现备忘](../implementation/2026-05-09-contact-share-review-gate.md#可观测性日志关键词)）。
 - **指标**：`contact_share_attempt`、`contact_share_ui_dump` 等（见 `metrics_logger` 调用处）。
 - **UI dump**：状态断言失败或 Contact Card 菜单阶段彻底失败时，可能写入  
   `logs/contact_share_dump_<timestamp>_<step>.json`（含完整 `elements` + `ui_tree`）。

@@ -9,12 +9,10 @@ from __future__ import annotations
 
 import json
 import sqlite3
-import tempfile
-from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
-
+from wecom_automation.services.media_actions.actions.auto_contact_share import AutoContactShareAction
+from wecom_automation.services.media_actions.actions.auto_group_invite import AutoGroupInviteAction
 from wecom_automation.services.media_actions.factory import build_media_event_bus
 
 
@@ -191,3 +189,42 @@ class TestBuildMediaEventBusEnabled:
         mock_writer_cls.assert_called_once_with(effects_db)
         mock_group_service_cls.assert_called_once()
         assert mock_group_service_cls.call_args.kwargs["db_path"] == effects_db
+
+    def test_conversation_db_for_gate_side_effects_db_for_services(self, tmp_path):
+        """Gate reads ai_review_* from device DB; idempotency / tracking use control DB."""
+        settings_db = str(tmp_path / "settings.db")
+        device_db = str(tmp_path / "device.db")
+        effects_db = str(tmp_path / "effects.db")
+        _create_settings_db(settings_db, enabled=True)
+        sqlite3.connect(device_db).close()
+        sqlite3.connect(effects_db).close()
+        wecom = MagicMock()
+
+        fake_blacklist = MagicMock(action_name="auto_blacklist")
+
+        with (
+            patch("wecom_automation.services.media_actions.factory.BlacklistWriter"),
+            patch(
+                "wecom_automation.services.media_actions.factory.AutoBlacklistAction",
+                return_value=fake_blacklist,
+            ),
+        ):
+            bus, _ = build_media_event_bus(
+                device_db,
+                settings_db_path=settings_db,
+                effects_db_path=effects_db,
+                wecom_service=wecom,
+            )
+
+        assert bus is not None
+        assert len(bus._actions) == 3
+        contact_action = next(a for a in bus._actions if a.action_name == "auto_contact_share")
+        group_action = next(a for a in bus._actions if a.action_name == "auto_group_invite")
+
+        assert isinstance(contact_action, AutoContactShareAction)
+        assert contact_action._db_path == device_db
+        assert contact_action._service._db_path == effects_db
+
+        assert isinstance(group_action, AutoGroupInviteAction)
+        assert group_action._db_path == device_db
+        assert group_action._service._db_path == effects_db

@@ -31,14 +31,20 @@ def build_media_event_bus(
     Build a MediaEventBus pre-loaded with auto-actions if the feature is enabled.
 
     Args:
-        db_path: Path to the SQLite database used for action side effects such
-            as blacklist and group records.
+        db_path: Path to the **per-device conversation** SQLite database (the
+            one that owns ``messages`` / ``images`` / ``videos`` rows). Passed to
+            ``AutoContactShareAction`` / ``AutoGroupInviteAction`` /
+            ``AutoBlacklistAction`` so ``evaluate_gate_pass`` reads
+            ``ai_review_*`` from the correct file. Callers that split control DB
+            vs device DB **must** pass the device conversation path here.
         settings_db_path: Optional path to the SQLite database that stores the
             ``settings`` table. Defaults to ``db_path`` for backward
             compatibility.
-        effects_db_path: Optional path to the SQLite database that stores
-            media action side effects such as blacklist rows and group tracking.
-            Defaults to ``settings_db_path`` when provided, otherwise ``db_path``.
+        effects_db_path: Optional **control** database for blacklist rows, group
+            tracking, and ``media_action_contact_shares`` idempotency.
+            ``ContactShareService`` / ``GroupChatService`` use this path;
+            gate evaluation still uses ``db_path``. Defaults to
+            ``settings_db_path`` when provided, otherwise ``db_path``.
         wecom_service: Optional WeComService instance.  When provided,
             ``AutoGroupInviteAction`` is registered (it needs WeComService for
             group-chat creation).  When ``None``, only ``AutoBlacklistAction``
@@ -78,9 +84,16 @@ def build_media_event_bus(
                 AutoContactShareAction,
             )
 
+            # Note: AutoContactShareAction.db_path MUST be the conversation DB
+            # (the one that owns the messages/images/videos rows), because
+            # ``evaluate_gate_pass`` queries ``images.ai_review_*`` /
+            # ``videos.ai_review_*`` against it. ContactShareService keeps
+            # ``effects_db_path`` for the idempotency table
+            # (``media_action_contact_shares``), which is intentionally a
+            # control-level concern.
             bus.register(AutoContactShareAction(
                 ContactShareService(wecom_service=wecom_service, db_path=effects_db_path),
-                db_path=effects_db_path,
+                db_path=db_path,
                 restore_navigation_after_execute=False,
             ))
         except Exception as exc:
@@ -93,6 +106,10 @@ def build_media_event_bus(
             )
             from wecom_automation.services.media_actions.group_chat_service import GroupChatService
 
+            # Same db_path semantics as auto_contact_share above:
+            # GroupChatService keeps ``effects_db_path`` (group tracking is
+            # control-level), but the action itself uses the conversation DB
+            # so ``evaluate_gate_pass`` resolves correctly.
             bus.register(
                 AutoGroupInviteAction(
                     GroupChatService(wecom_service=wecom_service, db_path=effects_db_path),

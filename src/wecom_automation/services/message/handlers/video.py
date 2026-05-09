@@ -146,14 +146,25 @@ class VideoMessageHandler(BaseMessageHandler):
 
         if video_path and msg_record:
             try:
+                # Persist review verdict back to the per-device conversation DB
+                # so ``evaluate_gate_pass`` can read ``videos.ai_review_*``.
+                # Mirrors the image-handler fix: without an explicit db_path the
+                # review service writes to the default control DB and the gate
+                # always reports ``video_row_missing``.
+                # Same reason as in image.py: probe both attribute names so
+                # this works whether the caller passed a wecom_automation repo
+                # (``db_path``) or a followup repo (``_db_path``).
+                review_db_path = getattr(self._repository, "db_path", None) or getattr(
+                    self._repository, "_db_path", None
+                )
                 if self._wait_for_review:
                     from services.video_review_service import run_video_review_for_message
 
-                    await run_video_review_for_message(msg_record.id, None)
+                    await run_video_review_for_message(msg_record.id, review_db_path)
                 else:
                     from services.video_review_service import schedule_video_review_for_message
 
-                    schedule_video_review_for_message(msg_record.id, None)
+                    schedule_video_review_for_message(msg_record.id, review_db_path)
             except Exception as exc:
                 self._logger.warning(f"Video AI review schedule failed: {exc}")
 

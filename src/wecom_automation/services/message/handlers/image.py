@@ -57,11 +57,26 @@ class ImageMessageHandler(BaseMessageHandler):
         """Upload the saved image for review without blocking realtime storage by default."""
         from services.image_review_client import upload_image_for_review
 
+        # Persist review verdict back to the conversation DB that owns this
+        # message row. Without this, image_review_client would fall back to
+        # ``get_default_db_path()`` (the control DB), and the per-device
+        # ``images`` row (which actually backs ``evaluate_gate_pass``) would
+        # never get its ``ai_review_*`` columns populated, causing the review
+        # gate to permanently report ``image_row_missing``.
+        # ``wecom_automation.database.repository.ConversationRepository`` exposes
+        # ``db_path`` while ``followup.repository.ConversationRepository`` uses
+        # ``_db_path``. Probe both so the path resolves regardless of which
+        # repo flavour the caller wired in.
+        review_db_path = getattr(self._repository, "db_path", None) or getattr(
+            self._repository, "_db_path", None
+        )
+
         if self._wait_for_review:
             await upload_image_for_review(
                 image_path,
                 auto_analyze=True,
                 local_message_id=message_id,
+                db_path=review_db_path,
             )
             return
 
@@ -70,6 +85,7 @@ class ImageMessageHandler(BaseMessageHandler):
                 image_path,
                 auto_analyze=True,
                 local_message_id=message_id,
+                db_path=review_db_path,
             )
         )
 
