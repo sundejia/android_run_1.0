@@ -105,6 +105,10 @@ class UpdateSettingsRequest(BaseModel):
     max_concurrent_sync_devices: Optional[int] = None
     sidecar_max_panels: Optional[int] = None
 
+    # Dashboard Settings
+    dashboard_enabled: Optional[bool] = None
+    dashboard_url: Optional[str] = None
+
 
 class SettingsResponse(BaseModel):
     """Full application settings response."""
@@ -392,8 +396,28 @@ async def update_settings(request: UpdateSettingsRequest):
     if request.sidecar_max_panels is not None:
         updates["sidecarMaxPanels"] = request.sidecar_max_panels
 
+    # Dashboard settings
+    if request.dashboard_enabled is not None:
+        updates["dashboardEnabled"] = request.dashboard_enabled
+    if request.dashboard_url is not None:
+        updates["dashboardUrl"] = request.dashboard_url.strip()
+
     # Update in database
     service.update_from_frontend_partial(updates, "frontend")
+
+    # If dashboard settings changed, reload the heartbeat client
+    if request.dashboard_enabled is not None or request.dashboard_url is not None:
+        try:
+            from services.dashboard_service import get_dashboard_service
+
+            new_dashboard = service.get_dashboard_settings()
+            await get_dashboard_service().reload(
+                enabled=new_dashboard.enabled,
+                url=new_dashboard.url or "",
+            )
+        except Exception as exc:
+            import logging
+            logging.getLogger(__name__).warning("dashboard_reload_after_save: %s", exc)
 
     return {"success": True, "message": "Settings updated"}
 
@@ -781,3 +805,46 @@ async def test_image_review_upload():
             message=f"连接失败: {exc}",
             latency_ms=int((time.time() - start_time) * 1000),
         )
+
+
+# ============================================================================
+# Dashboard Heartbeat Settings
+# ============================================================================
+
+
+@router.get("/dashboard/status")
+async def get_dashboard_status():
+    """Get dashboard heartbeat client connection status."""
+    try:
+        from services.dashboard_service import get_dashboard_service
+        return get_dashboard_service().status()
+    except Exception:
+        service = get_settings_service()
+        dashboard = service.get_dashboard_settings()
+        return {
+            "enabled": dashboard.enabled,
+            "url": dashboard.url,
+            "status": "unknown",
+        }
+
+
+@router.post("/dashboard/test")
+async def test_dashboard_connection(request: Optional[Dict[str, str]] = None):
+    """Test connection to the device-dashboard."""
+    try:
+        from services.dashboard_service import get_dashboard_service
+        url = (request or {}).get("url", "").strip() if request else ""
+        return await get_dashboard_service().test_connection(url or None)
+    except RuntimeError:
+        from services.heartbeat_client import HeartbeatClient
+
+        service = get_settings_service()
+        dashboard = service.get_dashboard_settings()
+        url = (request or {}).get("url", "").strip() or dashboard.url
+        if not url:
+            return {"success": False, "message": "Dashboard URL is not configured"}
+        client = HeartbeatClient(
+            dashboard_url=url,
+            settings_service=service,
+        )
+        return await client.test_connection()

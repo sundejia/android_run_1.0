@@ -253,9 +253,33 @@ async def lifespan(app: FastAPI):
     runtime_metrics.mark_startup_complete()
     print(f"[startup] [OK] Runtime metrics ready ({round((time.perf_counter() - startup_started_at) * 1000, 2)} ms)")
 
+    # Start heartbeat client if dashboard is configured
+    try:
+        from services.dashboard_service import get_dashboard_service
+        from services.settings.service import get_settings_service
+
+        settings_svc = get_settings_service()
+        dashboard_settings = settings_svc.get_dashboard_settings()
+        dashboard_svc = get_dashboard_service(settings_svc)
+        await dashboard_svc.reload(
+            enabled=dashboard_settings.enabled,
+            url=dashboard_settings.url or "",
+        )
+        app.state.dashboard_service = dashboard_svc
+        print(f"[startup] [OK] Dashboard service initialized (enabled={dashboard_settings.enabled}, url={dashboard_settings.url})")
+    except Exception as e:
+        print(f"[startup] [WARN] Dashboard heartbeat client failed: {e}")
+
     yield  # Application is running
 
     # ========== SHUTDOWN ==========
+    try:
+        from services.dashboard_service import get_dashboard_service
+        await get_dashboard_service().reload(enabled=False, url="")
+        print("[shutdown] Dashboard heartbeat client stopped")
+    except Exception:
+        pass
+
     await log_upload_service.stop()
     print("[shutdown] Log upload service stopped")
 

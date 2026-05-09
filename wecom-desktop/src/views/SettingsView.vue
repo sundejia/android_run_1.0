@@ -81,6 +81,10 @@ const emailTestResult = ref<{ success: boolean; message: string } | null>(null)
 const imageReviewTestLoading = ref(false)
 const imageReviewTestResult = ref<{ success: boolean; message: string } | null>(null)
 
+// Dashboard monitoring test
+const dashboardTestLoading = ref(false)
+const dashboardTestResult = ref<{ success: boolean; message: string } | null>(null)
+
 async function testImageReviewConnection() {
   imageReviewTestLoading.value = true
   imageReviewTestResult.value = null
@@ -105,6 +109,32 @@ async function testImageReviewConnection() {
     }
   } finally {
     imageReviewTestLoading.value = false
+  }
+}
+
+async function testDashboardConnection() {
+  dashboardTestLoading.value = true
+  dashboardTestResult.value = null
+
+  try {
+    const response = await fetch(`${settings.value.backendUrl}/settings/dashboard/test`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url: settings.value.dashboardUrl }),
+    })
+
+    const data = await response.json()
+    dashboardTestResult.value = {
+      success: data.success,
+      message: data.message || (data.success ? 'Connection successful' : 'Connection failed'),
+    }
+  } catch (e) {
+    dashboardTestResult.value = {
+      success: false,
+      message: e instanceof Error ? e.message : 'Connection failed',
+    }
+  } finally {
+    dashboardTestLoading.value = false
   }
 }
 
@@ -1963,6 +1993,76 @@ onMounted(async () => {
           >
             <span v-if="logUploadLoading" class="animate-spin">⏳</span>
             <span v-else>{{ t('settings.log_upload_button_upload') }}</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dashboard Monitoring Settings -->
+    <section class="space-y-4">
+      <h3
+        class="text-lg font-display font-semibold text-wecom-text border-b border-wecom-border pb-2"
+      >
+        📊 Dashboard Monitoring
+      </h3>
+      <p class="text-xs text-wecom-muted">
+        Connect to Device Dashboard for real-time monitoring. Report device status and heartbeat.
+      </p>
+
+      <div class="grid gap-4">
+        <!-- Enable Dashboard -->
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="text-sm font-medium text-wecom-text">Enable Dashboard Reporting</label>
+            <p class="text-xs text-wecom-muted">Periodically send heartbeat data to the monitoring dashboard</p>
+          </div>
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input
+              v-model="settings.dashboardEnabled"
+              type="checkbox"
+              class="sr-only peer"
+              @change="saveSettings"
+            />
+            <div
+              class="w-11 h-6 bg-wecom-surface peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-wecom-primary"
+            ></div>
+          </label>
+        </div>
+
+        <!-- Dashboard URL -->
+        <div class="flex items-center justify-between">
+          <div>
+            <label class="text-sm font-medium text-wecom-text">Dashboard URL</label>
+            <p class="text-xs text-wecom-muted">WebSocket address of the Device Dashboard</p>
+          </div>
+          <input
+            v-model="settings.dashboardUrl"
+            type="text"
+            placeholder="ws://localhost:8090/ws/heartbeat"
+            class="input-field w-72 text-sm"
+            @change="saveSettings"
+          />
+        </div>
+
+        <!-- Test Connection -->
+        <div class="flex items-center justify-between bg-wecom-surface/50 rounded-lg px-4 py-3">
+          <div class="flex items-center gap-2">
+            <span class="text-sm text-wecom-text">Test Connection</span>
+            <span
+              v-if="dashboardTestResult"
+              :class="dashboardTestResult.success ? 'text-green-400' : 'text-red-400'"
+              class="text-xs"
+            >
+              {{ dashboardTestResult.message }}
+            </span>
+          </div>
+          <button
+            class="btn-secondary text-sm"
+            :disabled="dashboardTestLoading || !settings.dashboardUrl"
+            @click="testDashboardConnection"
+          >
+            <span v-if="dashboardTestLoading" class="animate-spin">⏳</span>
+            <span v-else>🔗 Test</span>
           </button>
         </div>
       </div>

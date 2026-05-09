@@ -22,6 +22,7 @@ from .models import (
     AIAnalysisSettings,
     AIReplySettings,
     AllSettings,
+    DashboardSettings,
     EmailSettings,
     FollowupSettings,
     GeneralSettings,
@@ -198,6 +199,11 @@ class SettingsService:
 
         return FollowupSettings(**filtered)
 
+    def get_dashboard_settings(self) -> DashboardSettings:
+        """获取监控面板设置"""
+        data = self.get_category(SettingCategory.DASHBOARD.value)
+        return DashboardSettings(**data)
+
     def get_all_settings(self) -> AllSettings:
         """获取所有设置"""
         return AllSettings(
@@ -211,6 +217,7 @@ class SettingsService:
             sidecar=self.get_sidecar_settings(),
             realtime=self.get_realtime_settings(),
             followup=self.get_followup_settings(),
+            dashboard=self.get_dashboard_settings(),
         )
 
     # ============================================================================

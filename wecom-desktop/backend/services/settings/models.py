@@ -24,6 +24,7 @@ class SettingCategory(str, Enum):
     SIDECAR = "sidecar"
     REALTIME = "realtime"
     FOLLOWUP = "followup"
+    DASHBOARD = "dashboard"
 
 
 class ValueType(str, Enum):
@@ -256,6 +257,14 @@ class FollowupSettings:
 
 
 @dataclass
+class DashboardSettings:
+    """监控面板设置"""
+
+    enabled: bool = False
+    url: str = ""
+
+
+@dataclass
 class AllSettings:
     """完整的应用设置"""
 
@@ -269,6 +278,7 @@ class AllSettings:
     sidecar: SidecarSettings = field(default_factory=SidecarSettings)
     realtime: RealtimeSettings = field(default_factory=RealtimeSettings)
     followup: FollowupSettings = field(default_factory=FollowupSettings)
+    dashboard: DashboardSettings = field(default_factory=DashboardSettings)
 
     def to_dict(self) -> dict[str, Any]:
         """转换为字典（用于 API 响应）"""
@@ -285,6 +295,7 @@ class AllSettings:
             "sidecar": asdict(self.sidecar),
             "realtime": asdict(self.realtime),
             "followup": asdict(self.followup),
+            "dashboard": asdict(self.dashboard),
         }
 
     def to_flat_dict(self) -> dict[str, Any]:
@@ -377,4 +388,7 @@ class AllSettings:
             "attemptIntervals": self.followup.attempt_intervals,
             "avoidDuplicateMessages": self.followup.avoid_duplicate_messages,
             "templatesHash": self.followup.templates_hash,
+            # Dashboard
+            "dashboardEnabled": self.dashboard.enabled,
+            "dashboardUrl": self.dashboard.url,
         }

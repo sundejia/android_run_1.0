@@ -317,6 +317,11 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         "媒体动作图片审核门配置",
         False,
     ),
+    # ============================================================================
+    # Dashboard Settings (监控面板)
+    # ============================================================================
+    (SettingCategory.DASHBOARD.value, "enabled", ValueType.BOOLEAN.value, False, "是否启用监控面板上报", False),
+    (SettingCategory.DASHBOARD.value, "url", ValueType.STRING.value, "", "监控面板 WebSocket 地址", False),
 ]
 
 
@@ -407,6 +412,9 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "idleThresholdMinutes": (SettingCategory.FOLLOWUP.value, "idle_threshold_minutes"),
     "maxAttemptsPerCustomer": (SettingCategory.FOLLOWUP.value, "max_attempts_per_customer"),
     "attemptIntervals": (SettingCategory.FOLLOWUP.value, "attempt_intervals"),
+    # Dashboard
+    "dashboardEnabled": (SettingCategory.DASHBOARD.value, "enabled"),
+    "dashboardUrl": (SettingCategory.DASHBOARD.value, "url"),
 }
 
 

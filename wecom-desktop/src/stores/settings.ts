@@ -139,6 +139,10 @@ export type AppSettings = {
   emailReceiverEmail: string  // Receiver email address
   emailNotifyOnVoice: boolean  // Send email when user sends voice message
   emailNotifyOnHumanRequest: boolean  // Send email when user requests human agent
+
+  // Dashboard monitoring settings
+  dashboardEnabled: boolean  // Enable heartbeat reporting to device-dashboard
+  dashboardUrl: string  // Device-dashboard WebSocket URL
 }
 
 export interface PerformanceProfile {
@@ -247,6 +251,10 @@ export const DEFAULT_SETTINGS: AppSettings = {
   emailReceiverEmail: '',
   emailNotifyOnVoice: true,  // Notify when user sends voice
   emailNotifyOnHumanRequest: true,  // Notify when user requests human agent
+
+  // Dashboard monitoring defaults
+  dashboardEnabled: false,  // Disabled by default
+  dashboardUrl: '',  // Empty by default
 }
 
 function clampCountdown(value: unknown) {
@@ -408,6 +416,10 @@ export const useSettingsStore = defineStore('settings', () => {
             // Generic
             timezone: settings.value.timezone,
             email_enabled: settings.value.emailEnabled,
+
+            // Dashboard
+            dashboard_enabled: settings.value.dashboardEnabled,
+            dashboard_url: settings.value.dashboardUrl,
           })
         })
 
