@@ -62,6 +62,18 @@ class FakeAdbPort:
         self.tap_text_calls.append(text)
         return True
 
+    async def tap(self, x: int, y: int) -> bool:
+        return True
+
+    async def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
+        pass
+
+    async def type_text(self, text: str) -> bool:
+        return True
+
+    async def press_back(self) -> None:
+        pass
+
 
 class TestLaunch:
     @pytest.mark.asyncio

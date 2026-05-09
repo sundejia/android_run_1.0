@@ -26,6 +26,7 @@ and future contributors.
 | **M4** | Message reply | Message/conversation/resume parsers, `TemplateEngine`, `AiReplyClient`, `ReplyDispatcher`, `boss_templates` + `boss_messages`, templates + conversations UI |
 | **M5** | Re-engagement | `SilentCandidateDetector`, `FollowupAttemptsRepository`, `ReengagementOrchestrator`, `boss_reengagement` router, `ReengagementView` |
 | **M6** | Ops hardening | `GET /api/boss/monitoring/summary`, `scripts/boss_smoke.py`, `BossDashboardView` + `useBossMonitoringStore`, onboarding + TDD docs |
+| **Post-M6** | Navigation landing | `BossNavigator` tab-aware navigation, `AdbPort.press_back`, DroidRunAdapter coordinate-based `tap_by_text`, wired into `ReplyDispatcher` / `GreetExecutor` / API routers |
 
 ## Operations Surface
 
@@ -35,6 +36,7 @@ and future contributors.
 | BOSS database | `BOSS_DB_PATH` or default `boss_recruitment.db` at repo root |
 | Smoke regression | `uv run python scripts/boss_smoke.py` → prints `BOSS smoke OK` |
 | Monitoring API | `GET /api/boss/monitoring/summary` (rolling 24h windows) |
+| Page navigation | `BossNavigator` — tab-aware BACK-retry navigation (mirrors WeCom `ensure_on_private_chats`) |
 | Operator runbook | `docs/guides/boss-zhipin-onboarding.md` |
 | Developer playbook | `docs/development/boss-tdd-workflow.md`, `docs/00-boss-pivot/tdd-workflow.md` |
 

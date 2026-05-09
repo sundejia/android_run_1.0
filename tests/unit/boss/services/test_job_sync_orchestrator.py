@@ -93,6 +93,15 @@ class FakeAdbPort:
     ) -> None:
         self.swipe_calls.append((x1, y1, x2, y2, duration_ms))
 
+    async def tap(self, x: int, y: int) -> bool:
+        return True
+
+    async def type_text(self, text: str) -> bool:
+        return True
+
+    async def press_back(self) -> None:
+        pass
+
 
 @pytest.fixture()
 def db_path(tmp_path: Path) -> Path:

@@ -13,7 +13,6 @@ from boss_automation.services.uiautomator_fallback import (
     parse_uiautomator_xml,
 )
 
-
 _SAMPLE_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
 <hierarchy rotation="0">
   <node index="0" text="" resource-id="" class="android.widget.FrameLayout"
@@ -44,7 +43,7 @@ _SAMPLE_XML = """<?xml version='1.0' encoding='UTF-8' standalone='yes' ?>
   </node>
 </hierarchy>
 UI hierchary dumped to: /dev/tty
-""".encode("utf-8")
+""".encode()
 
 
 class TestParseUiautomatorXml:

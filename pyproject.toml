@@ -61,7 +61,7 @@ include = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
-addopts = "-v --tb=short"
+addopts = "-v --tb=short -p no:logfire"
 markers = [
     "unit: Unit tests (fast, no external dependencies)",
     "integration: Integration tests (require device connection)",
@@ -107,6 +107,7 @@ ignore = [
 "tests/**" = ["B011"]     # Allow assert in tests
 "wecom-desktop/backend/main.py" = ["E402"]  # Path setup before imports
 "wecom-desktop/backend/scripts/*" = ["E402"]  # Path setup before imports
+"scripts/boss_e2e_live.py" = ["E402", "F401", "F841", "B007"]  # Standalone E2E script with sys.path bootstrap
 "wecom-desktop/backend/services/followup/response_detector.py" = ["E402"]  # Path setup before imports
 "wecom-desktop/backend/tests/test_logs_ws.py" = ["E402"]  # sys.path bootstrap before router imports
 "tests/integration/test_contact_search_e2e.py" = ["E402"]  # sys.path bootstrap before imports

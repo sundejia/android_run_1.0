@@ -94,21 +94,15 @@ async def dump_ui_tree(
         raise UiAutomatorFallbackError(f"adb binary not found: {adb_binary!r}") from exc
 
     try:
-        stdout_bytes, stderr_bytes = await asyncio.wait_for(
-            proc.communicate(), timeout=timeout_seconds
-        )
-    except asyncio.TimeoutError as exc:
+        stdout_bytes, stderr_bytes = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds)
+    except TimeoutError as exc:
         proc.kill()
         await proc.wait()
-        raise UiAutomatorFallbackError(
-            f"uiautomator dump timed out after {timeout_seconds}s on {serial}"
-        ) from exc
+        raise UiAutomatorFallbackError(f"uiautomator dump timed out after {timeout_seconds}s on {serial}") from exc
 
     if proc.returncode != 0:
         stderr_text = stderr_bytes.decode("utf-8", errors="replace").strip()
-        raise UiAutomatorFallbackError(
-            f"adb uiautomator dump returned {proc.returncode} on {serial}: {stderr_text}"
-        )
+        raise UiAutomatorFallbackError(f"adb uiautomator dump returned {proc.returncode} on {serial}: {stderr_text}")
 
     return parse_uiautomator_xml(stdout_bytes)
 
@@ -127,9 +121,7 @@ def parse_uiautomator_xml(raw: bytes) -> dict[str, Any]:
     end_idx = raw.rfind(b"</hierarchy>")
     if end_idx == -1:
         preview = raw[:200].decode("utf-8", errors="replace")
-        raise UiAutomatorFallbackError(
-            f"no </hierarchy> tag in uiautomator output; got: {preview!r}"
-        )
+        raise UiAutomatorFallbackError(f"no </hierarchy> tag in uiautomator output; got: {preview!r}")
     xml_bytes = raw[: end_idx + len(b"</hierarchy>")]
 
     try:
@@ -138,9 +130,7 @@ def parse_uiautomator_xml(raw: bytes) -> dict[str, Any]:
         raise UiAutomatorFallbackError(f"malformed uiautomator XML: {exc}") from exc
 
     if root.tag != "hierarchy":
-        raise UiAutomatorFallbackError(
-            f"expected <hierarchy> root, got <{root.tag}>"
-        )
+        raise UiAutomatorFallbackError(f"expected <hierarchy> root, got <{root.tag}>")
 
     top_nodes = list(root)
     if not top_nodes:

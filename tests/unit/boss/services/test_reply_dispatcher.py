@@ -71,6 +71,12 @@ class FakeAdbPort:
         self.type_text_calls.append(text)
         return True
 
+    async def tap(self, x: int, y: int) -> bool:
+        return True
+
+    async def press_back(self) -> None:
+        pass
+
 
 # ---------------------------------------------------------------------------
 # Helper template provider — synchronous, deterministic.

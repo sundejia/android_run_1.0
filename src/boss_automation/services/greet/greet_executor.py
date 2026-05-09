@@ -23,6 +23,7 @@ from boss_automation.parsers.greet_state_detector import (
     detect_greet_state,
 )
 from boss_automation.services.adb_port import AdbPort
+from boss_automation.services.boss_navigator import BossNavigator
 from boss_automation.services.greet.quota_guard import QuotaDecision, QuotaGuard
 from boss_automation.services.greet.schedule import GreetSchedule, is_within_window
 
@@ -82,6 +83,7 @@ class GreetExecutor:
         is_blacklisted: _BlacklistChecker | None = None,
         recent_send_times_provider: _RecentSendTimesProvider | None = None,
         clock: Callable[[], datetime] = _utcnow,
+        navigator: BossNavigator | None = None,
     ) -> None:
         self._adb = adb
         self._candidate_repo = candidate_repo
@@ -91,6 +93,7 @@ class GreetExecutor:
         self._is_blacklisted = is_blacklisted
         self._recent_send_times_provider = recent_send_times_provider or (lambda: [])
         self._clock = clock
+        self._navigator = navigator
 
     async def execute_one(
         self,
@@ -110,6 +113,10 @@ class GreetExecutor:
         if decision != QuotaDecision.ALLOWED:
             emit(GreetEvent(stage="quota_pre_pick", detail=decision.value))
             return GreetOutcome(kind=_quota_decision_to_outcome_kind(decision))
+
+        # Pre-navigation: ensure device is on the candidate feed page.
+        if self._navigator is not None:
+            await self._navigator.ensure_on_candidates()
 
         feed_tree, _ = await self._adb.get_state()
         cards = parse_candidate_feed(feed_tree)
@@ -188,6 +195,11 @@ class GreetExecutor:
         await self._adb.tap_by_text(GREET_BUTTON_LABEL)
         emit(GreetEvent(stage="sent_greet", boss_candidate_id=candidate.boss_candidate_id))
         self._candidate_repo.set_status(self._recruiter_id, candidate.boss_candidate_id, "greeted")
+
+        # Post-greet: navigate back to candidate feed.
+        if self._navigator is not None:
+            await self._navigator.press_back()
+
         return GreetOutcome(
             kind=OutcomeKind.SENT,
             boss_candidate_id=candidate.boss_candidate_id,

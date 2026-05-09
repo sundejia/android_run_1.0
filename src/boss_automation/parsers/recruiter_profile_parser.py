@@ -46,16 +46,12 @@ _POSITION_IDS: Final[tuple[str, ...]] = (
 )
 
 # May-2026 schema: single node carries "<company>·<position>" text.
-_COMPANY_AND_POSITION_IDS: Final[tuple[str, ...]] = (
-    "com.hpbr.bosszhipin:id/tv_company_and_position",
-)
+_COMPANY_AND_POSITION_IDS: Final[tuple[str, ...]] = ("com.hpbr.bosszhipin:id/tv_company_and_position",)
 
 # May-2026 schema: name only appears as ``contentDescription`` on the
 # profile-header container. Checked last so legacy rids win when both
 # forms are in the tree.
-_NAME_CONTENT_DESC_IDS: Final[tuple[str, ...]] = (
-    "com.hpbr.bosszhipin:id/ctl_f3_profile",
-)
+_NAME_CONTENT_DESC_IDS: Final[tuple[str, ...]] = ("com.hpbr.bosszhipin:id/ctl_f3_profile",)
 
 # Middle-dot separator used by the merged company-and-position text
 # node. ``·`` (U+00B7) is the only observed variant; if BOSS ever
@@ -79,9 +75,7 @@ _LOGGED_IN_TAB_HINTS: Final[frozenset[str]] = frozenset(
 # a login screen that happens to display e.g. the single word "我" —
 # we require at least three of these labels present simultaneously,
 # which is the recruiter-side shell signature.
-_LOGGED_IN_TAB_TEXTS: Final[frozenset[str]] = frozenset(
-    {"牛人", "搜索", "消息", "我", "我的", "首页", "招聘", "推荐"}
-)
+_LOGGED_IN_TAB_TEXTS: Final[frozenset[str]] = frozenset({"牛人", "搜索", "消息", "我", "我的", "首页", "招聘", "推荐"})
 _LOGGED_IN_TAB_TEXT_MIN: Final[int] = 3
 
 # Text or content-description tokens that always indicate a login page.
@@ -128,9 +122,7 @@ def _content_desc(node: dict[str, Any]) -> str:
     return str(raw).strip()
 
 
-def _find_first_text_for_resource_ids(
-    tree: dict[str, Any], resource_ids: tuple[str, ...]
-) -> str | None:
+def _find_first_text_for_resource_ids(tree: dict[str, Any], resource_ids: tuple[str, ...]) -> str | None:
     """Return the first non-empty stripped text of any node with one of
     the given resource ids.
     """
@@ -144,9 +136,7 @@ def _find_first_text_for_resource_ids(
     return None
 
 
-def _find_first_content_desc_for_resource_ids(
-    tree: dict[str, Any], resource_ids: tuple[str, ...]
-) -> str | None:
+def _find_first_content_desc_for_resource_ids(tree: dict[str, Any], resource_ids: tuple[str, ...]) -> str | None:
     """May-2026 fallback: some identity fields now live only in
     ``contentDescription`` on container nodes."""
     wanted = set(resource_ids)
@@ -198,10 +188,7 @@ def detect_login_state(tree: dict[str, Any]) -> LoginState:
             has_legacy_tab = True
         text = _text_of(node)
         rid = node.get("resourceId") or ""
-        if (
-            rid.startswith("com.hpbr.bosszhipin:id/tv_tab_")
-            and text in _LOGGED_IN_TAB_TEXTS
-        ):
+        if rid.startswith("com.hpbr.bosszhipin:id/tv_tab_") and text in _LOGGED_IN_TAB_TEXTS:
             tv_tab_text_matches += 1
         if text in _LOGGED_OUT_HINTS or cd in _LOGGED_OUT_HINTS:
             has_login_marker = True

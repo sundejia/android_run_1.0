@@ -14,6 +14,7 @@ fake.
 
 from __future__ import annotations
 
+import asyncio
 from typing import Final
 
 from boss_automation.parsers.recruiter_profile_parser import (
@@ -23,13 +24,12 @@ from boss_automation.parsers.recruiter_profile_parser import (
     extract_recruiter_profile,
 )
 from boss_automation.services.adb_port import AdbPort
+from boss_automation.services.boss_navigator import BossNavigator
 
 DEFAULT_PACKAGE_NAME: Final[str] = "com.hpbr.bosszhipin"
-# Tab-label candidates tried in order when we need to force-navigate to
-# the "我" tab. BOSS 12.14x renamed the tab text to "我的"; earlier
-# builds used a bare "我". Trying both keeps M1/M3/M5 working across
-# app versions.
 ME_TAB_TEXT_CANDIDATES: Final[tuple[str, ...]] = ("我的", "我")
+_SPLASH_WAIT: Final[float] = 4.0
+_SPLASH_RETRIES: Final[int] = 3
 
 
 class BossAppError(Exception):
@@ -55,6 +55,7 @@ class BossAppService:
     ) -> None:
         self._adb = adb
         self._package_name = package_name
+        self._navigator = BossNavigator(adb)
 
     async def launch(self) -> None:
         await self._adb.start_app(self._package_name)
@@ -65,6 +66,30 @@ class BossAppService:
 
     async def is_logged_in(self) -> bool:
         return await self.detect_login_state() == LoginState.LOGGED_IN
+
+    async def wait_for_login(self, timeout: float = 20.0) -> LoginState:
+        """Launch the app and retry login-state detection until resolved.
+
+        Handles the common case where the app shows a splash / welcome
+        screen that does not carry the bottom tab bar, causing the
+        detector to return ``UNKNOWN``.  Presses BACK between retries
+        to dismiss any transient overlays.
+        """
+        await self.launch()
+        await asyncio.sleep(6)
+
+        state = await self.detect_login_state()
+        if state == LoginState.LOGGED_IN:
+            return state
+
+        for _ in range(_SPLASH_RETRIES):
+            await self._navigator.press_back()
+            await asyncio.sleep(_SPLASH_WAIT)
+            state = await self.detect_login_state()
+            if state != LoginState.UNKNOWN:
+                return state
+
+        return state
 
     async def get_recruiter_profile(self) -> RecruiterProfile | None:
         """Return the logged-in recruiter, navigating to the "我" tab if needed.
@@ -83,14 +108,9 @@ class BossAppService:
         if profile is not None:
             return profile
 
-        # Not on the "我" tab yet, or the tree did not include the
-        # profile section. Try each known tab-label variant; if any
-        # tap lands us on the right screen, re-read the UI.
-        for candidate in ME_TAB_TEXT_CANDIDATES:
-            tapped = await self._adb.tap_by_text(candidate)
-            if tapped:
-                break
-        else:
+        # Not on the "我" tab yet, navigate there.
+        navigated = await self._navigator.navigate_to_me_tab()
+        if not navigated:
             return None
 
         tree2, _ = await self._adb.get_state()

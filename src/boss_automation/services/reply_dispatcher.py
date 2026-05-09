@@ -39,6 +39,7 @@ from boss_automation.parsers.message_list_parser import parse_message_list
 from boss_automation.parsers.resume_parser import ResumeSnapshot, parse_resume
 from boss_automation.services.adb_port import AdbPort
 from boss_automation.services.ai_reply_client import AiReplyKind, AiReplyResult
+from boss_automation.services.boss_navigator import BossNavigator
 from boss_automation.services.template_engine import render_template
 
 
@@ -86,10 +87,12 @@ class ReplyDispatcher:
         adb: AdbPort,
         template_provider: TemplateProvider,
         ai_client: AiClientLike | None = None,
+        navigator: BossNavigator | None = None,
     ) -> None:
         self._adb = adb
         self._template_provider = template_provider
         self._ai_client = ai_client
+        self._navigator = navigator
 
     async def dispatch_one(
         self,
@@ -97,6 +100,10 @@ class ReplyDispatcher:
         is_blacklisted: Callable[[str], Awaitable[bool]] | None = None,
         dry_run: bool = False,
     ) -> DispatchOutcome:
+        # Pre-navigation: ensure device is on the messages list page.
+        if self._navigator is not None:
+            await self._navigator.ensure_on_messages()
+
         list_tree, _ = await self._adb.get_state()
         rows = parse_message_list(list_tree)
         target = next((r for r in rows if r.unread_count > 0), None)
@@ -129,6 +136,10 @@ class ReplyDispatcher:
         await self._adb.tap_by_text("查看简历")
         resume_tree, _ = await self._adb.get_state()
         resume = parse_resume(resume_tree)
+
+        # Navigate back from resume view to chat input page.
+        if resume is not None and self._navigator is not None:
+            await self._navigator.press_back()
 
         context = _build_context(target.candidate_name, resume)
         rendered_text: str
@@ -170,6 +181,10 @@ class ReplyDispatcher:
 
         await self._adb.type_text(rendered_text)
         await self._adb.tap_by_text("发送")
+
+        # Post-send: navigate back to message list.
+        if self._navigator is not None:
+            await self._navigator.press_back()
 
         return DispatchOutcome(
             kind=kind,

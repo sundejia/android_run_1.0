@@ -53,9 +53,7 @@ class FakeDriver:
         self.tap_by_text_calls.append(text)
         return True
 
-    async def swipe(
-        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
-    ) -> None:
+    async def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
         self.swipe_calls.append((x1, y1, x2, y2, duration_ms))
 
 
@@ -66,9 +64,7 @@ class ShellRecorder:
         self.calls: list[tuple[str, str, tuple[str, ...]]] = []
         self._rc = rc
 
-    async def __call__(
-        self, adb_binary: str, serial: str, args: list[str]
-    ) -> tuple[int, bytes, bytes]:
+    async def __call__(self, adb_binary: str, serial: str, args: list[str]) -> tuple[int, bytes, bytes]:
         self.calls.append((adb_binary, serial, tuple(args)))
         return self._rc, b"", b""
 
@@ -218,9 +214,7 @@ class TestPortalSelfHeal:
         commands = [call[2] for call in shell.calls]
         assert ("shell", "am", "force-stop", "com.droidrun.portal") in commands
         assert any(
-            args[:3] == ("shell", "am", "start-service")
-            and "com.droidrun.portal" in args[3]
-            for args in commands
+            args[:3] == ("shell", "am", "start-service") and "com.droidrun.portal" in args[3] for args in commands
         )
 
         metrics = get_resilience_metrics("SER2")["SER2"]
@@ -424,9 +418,7 @@ class TestFallbackModeActions:
         await adapter.swipe(100, 200, 300, 400, duration_ms=500)
 
         swipe_cmds = [c[2] for c in shell.calls if c[2][:3] == ("shell", "input", "swipe")]
-        assert swipe_cmds == [
-            ("shell", "input", "swipe", "100", "200", "300", "400", "500")
-        ]
+        assert swipe_cmds == [("shell", "input", "swipe", "100", "200", "300", "400", "500")]
 
 
 class TestMetricsRegistry:

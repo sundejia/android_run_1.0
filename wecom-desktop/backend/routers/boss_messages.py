@@ -47,6 +47,7 @@ from boss_automation.database.template_repository import (  # noqa: E402
 )
 from boss_automation.services.adb_port import AdbPort  # noqa: E402
 from boss_automation.services.ai_reply_client import AiReplyClient  # noqa: E402
+from boss_automation.services.boss_navigator import BossNavigator  # noqa: E402
 from boss_automation.services.reply_dispatcher import (  # noqa: E402
     DispatchKind,
     ReplyDispatcher,
@@ -254,10 +255,12 @@ async def dispatch_one(body: DispatchRequest, db_path: str = Depends(get_db_path
         return "您好 {name}，看到您的简历，请问方便沟通吗？"
 
     adb = _adb_factory(body.device_serial)
+    navigator = BossNavigator(adb)
     dispatcher = ReplyDispatcher(
         adb=adb,
         template_provider=template_provider,
         ai_client=_ai_provider(),
+        navigator=navigator,
     )
 
     outcome = await dispatcher.dispatch_one(

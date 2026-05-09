@@ -69,18 +69,14 @@ def _assert_message_list(tree: dict[str, Any]) -> None:
     from boss_automation.parsers.message_list_parser import parse_message_list
 
     conversations = parse_message_list(tree)
-    assert conversations, (
-        "messages_list fixture must parse at least one conversation row."
-    )
+    assert conversations, "messages_list fixture must parse at least one conversation row."
 
 
 def _assert_candidate_card(tree: dict[str, Any]) -> None:
     from boss_automation.parsers.candidate_card_parser import parse_candidate_feed
 
     cards = parse_candidate_feed(tree)
-    assert cards, (
-        "candidates_feed fixture must parse at least one candidate card."
-    )
+    assert cards, "candidates_feed fixture must parse at least one candidate card."
 
 
 _PAGE_PARSERS: dict[str, Callable[[dict[str, Any]], None]] = {
@@ -123,11 +119,7 @@ _FIXTURES = _discover_e2e_fixtures()
     _FIXTURES,
     ids=[str(p.relative_to(FIXTURE_ROOT)) for _, p in _FIXTURES],
 )
-def test_real_device_fixture_round_trips_through_parser(
-    page: str, fixture_path: Path
-) -> None:
+def test_real_device_fixture_round_trips_through_parser(page: str, fixture_path: Path) -> None:
     fixture = load_fixture(fixture_path)
-    assert fixture.page == page, (
-        f"fixture file lives under {page}/ but declares page={fixture.page!r}"
-    )
+    assert fixture.page == page, f"fixture file lives under {page}/ but declares page={fixture.page!r}"
     _PAGE_PARSERS[page](fixture.ui_tree)

@@ -36,6 +36,7 @@ from boss_automation.database.recruiter_repository import (  # noqa: E402
 )
 from boss_automation.database.schema import ensure_schema  # noqa: E402
 from boss_automation.services.adb_port import AdbPort  # noqa: E402
+from boss_automation.services.boss_navigator import BossNavigator  # noqa: E402
 from boss_automation.services.greet.greet_executor import (  # noqa: E402
     GreetExecutor,
     GreetOutcome,
@@ -366,12 +367,14 @@ async def test_run(
     )
 
     adb = _adb_factory(body.device_serial)
+    navigator = BossNavigator(adb)
     executor = GreetExecutor(
         adb=adb,
         candidate_repo=candidate_repo,
         recruiter_id=recruiter.id,
         schedule=schedule,
         quota_guard=quota_guard,
+        navigator=navigator,
     )
     outcome = await executor.execute_one()
     # When the outcome was SENT we deliberately do not mock messages

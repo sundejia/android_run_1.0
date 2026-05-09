@@ -118,9 +118,7 @@ def _is_portal_error(exc: BaseException) -> bool:
 ShellRunner = Callable[[str, str, list[str]], Awaitable[tuple[int, bytes, bytes]]]
 
 
-async def _default_shell_runner(
-    adb_binary: str, serial: str, args: list[str]
-) -> tuple[int, bytes, bytes]:
+async def _default_shell_runner(adb_binary: str, serial: str, args: list[str]) -> tuple[int, bytes, bytes]:
     """Execute ``adb -s <serial> <args...>`` and return (rc, stdout, stderr)."""
     proc = await asyncio.create_subprocess_exec(
         adb_binary,
@@ -170,9 +168,7 @@ class DroidRunAdapter:
         if driver is None:
             from droidrun import AdbTools  # type: ignore[import-untyped]
 
-            driver = AdbTools(
-                serial=serial, use_tcp=use_tcp, remote_tcp_port=droidrun_port
-            )
+            driver = AdbTools(serial=serial, use_tcp=use_tcp, remote_tcp_port=droidrun_port)
 
         self._serial = serial
         self._adb_binary = adb_binary
@@ -208,9 +204,7 @@ class DroidRunAdapter:
         except Exception as exc:
             if not _is_portal_error(exc):
                 raise
-            self._log.warning(
-                "portal error on %s: %s; attempting self-heal", self._serial, exc
-            )
+            self._log.warning("portal error on %s: %s; attempting self-heal", self._serial, exc)
             _incr(self._serial, "portal_retry")
             try:
                 return await self._self_heal_and_retry()
@@ -227,13 +221,28 @@ class DroidRunAdapter:
     async def tap_by_text(self, text: str) -> bool:
         if self._fallback_active:
             return await self._tap_by_text_fallback(text)
+        # DroidRun AdbTools has no tap_by_text; find the element by
+        # scanning the current UI tree and tapping its centre via
+        # ``tap_by_coordinates``.
         try:
-            return bool(await self._adb.tap_by_text(text))
+            bounds = await self._find_bounds_native(text)
+            if bounds is not None:
+                cx = (bounds["left"] + bounds["right"]) // 2
+                cy = (bounds["top"] + bounds["bottom"]) // 2
+                self._log.debug("tap_by_text(%r) -> coordinates (%d, %d) on %s", text, cx, cy, self._serial)
+                return bool(await self._adb.tap_by_coordinates(cx, cy))
+            self._log.debug("tap_by_text(%r) element not found in tree on %s", text, self._serial)
+            return False
         except Exception as exc:  # noqa: BLE001
             self._log.debug("native tap_by_text(%r) failed on %s: %s", text, self._serial, exc)
             return False
 
     async def tap(self, x: int, y: int) -> bool:
+        if not self._fallback_active and hasattr(self._adb, "tap_by_coordinates"):
+            try:
+                return bool(await self._adb.tap_by_coordinates(x, y))
+            except Exception:  # noqa: BLE001
+                pass
         rc, _, _ = await self._shell(
             self._adb_binary,
             self._serial,
@@ -241,9 +250,7 @@ class DroidRunAdapter:
         )
         return rc == 0
 
-    async def swipe(
-        self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
-    ) -> None:
+    async def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:
         if self._fallback_active:
             await self._shell(
                 self._adb_binary,
@@ -254,15 +261,36 @@ class DroidRunAdapter:
         await self._adb.swipe(x1, y1, x2, y2, duration_ms)
 
     async def type_text(self, text: str) -> bool:
-        if self._fallback_active or not hasattr(self._adb, "type_text"):
+        if self._fallback_active or not hasattr(self._adb, "input_text"):
             return await self._type_text_via_shell(text)
         try:
-            return bool(await self._adb.type_text(text))
+            result = await self._adb.input_text(text)
+            return "error" not in str(result).lower()
         except Exception as exc:  # noqa: BLE001
             self._log.debug("native type_text failed on %s: %s", self._serial, exc)
-            return False
+            return await self._type_text_via_shell(text)
+
+    async def press_back(self) -> None:
+        """Press the Android BACK button (KEYCODE_BACK = 4)."""
+        if not self._fallback_active and hasattr(self._adb, "press_key"):
+            try:
+                await self._adb.press_key(4)
+                return
+            except Exception:  # noqa: BLE001
+                pass
+        await self._shell(
+            self._adb_binary,
+            self._serial,
+            ["shell", "input", "keyevent", "4"],
+        )
 
     # --- Internals --------------------------------------------------
+
+    async def _find_bounds_native(self, label: str) -> dict[str, int] | None:
+        """Scan the native UI tree for a node whose text matches *label*
+        and return its ``boundsInScreen`` dict."""
+        tree, _ = await self._get_state_native()
+        return _find_bounds_for_label(tree, label)
 
     async def _get_state_native(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
         state = await self._adb.get_state()
@@ -272,6 +300,12 @@ class DroidRunAdapter:
         elements = state[1] if len(state) > 1 else []
         if isinstance(tree, str):
             parsed_tree = _tree_from_clickable_state_text(tree)
+            # Also try Part 2 (structured list) when available.
+            structured = state[2] if len(state) > 2 and isinstance(state[2], list) else None
+            if structured:
+                tree_from_list = _tree_from_structured_elements(structured)
+                if tree_from_list is not None:
+                    return tree_from_list, []
             if parsed_tree is not None:
                 return parsed_tree, []
             return {}, elements if isinstance(elements, list) else []
@@ -305,9 +339,7 @@ class DroidRunAdapter:
             # Step 2: force-stop portal, let accessibility services
             # re-register, retry.
             _incr(self._serial, "portal_self_heal")
-            self._log.warning(
-                "portal self-heal: force-stop + restart on %s", self._serial
-            )
+            self._log.warning("portal self-heal: force-stop + restart on %s", self._serial)
             await self._shell(
                 self._adb_binary,
                 self._serial,
@@ -415,12 +447,71 @@ def _text_from_quoted(values: list[str]) -> str:
     return ""
 
 
+def _tree_from_structured_elements(elements: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """Build a UI tree from DroidRun's Part-2 structured element list.
+
+    Each element has ``index``, ``resourceId``, ``className``, ``text``,
+    ``bounds`` (as ``"x1,y1,x2,y2"`` string), and optional ``children``.
+    """
+    children: list[dict[str, Any]] = []
+    for el in elements:
+        raw_text = el.get("text", "")
+        rid = el.get("resourceId", "")
+        cls = el.get("className", "")
+        raw_bounds = el.get("bounds", "")
+        el_children = el.get("children") or []
+
+        # In DroidRun's Part 2, the ``text`` field sometimes contains
+        # a resourceId (e.g. "com.hpbr.bosszhipin:id/parent") instead
+        # of visible text.  Only use it as display text if it does NOT
+        # look like a resource id.
+        display_text = raw_text if not raw_text.startswith("com.") and ":id/" not in raw_text else ""
+
+        bounds_dict: dict[str, int] = {}
+        if isinstance(raw_bounds, str) and "," in raw_bounds:
+            parts = raw_bounds.split(",")
+            if len(parts) == 4:
+                try:
+                    bounds_dict = {
+                        "left": int(parts[0]),
+                        "top": int(parts[1]),
+                        "right": int(parts[2]),
+                        "bottom": int(parts[3]),
+                    }
+                except ValueError:
+                    pass
+        elif isinstance(raw_bounds, dict):
+            bounds_dict = raw_bounds
+
+        # Recursively convert children
+        sub_children = _tree_from_structured_elements(el_children) if el_children else None
+
+        node: dict[str, Any] = {
+            "resourceId": rid,
+            "className": cls,
+            "text": display_text,
+            "contentDescription": display_text,
+            "boundsInScreen": bounds_dict,
+            "children": sub_children["children"] if sub_children else [],
+        }
+        children.append(node)
+
+    if not children:
+        return None
+    return {
+        "resourceId": "",
+        "className": "DroidRunStructured",
+        "text": "",
+        "contentDescription": "",
+        "boundsInScreen": {"left": 0, "top": 0, "right": 0, "bottom": 0},
+        "children": children,
+    }
+
+
 # --- Tree walking utilities -----------------------------------------
 
 
-def _find_bounds_for_label(
-    tree: dict[str, Any], label: str
-) -> dict[str, int] | None:
+def _find_bounds_for_label(tree: dict[str, Any], label: str) -> dict[str, int] | None:
     """Depth-first search for the first node whose ``text`` or
     ``contentDescription`` matches ``label`` exactly.
 
@@ -436,15 +527,8 @@ def _find_bounds_for_label(
             yield from walk(child)
 
     for node in walk(tree):
-        if (node.get("text") or "").strip() == label or (
-            node.get("contentDescription") or ""
-        ).strip() == label:
+        if (node.get("text") or "").strip() == label or (node.get("contentDescription") or "").strip() == label:
             bounds = node.get("boundsInScreen")
-            if (
-                isinstance(bounds, dict)
-                and "left" in bounds
-                and "right" in bounds
-                and bounds["right"] > bounds["left"]
-            ):
+            if isinstance(bounds, dict) and "left" in bounds and "right" in bounds and bounds["right"] > bounds["left"]:
                 return bounds
     return None

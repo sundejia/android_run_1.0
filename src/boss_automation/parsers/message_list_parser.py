@@ -145,7 +145,9 @@ def _parse_live_flat_rows(nodes: list[dict[str, Any]]) -> list[ConversationSumma
     return rows
 
 
-def _parse_live_flat_row(row_nodes: list[dict[str, Any]], previous_nodes: list[dict[str, Any]]) -> ConversationSummary | None:
+def _parse_live_flat_row(
+    row_nodes: list[dict[str, Any]], previous_nodes: list[dict[str, Any]]
+) -> ConversationSummary | None:
     name = _text(row_nodes[0]) if row_nodes else None
     if not name:
         return None

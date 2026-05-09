@@ -19,8 +19,13 @@ send paths after the parser/runtime compatibility fixes:
 - Message list → unread selection → reply generation returned `dry_run_ready`
   for an unread conversation; no message was sent in dry-run mode.
 
+Post-M6 landing: `BossNavigator` brings tab-aware page navigation (BACK-retry
+loop, pre/post action navigation) into production code so all executors and
+dispatchers can drive the device end-to-end without the test script shim.
+292 BOSS unit tests pass (including 11 navigator tests).
+
 High-level completion summary: **`docs/implementation/2026-05-07-boss-pivot-m0-m6-complete.md`**.
-Latest live-device runtime report: **`docs/implementation/2026-05-08-boss-e2e-test-report.md`**.
+Latest live-device runtime report: **`docs/implementation/2026-05-09-boss-e2e-live-test-report.md`**.
 
 ## Where things live
 
@@ -35,6 +40,8 @@ Latest live-device runtime report: **`docs/implementation/2026-05-08-boss-e2e-te
 | Fixture loader | `tests/_fixtures/loader.py` |
 | Captured fixtures | `tests/fixtures/boss/<page>/<scenario>.{json,png}` |
 | Smoke regression script | `scripts/boss_smoke.py` |
+| BOSS live E2E script | `scripts/boss_e2e_live.py` |
+| BOSS page navigation | `src/boss_automation/services/boss_navigator.py` |
 | Theme overrides | `wecom-desktop/src/styles/boss-theme.css` |
 | BOSS Vue views | `wecom-desktop/src/views/boss/` |
 | Tailwind palette | `boss.*` keys in `wecom-desktop/tailwind.config.js` |
