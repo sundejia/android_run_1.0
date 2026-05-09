@@ -2,7 +2,7 @@
 
 ## Scope
 
-Operational incident and recovery on a standalone deployment of the **WeCom chatbot** FastAPI app under `/root/brain/wecom_chat` on host `8.136.11.129`. This repository (`android_run_1.0`) does not contain that application source tree; this document records facts observed during recovery so future ops and debugging stay aligned.
+Operational incident and recovery on a standalone deployment of the **WeCom chatbot** FastAPI app under `/root/brain/wecom_chat` on host `8.136.11.129`. This repository (`boss-automation`) does not contain that application source tree; this document records facts observed during recovery so future ops and debugging stay aligned.
 
 Public HTTP on port `80` serves the default nginx welcome page. The chatbot API listens on **`8000`** (`uvicorn main:app --host 0.0.0.0 --port 8000`).
 

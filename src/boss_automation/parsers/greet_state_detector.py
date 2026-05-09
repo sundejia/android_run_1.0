@@ -89,8 +89,8 @@ def _has_already_greeted(tree: dict[str, Any]) -> bool:
 def _has_ready_button(tree: dict[str, Any]) -> bool:
     wanted = set(_READY_BUTTON_IDS)
     for node in _walk(tree):
-        if node.get("resourceId") in wanted:
-            text = str(node.get("text") or "").strip()
+        text = str(node.get("text") or "").strip()
+        if node.get("resourceId") in wanted or text in _READY_BUTTON_LABELS:
             enabled = bool(node.get("enabled", True))
             if text in _READY_BUTTON_LABELS and enabled:
                 return True

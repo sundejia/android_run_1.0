@@ -26,6 +26,8 @@ class AdbPort(Protocol):
 
     async def tap_by_text(self, text: str) -> bool: ...
 
+    async def tap(self, x: int, y: int) -> bool: ...
+
     async def swipe(
         self,
         x1: int,

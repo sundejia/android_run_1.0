@@ -56,6 +56,7 @@ class FakeAdbPort:
         self._trees = list(trees)
         self._idx = 0
         self.tap_text_calls: list[str] = []
+        self.tap_calls: list[tuple[int, int]] = []
         self.swipe_calls: list[tuple[int, int, int, int, int]] = []
         # Optional hook fired before each tap (used to simulate
         # mid-flight state changes like blacklist additions).
@@ -75,6 +76,10 @@ class FakeAdbPort:
         for hook in self.before_tap_hook:
             hook(text)
         self.tap_text_calls.append(text)
+        return True
+
+    async def tap(self, x: int, y: int) -> bool:
+        self.tap_calls.append((x, y))
         return True
 
     async def swipe(self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300) -> None:

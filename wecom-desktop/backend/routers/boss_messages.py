@@ -57,6 +57,7 @@ router = APIRouter(prefix="/api/boss/messages", tags=["boss-messages"])
 OutcomeLiteral = Literal[
     "sent_template",
     "sent_ai",
+    "dry_run_ready",
     "skipped_no_unread",
     "skipped_blacklisted",
     "halted_unknown_ui",
@@ -118,6 +119,8 @@ class MessagesListResponse(BaseModel):
 
 class DispatchRequest(BaseModel):
     device_serial: str
+    dry_run: bool = True
+    confirm_send: bool = False
 
 
 class DispatchResponse(BaseModel):
@@ -257,7 +260,10 @@ async def dispatch_one(body: DispatchRequest, db_path: str = Depends(get_db_path
         ai_client=_ai_provider(),
     )
 
-    outcome = await dispatcher.dispatch_one(is_blacklisted=_blacklist_check)
+    outcome = await dispatcher.dispatch_one(
+        is_blacklisted=_blacklist_check,
+        dry_run=body.dry_run or not body.confirm_send,
+    )
 
     if outcome.kind in (DispatchKind.SENT_TEMPLATE, DispatchKind.SENT_AI):
         _persist_outbound_message(

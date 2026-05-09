@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain, shell } from 'electron'
+import electron from 'electron'
+import type { BrowserWindow as BrowserWindowInstance } from 'electron'
 import { join } from 'path'
 import {
   startMirror as startScrcpyMirror,
@@ -8,7 +9,9 @@ import {
   getActiveMirrors,
 } from './scrcpy/mirror'
 
-function createWindow(): BrowserWindow {
+const { app, BrowserWindow, ipcMain, shell } = electron
+
+function createWindow(): BrowserWindowInstance {
   const mainWindow = new BrowserWindow({
     width: 1400,
     height: 900,
@@ -41,7 +44,7 @@ function createWindow(): BrowserWindow {
   return mainWindow
 }
 
-function createSidecarWindow(serial: string): BrowserWindow {
+function createSidecarWindow(serial: string): BrowserWindowInstance {
   const sidecarWindow = new BrowserWindow({
     width: 420,
     height: 820,
@@ -72,9 +75,9 @@ function createSidecarWindow(serial: string): BrowserWindow {
 }
 
 // Track log popup windows for setAlwaysOnTop
-const logPopupWindows = new Map<number, BrowserWindow>()
+const logPopupWindows = new Map<number, BrowserWindowInstance>()
 
-function createLogPopupWindow(serial: string): BrowserWindow {
+function createLogPopupWindow(serial: string): BrowserWindowInstance {
   const logPopupWindow = new BrowserWindow({
     width: 500,
     height: 400,

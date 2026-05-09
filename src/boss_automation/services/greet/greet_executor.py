@@ -126,7 +126,11 @@ class GreetExecutor:
         self._candidate_repo.upsert_from_card(self._recruiter_id, candidate)
 
         # Open the candidate detail page.
-        opened = await self._adb.tap_by_text(candidate.name)
+        opened = False
+        if candidate.tap_x is not None and candidate.tap_y is not None:
+            opened = await self._adb.tap(candidate.tap_x, candidate.tap_y)
+        if not opened:
+            opened = await self._adb.tap_by_text(candidate.name)
         emit(GreetEvent(stage="open_card", boss_candidate_id=candidate.boss_candidate_id))
         if not opened:
             return GreetOutcome(

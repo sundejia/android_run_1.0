@@ -27,7 +27,7 @@ auto-group-invite pipeline** end-to-end:
 is_real_person ∧ face_visible`).
 5. Inspect the resulting analytics events + JSONL traces export.
 
-## Why this matters for `android_run_1.0`
+## Why this matters for `boss-automation`
 
 This repository owns the **inbound** half of the contract:
 

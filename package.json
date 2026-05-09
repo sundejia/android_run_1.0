@@ -1,5 +1,5 @@
 {
-  "name": "wecom-automation",
+  "name": "boss-automation",
   "version": "1.0.0",
   "description": "WeCom Automation - Android device automation for WeCom",
   "private": true,
@@ -14,8 +14,8 @@
     "format:python": "python -m ruff format src/ wecom-desktop/backend/",
     "typecheck": "cd wecom-desktop && npx vue-tsc --noEmit",
     "test": "npm run test:python",
-    "test:python": "pytest tests/ -v --tb=short",
-    "test:unit": "pytest tests/unit -v --tb=short"
+    "test:python": "python -m pytest -p no:logfire tests/ -v --tb=short",
+    "test:unit": "python -m pytest -p no:logfire tests/unit -v --tb=short"
   },
   "lint-staged": {
     "wecom-desktop/src/**/*.{vue,ts,tsx,js,jsx}": [

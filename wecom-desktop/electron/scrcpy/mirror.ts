@@ -6,9 +6,11 @@
  */
 
 import { spawn, ChildProcess } from 'child_process'
-import { app } from 'electron'
+import electron from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
+
+const { app } = electron
 
 export interface MirrorOptions {
   serial: string

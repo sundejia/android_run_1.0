@@ -1,0 +1,4049 @@
+{
+  "schema_version": 1,
+  "captured_at": "2026-05-08T12:12:01+00:00",
+  "device": {
+    "serial": "10AE9P1DTT002LE",
+    "model": null,
+    "android_version": null,
+    "screen_width": null,
+    "screen_height": null
+  },
+  "app": {
+    "package_name": "com.hpbr.bosszhipin",
+    "version_name": null
+  },
+  "label": "after_greet_open_20260508",
+  "page": "candidate_detail",
+  "ui_tree": {
+    "resourceId": "",
+    "className": "android.widget.FrameLayout",
+    "packageName": "com.hpbr.bosszhipin",
+    "text": "",
+    "contentDescription": "",
+    "hint": "",
+    "stateDescription": "",
+    "tooltipText": "",
+    "paneTitle": "",
+    "error": "",
+    "boundsInScreen": {
+      "left": 0,
+      "top": 0,
+      "right": 720,
+      "bottom": 1612
+    },
+    "boundsInParent": {
+      "left": 0,
+      "top": 0,
+      "right": 720,
+      "bottom": 1612
+    },
+    "isClickable": false,
+    "isLongClickable": false,
+    "isContextClickable": false,
+    "isFocusable": false,
+    "isFocused": false,
+    "isAccessibilityFocused": false,
+    "isSelected": false,
+    "isCheckable": false,
+    "isChecked": false,
+    "isEnabled": true,
+    "isVisibleToUser": true,
+    "isEditable": false,
+    "isPassword": false,
+    "isShowingHintText": false,
+    "isScrollable": false,
+    "isDismissable": false,
+    "isMultiLine": false,
+    "isImportantForAccessibility": true,
+    "isScreenReaderFocusable": false,
+    "isHeading": false,
+    "isTextSelectable": false,
+    "inputType": 0,
+    "liveRegion": 0,
+    "windowId": 746,
+    "drawingOrder": 0,
+    "maxTextLength": -1,
+    "movementGranularities": 0,
+    "childCount": 6,
+    "actionCount": 4,
+    "actionList": [
+      {
+        "id": 4,
+        "label": "",
+        "name": "SELECT"
+      },
+      {
+        "id": 8,
+        "label": "",
+        "name": "CLEAR_SELECTION"
+      },
+      {
+        "id": 64,
+        "label": "",
+        "name": "UNKNOWN_64"
+      },
+      {
+        "id": 16908342,
+        "label": "",
+        "name": "UNKNOWN_16908342"
+      }
+    ],
+    "children": [
+      {
+        "resourceId": "com.hpbr.bosszhipin:id/iv_back",
+        "className": "android.widget.ImageView",
+        "packageName": "com.hpbr.bosszhipin",
+        "text": "",
+        "contentDescription": "",
+        "hint": "",
+        "stateDescription": "",
+        "tooltipText": "",
+        "paneTitle": "",
+        "error": "",
+        "boundsInScreen": {
+          "left": 24,
+          "top": 66,
+          "right": 96,
+          "bottom": 146
+        },
+        "boundsInParent": {
+          "left": 0,
+          "top": 0,
+          "right": 72,
+          "bottom": 80
+        },
+        "isClickable": true,
+        "isLongClickable": false,
+        "isContextClickable": false,
+        "isFocusable": true,
+        "isFocused": false,
+        "isAccessibilityFocused": false,
+        "isSelected": false,
+        "isCheckable": false,
+        "isChecked": false,
+        "isEnabled": true,
+        "isVisibleToUser": true,
+        "isEditable": false,
+        "isPassword": false,
+        "isShowingHintText": false,
+        "isScrollable": false,
+        "isDismissable": false,
+        "isMultiLine": false,
+        "isImportantForAccessibility": true,
+        "isScreenReaderFocusable": false,
+        "isHeading": false,
+        "isTextSelectable": false,
+        "inputType": 0,
+        "liveRegion": 0,
+        "windowId": 746,
+        "drawingOrder": 1,
+        "maxTextLength": -1,
+        "movementGranularities": 0,
+        "childCount": 0,
+        "actionCount": 6,
+        "actionList": [
+          {
+            "id": 1,
+            "label": "",
+            "name": "FOCUS"
+          },
+          {
+            "id": 4,
+            "label": "",
+            "name": "SELECT"
+          },
+          {
+            "id": 8,
+            "label": "",
+            "name": "CLEAR_SELECTION"
+          },
+          {
+            "id": 16,
+            "label": "",
+            "name": "CLICK"
+          },
+          {
+            "id": 64,
+            "label": "",
+            "name": "UNKNOWN_64"
+          },
+          {
+            "id": 16908342,
+            "label": "",
+            "name": "UNKNOWN_16908342"
+          }
+        ],
+        "children": []
+      },
+      {
+        "resourceId": "com.hpbr.bosszhipin:id/iv_avatar_title",
+        "className": "android.widget.ImageView",
+        "packageName": "com.hpbr.bosszhipin",
+        "text": "",
+        "contentDescription": "",
+        "hint": "",
+        "stateDescription": "",
+        "tooltipText": "",
+        "paneTitle": "",
+        "error": "",
+        "boundsInScreen": {
+          "left": 96,
+          "top": 81,
+          "right": 146,
+          "bottom": 131
+        },
+        "boundsInParent": {
+          "left": 0,
+          "top": 0,
+          "right": 50,
+          "bottom": 50
+        },
+        "isClickable": true,
+        "isLongClickable": false,
+        "isContextClickable": false,
+        "isFocusable": true,
+        "isFocused": false,
+        "isAccessibilityFocused": false,
+        "isSelected": false,
+        "isCheckable": false,
+        "isChecked": false,
+        "isEnabled": true,
+        "isVisibleToUser": false,
+        "isEditable": false,
+        "isPassword": false,
+        "isShowingHintText": false,
+        "isScrollable": false,
+        "isDismissable": false,
+        "isMultiLine": false,
+        "isImportantForAccessibility": true,
+        "isScreenReaderFocusable": false,
+        "isHeading": false,
+        "isTextSelectable": false,
+        "inputType": 0,
+        "liveRegion": 0,
+        "windowId": 746,
+        "drawingOrder": 2,
+        "maxTextLength": -1,
+        "movementGranularities": 0,
+        "childCount": 0,
+        "actionCount": 6,
+        "actionList": [
+          {
+            "id": 1,
+            "label": "",
+            "name": "FOCUS"
+          },
+          {
+            "id": 4,
+            "label": "",
+            "name": "SELECT"
+          },
+          {
+            "id": 8,
+            "label": "",
+            "name": "CLEAR_SELECTION"
+          },
+          {
+            "id": 16,
+            "label": "",
+            "name": "CLICK"
+          },
+          {
+            "id": 64,
+            "label": "",
+            "name": "UNKNOWN_64"
+          },
+          {
+            "id": 16908342,
+            "label": "",
+            "name": "UNKNOWN_16908342"
+          }
+        ],
+        "children": []
+      },
+      {
+        "resourceId": "com.hpbr.bosszhipin:id/tv_title",
+        "className": "android.widget.TextView",
+        "packageName": "com.hpbr.bosszhipin",
+        "text": "王卓",
+        "contentDescription": "",
+        "hint": "",
+        "stateDescription": "",
+        "tooltipText": "",
+        "paneTitle": "",
+        "error": "",
+        "boundsInScreen": {
+          "left": 166,
+          "top": 85,
+          "right": 230,
+          "bottom": 128
+        },
+        "boundsInParent": {
+          "left": 0,
+          "top": 0,
+          "right": 64,
+          "bottom": 43
+        },
+        "isClickable": false,
+        "isLongClickable": false,
+        "isContextClickable": false,
+        "isFocusable": false,
+        "isFocused": false,
+        "isAccessibilityFocused": false,
+        "isSelected": false,
+        "isCheckable": false,
+        "isChecked": false,
+        "isEnabled": true,
+        "isVisibleToUser": false,
+        "isEditable": false,
+        "isPassword": false,
+        "isShowingHintText": false,
+        "isScrollable": false,
+        "isDismissable": false,
+        "isMultiLine": false,
+        "isImportantForAccessibility": true,
+        "isScreenReaderFocusable": false,
+        "isHeading": false,
+        "isTextSelectable": false,
+        "textSelectionStart": -1,
+        "textSelectionEnd": -1,
+        "inputType": 0,
+        "liveRegion": 0,
+        "windowId": 746,
+        "drawingOrder": 3,
+        "maxTextLength": -1,
+        "movementGranularities": 31,
+        "childCount": 0,
+        "actionCount": 7,
+        "actionList": [
+          {
+            "id": 4,
+            "label": "",
+            "name": "SELECT"
+          },
+          {
+            "id": 8,
+            "label": "",
+            "name": "CLEAR_SELECTION"
+          },
+          {
+            "id": 64,
+            "label": "",
+            "name": "UNKNOWN_64"
+          },
+          {
+            "id": 256,
+            "label": "",
+            "name": "UNKNOWN_256"
+          },
+          {
+            "id": 512,
+            "label": "",
+            "name": "UNKNOWN_512"
+          },
+          {
+            "id": 131072,
+            "label": "",
+            "name": "UNKNOWN_131072"
+          },
+          {
+            "id": 16908342,
+            "label": "",
+            "name": "UNKNOWN_16908342"
+          }
+        ],
+        "children": []
+      },
+      {
+        "resourceId": "com.hpbr.bosszhipin:id/title_actions",
+        "className": "androidx.recyclerview.widget.RecyclerView",
+        "packageName": "com.hpbr.bosszhipin",
+        "text": "",
+        "contentDescription": "",
+        "hint": "",
+        "stateDescription": "",
+        "tooltipText": "",
+        "paneTitle": "",
+        "error": "",
+        "boundsInScreen": {
+          "left": 376,
+          "top": 66,
+          "right": 696,
+          "bottom": 146
+        },
+        "boundsInParent": {
+          "left": 0,
+          "top": 0,
+          "right": 320,
+          "bottom": 80
+        },
+        "isClickable": false,
+        "isLongClickable": false,
+        "isContextClickable": false,
+        "isFocusable": true,
+        "isFocused": false,
+        "isAccessibilityFocused": false,
+        "isSelected": false,
+        "isCheckable": false,
+        "isChecked": false,
+        "isEnabled": true,
+        "isVisibleToUser": true,
+        "isEditable": false,
+        "isPassword": false,
+        "isShowingHintText": false,
+        "isScrollable": false,
+        "isDismissable": false,
+        "isMultiLine": false,
+        "isImportantForAccessibility": true,
+        "isScreenReaderFocusable": false,
+        "isHeading": false,
+        "isTextSelectable": false,
+        "inputType": 0,
+        "liveRegion": 0,
+        "windowId": 746,
+        "drawingOrder": 4,
+        "maxTextLength": -1,
+        "movementGranularities": 0,
+        "childCount": 4,
+        "actionCount": 5,
+        "collectionInfo": {
+          "rowCount": -1,
+          "columnCount": -1,
+          "isHierarchical": false,
+          "selectionMode": 0
+        },
+        "actionList": [
+          {
+            "id": 1,
+            "label": "",
+            "name": "FOCUS"
+          },
+          {
+            "id": 4,
+            "label": "",
+            "name": "SELECT"
+          },
+          {
+            "id": 8,
+            "label": "",
+            "name": "CLEAR_SELECTION"
+          },
+          {
+            "id": 64,
+            "label": "",
+            "name": "UNKNOWN_64"
+          },
+          {
+            "id": 16908342,
+            "label": "",
+            "name": "UNKNOWN_16908342"
+          }
+        ],
+        "children": [
+          {
+            "resourceId": "com.hpbr.bosszhipin:id/cl_parent",
+            "className": "android.view.ViewGroup",
+            "packageName": "com.hpbr.bosszhipin",
+            "text": "",
+            "contentDescription": "",
+            "hint": "",
+            "stateDescription": "",
+            "tooltipText": "",
+            "paneTitle": "",
+            "error": "",
+            "boundsInScreen": {
+              "left": 376,
+              "top": 66,
+              "right": 456,
+              "bottom": 146
+            },
+            "boundsInParent": {
+              "left": 0,
+              "top": 0,
+              "right": 80,
+              "bottom": 80
+            },
+            "isClickable": true,
+            "isLongClickable": false,
+            "isContextClickable": false,
+            "isFocusable": true,
+            "isFocused": false,
+            "isAccessibilityFocused": false,
+            "isSelected": false,
+            "isCheckable": false,
+            "isChecked": false,
+            "isEnabled": true,
+            "isVisibleToUser": true,
+            "isEditable": false,
+            "isPassword": false,
+            "isShowingHintText": false,
+            "isScrollable": false,
+            "isDismissable": false,
+            "isMultiLine": false,
+            "isImportantForAccessibility": true,
+            "isScreenReaderFocusable": false,
+            "isHeading": false,
+            "isTextSelectable": false,
+            "inputType": 0,
+            "liveRegion": 0,
+            "windowId": 746,
+            "drawingOrder": 1,
+            "maxTextLength": -1,
+            "movementGranularities": 0,
+            "childCount": 0,
+            "actionCount": 6,
+            "actionList": [
+              {
+                "id": 1,
+                "label": "",
+                "name": "FOCUS"
+              },
+              {
+                "id": 4,
+                "label": "",
+                "name": "SELECT"
+              },
+              {
+                "id": 8,
+                "label": "",
+                "name": "CLEAR_SELECTION"
+              },
+              {
+                "id": 16,
+                "label": "",
+                "name": "CLICK"
+              },
+              {
+                "id": 64,
+                "label": "",
+                "name": "UNKNOWN_64"
+              },
+              {
+                "id": 16908342,
+                "label": "",
+                "name": "UNKNOWN_16908342"
+              }
+            ],
+            "children": []
+          },
+          {
+            "resourceId": "com.hpbr.bosszhipin:id/cl_parent",
+            "className": "android.view.ViewGroup",
+            "packageName": "com.hpbr.bosszhipin",
+            "text": "",
+            "contentDescription": "",
+            "hint": "",
+            "stateDescription": "",
+            "tooltipText": "",
+            "paneTitle": "",
+            "error": "",
+            "boundsInScreen": {
+              "left": 456,
+              "top": 66,
+              "right": 536,
+              "bottom": 146
+            },
+            "boundsInParent": {
+              "left": 0,
+              "top": 0,
+              "right": 80,
+              "bottom": 80
+            },
+            "isClickable": true,
+            "isLongClickable": false,
+            "isContextClickable": false,
+            "isFocusable": true,
+            "isFocused": false,
+            "isAccessibilityFocused": false,
+            "isSelected": false,
+            "isCheckable": false,
+            "isChecked": false,
+            "isEnabled": true,
+            "isVisibleToUser": true,
+            "isEditable": false,
+            "isPassword": false,
+            "isShowingHintText": false,
+            "isScrollable": false,
+            "isDismissable": false,
+            "isMultiLine": false,
+            "isImportantForAccessibility": true,
+            "isScreenReaderFocusable": false,
+            "isHeading": false,
+            "isTextSelectable": false,
+            "inputType": 0,
+            "liveRegion": 0,
+            "windowId": 746,
+            "drawingOrder": 2,
+            "maxTextLength": -1,
+            "movementGranularities": 0,
+            "childCount": 0,
+            "actionCount": 6,
+            "actionList": [
+              {
+                "id": 1,
+                "label": "",
+                "name": "FOCUS"
+              },
+              {
+                "id": 4,
+                "label": "",
+                "name": "SELECT"
+              },
+              {
+                "id": 8,
+                "label": "",
+                "name": "CLEAR_SELECTION"
+              },
+              {
+                "id": 16,
+                "label": "",
+                "name": "CLICK"
+              },
+              {
+                "id": 64,
+                "label": "",
+                "name": "UNKNOWN_64"
+              },
+              {
+                "id": 16908342,
+                "label": "",
+                "name": "UNKNOWN_16908342"
+              }
+            ],
+            "children": []
+          },
+          {
+            "resourceId": "com.hpbr.bosszhipin:id/cl_parent",
+            "className": "android.view.ViewGroup",
+            "packageName": "com.hpbr.bosszhipin",
+            "text": "",
+            "contentDescription": "",
+            "hint": "",
+            "stateDescription": "",
+            "tooltipText": "",
+            "paneTitle": "",
+            "error": "",
+            "boundsInScreen": {
+              "left": 536,
+              "top": 66,
+              "right": 616,
+              "bottom": 146
+            },
+            "boundsInParent": {
+              "left": 0,
+              "top": 0,
+              "right": 80,
+              "bottom": 80
+            },
+            "isClickable": true,
+            "isLongClickable": false,
+            "isContextClickable": false,
+            "isFocusable": true,
+            "isFocused": false,
+            "isAccessibilityFocused": false,
+            "isSelected": false,
+            "isCheckable": false,
+            "isChecked": false,
+            "isEnabled": true,
+            "isVisibleToUser": true,
+            "isEditable": false,
+            "isPassword": false,
+            "isShowingHintText": false,
+            "isScrollable": false,
+            "isDismissable": false,
+            "isMultiLine": false,
+            "isImportantForAccessibility": true,
+            "isScreenReaderFocusable": false,
+            "isHeading": false,
+            "isTextSelectable": false,
+            "inputType": 0,
+            "liveRegion": 0,
+            "windowId": 746,
+            "drawingOrder": 3,
+            "maxTextLength": -1,
+            "movementGranularities": 0,
+            "childCount": 0,
+            "actionCount": 6,
+            "actionList": [
+              {
+                "id": 1,
+                "label": "",
+                "name": "FOCUS"
+              },
+              {
+                "id": 4,
+                "label": "",
+                "name": "SELECT"
+              },
+              {
+                "id": 8,
+                "label": "",
+                "name": "CLEAR_SELECTION"
+              },
+              {
+                "id": 16,
+                "label": "",
+                "name": "CLICK"
+              },
+              {
+                "id": 64,
+                "label": "",
+                "name": "UNKNOWN_64"
+              },
+              {
+                "id": 16908342,
+                "label": "",
+                "name": "UNKNOWN_16908342"
+              }
+            ],
+            "children": []
+          },
+          {
+            "resourceId": "com.hpbr.bosszhipin:id/cl_parent",
+            "className": "android.view.ViewGroup",
+            "packageName": "com.hpbr.bosszhipin",
+            "text": "",
+            "contentDescription": "",
+            "hint": "",
+            "stateDescription": "",
+            "tooltipText": "",
+            "paneTitle": "",
+            "error": "",
+            "boundsInScreen": {
+              "left": 616,
+              "top": 66,
+              "right": 696,
+              "bottom": 146
+            },
+            "boundsInParent": {
+              "left": 0,
+              "top": 0,
+              "right": 80,
+              "bottom": 80
+            },
+            "isClickable": true,
+            "isLongClickable": false,
+            "isContextClickable": false,
+            "isFocusable": true,
+            "isFocused": false,
+            "isAccessibilityFocused": false,
+            "isSelected": false,
+            "isCheckable": false,
+            "isChecked": false,
+            "isEnabled": true,
+            "isVisibleToUser": true,
+            "isEditable": false,
+            "isPassword": false,
+            "isShowingHintText": false,
+            "isScrollable": false,
+            "isDismissable": false,
+            "isMultiLine": false,
+            "isImportantForAccessibility": true,
+            "isScreenReaderFocusable": false,
+            "isHeading": false,
+            "isTextSelectable": false,
+            "inputType": 0,
+            "liveRegion": 0,
+            "windowId": 746,
+            "drawingOrder": 4,
+            "maxTextLength": -1,
+            "movementGranularities": 0,
+            "childCount": 0,
+            "actionCount": 6,
+            "actionList": [
+              {
+                "id": 1,
+                "label": "",
+                "name": "FOCUS"
+              },
+              {
+                "id": 4,
+                "label": "",
+                "name": "SELECT"
+              },
+              {
+                "id": 8,
+                "label": "",
+                "name": "CLEAR_SELECTION"
+              },
+              {
+                "id": 16,
+                "label": "",
+                "name": "CLICK"
+              },
+              {
+                "id": 64,
+                "label": "",
+                "name": "UNKNOWN_64"
+              },
+              {
+                "id": 16908342,
+                "label": "",
+                "name": "UNKNOWN_16908342"
+              }
+            ],
+            "children": []
+          }
+        ]
+      },
+      {
+        "resourceId": "com.hpbr.bosszhipin:id/view_pager",
+        "className": "androidx.viewpager.widget.ViewPager",
+        "packageName": "com.hpbr.bosszhipin",
+        "text": "",
+        "contentDescription": "",
+        "hint": "",
+        "stateDescription": "",
+        "tooltipText": "",
+        "paneTitle": "",
+        "error": "",
+        "boundsInScreen": {
+          "left": 0,
+          "top": 156,
+          "right": 720,
+          "bottom": 1462
+        },
+        "boundsInParent": {
+          "left": 0,
+          "top": 0,
+          "right": 720,
+          "bottom": 1306
+        },
+        "isClickable": false,
+        "isLongClickable": false,
+        "isContextClickable": false,
+        "isFocusable": true,
+        "isFocused": false,
+        "isAccessibilityFocused": false,
+        "isSelected": false,
+        "isCheckable": false,
+        "isChecked": false,
+        "isEnabled": true,
+        "isVisibleToUser": true,
+        "isEditable": false,
+        "isPassword": false,
+        "isShowingHintText": false,
+        "isScrollable": true,
+        "isDismissable": false,
+        "isMultiLine": false,
+        "isImportantForAccessibility": true,
+        "isScreenReaderFocusable": false,
+        "isHeading": false,
+        "isTextSelectable": false,
+        "inputType": 0,
+        "liveRegion": 0,
+        "windowId": 746,
+        "drawingOrder": 5,
+        "maxTextLength": -1,
+        "movementGranularities": 0,
+        "childCount": 2,
+        "actionCount": 6,
+        "actionList": [
+          {
+            "id": 1,
+            "label": "",
+            "name": "FOCUS"
+          },
+          {
+            "id": 4,
+            "label": "",
+            "name": "SELECT"
+          },
+          {
+            "id": 8,
+            "label": "",
+            "name": "CLEAR_SELECTION"
+          },
+          {
+            "id": 64,
+            "label": "",
+            "name": "UNKNOWN_64"
+          },
+          {
+            "id": 4096,
+            "label": "",
+            "name": "SCROLL_FORWARD"
+          },
+          {
+            "id": 16908342,
+            "label": "",
+            "name": "UNKNOWN_16908342"
+          }
+        ],
+        "children": [
+          {
+            "resourceId": "com.hpbr.bosszhipin:id/rv_list",
+            "className": "androidx.recyclerview.widget.RecyclerView",
+            "packageName": "com.hpbr.bosszhipin",
+            "text": "",
+            "contentDescription": "",
+            "hint": "",
+            "stateDescription": "",
+            "tooltipText": "",
+            "paneTitle": "",
+            "error": "",
+            "boundsInScreen": {
+              "left": 0,
+              "top": 156,
+              "right": 720,
+              "bottom": 1462
+            },
+            "boundsInParent": {
+              "left": 0,
+              "top": 0,
+              "right": 720,
+              "bottom": 1306
+            },
+            "isClickable": false,
+            "isLongClickable": false,
+            "isContextClickable": false,
+            "isFocusable": true,
+            "isFocused": false,
+            "isAccessibilityFocused": false,
+            "isSelected": false,
+            "isCheckable": false,
+            "isChecked": false,
+            "isEnabled": true,
+            "isVisibleToUser": true,
+            "isEditable": false,
+            "isPassword": false,
+            "isShowingHintText": false,
+            "isScrollable": true,
+            "isDismissable": false,
+            "isMultiLine": false,
+            "isImportantForAccessibility": true,
+            "isScreenReaderFocusable": false,
+            "isHeading": false,
+            "isTextSelectable": false,
+            "inputType": 0,
+            "liveRegion": 0,
+            "windowId": 746,
+            "drawingOrder": 1,
+            "maxTextLength": -1,
+            "movementGranularities": 0,
+            "childCount": 10,
+            "actionCount": 6,
+            "collectionInfo": {
+              "rowCount": -1,
+              "columnCount": -1,
+              "isHierarchical": false,
+              "selectionMode": 0
+            },
+            "actionList": [
+              {
+                "id": 1,
+                "label": "",
+                "name": "FOCUS"
+              },
+              {
+                "id": 4,
+                "label": "",
+                "name": "SELECT"
+              },
+              {
+                "id": 8,
+                "label": "",
+                "name": "CLEAR_SELECTION"
+              },
+              {
+                "id": 64,
+                "label": "",
+                "name": "UNKNOWN_64"
+              },
+              {
+                "id": 4096,
+                "label": "",
+                "name": "SCROLL_FORWARD"
+              },
+              {
+                "id": 16908342,
+                "label": "",
+                "name": "UNKNOWN_16908342"
+              }
+            ],
+            "children": [
+              {
+                "resourceId": "",
+                "className": "android.view.ViewGroup",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 156,
+                  "right": 720,
+                  "bottom": 351
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 195
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 1,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 3,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_geek_name",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "王卓",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 196,
+                      "right": 152,
+                      "bottom": 262
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 112,
+                      "bottom": 66
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_job_and_com",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "飞趣游戏·用户运营",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 270,
+                      "right": 540,
+                      "bottom": 311
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 500,
+                      "bottom": 41
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 2,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/iv_avatar",
+                    "className": "android.widget.ImageView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 560,
+                      "top": 196,
+                      "right": 680,
+                      "bottom": 316
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 120,
+                      "bottom": 120
+                    },
+                    "isClickable": true,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": true,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 4,
+                    "maxTextLength": -1,
+                    "movementGranularities": 0,
+                    "childCount": 0,
+                    "actionCount": 6,
+                    "actionList": [
+                      {
+                        "id": 1,
+                        "label": "",
+                        "name": "FOCUS"
+                      },
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 16,
+                        "label": "",
+                        "name": "CLICK"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "resourceId": "",
+                "className": "android.widget.FrameLayout",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 351,
+                  "right": 720,
+                  "bottom": 352
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 1
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 2,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 0,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": []
+              },
+              {
+                "resourceId": "",
+                "className": "android.view.ViewGroup",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 352,
+                  "right": 720,
+                  "bottom": 745
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 393
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 3,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 5,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_geek_work_status",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "离职-随时到岗",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 392,
+                      "right": 246,
+                      "bottom": 435
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 206,
+                      "bottom": 43
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_geek_work_year",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "10年",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 465,
+                      "right": 140,
+                      "bottom": 503
+                    },
+                    "boundsInParent": {
+                      "left": 524259,
+                      "top": 0,
+                      "right": 524359,
+                      "bottom": 38
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 4,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_geek_degree",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "大专",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 180,
+                      "top": 465,
+                      "right": 278,
+                      "bottom": 503
+                    },
+                    "boundsInParent": {
+                      "left": 524260,
+                      "top": 0,
+                      "right": 524358,
+                      "bottom": 38
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 5,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_geek_age",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "30岁",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 318,
+                      "top": 465,
+                      "right": 421,
+                      "bottom": 503
+                    },
+                    "boundsInParent": {
+                      "left": 524257,
+                      "top": 0,
+                      "right": 524360,
+                      "bottom": 38
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 6,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_geek_description",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "细心从每一个小细节开始。\n具备数据分析能力，可通过数据洞察业务逻辑；擅长沟通协作，注重贴近用户需求，能高效推动跨部门合作。本人热爱摄影与骑行...  查看全部",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 533,
+                      "right": 680,
+                      "bottom": 705
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 640,
+                      "bottom": 172
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": true,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 8,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 8,
+                    "actionList": [
+                      {
+                        "id": 1,
+                        "label": "",
+                        "name": "FOCUS"
+                      },
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "resourceId": "",
+                "className": "android.widget.LinearLayout",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 745,
+                  "right": 720,
+                  "bottom": 857
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 112
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 4,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 1,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/rv_list",
+                    "className": "androidx.recyclerview.widget.RecyclerView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 0,
+                      "top": 745,
+                      "right": 720,
+                      "bottom": 857
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 720,
+                      "bottom": 112
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": true,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 0,
+                    "childCount": 1,
+                    "actionCount": 5,
+                    "collectionInfo": {
+                      "rowCount": -1,
+                      "columnCount": -1,
+                      "isHierarchical": false,
+                      "selectionMode": 0
+                    },
+                    "actionList": [
+                      {
+                        "id": 1,
+                        "label": "",
+                        "name": "FOCUS"
+                      },
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": [
+                      {
+                        "resourceId": "com.hpbr.bosszhipin:id/videoResumeLayout",
+                        "className": "android.view.ViewGroup",
+                        "packageName": "com.hpbr.bosszhipin",
+                        "text": "",
+                        "contentDescription": "",
+                        "hint": "",
+                        "stateDescription": "",
+                        "tooltipText": "",
+                        "paneTitle": "",
+                        "error": "",
+                        "boundsInScreen": {
+                          "left": 40,
+                          "top": 745,
+                          "right": 680,
+                          "bottom": 857
+                        },
+                        "boundsInParent": {
+                          "left": 0,
+                          "top": 0,
+                          "right": 640,
+                          "bottom": 112
+                        },
+                        "isClickable": true,
+                        "isLongClickable": false,
+                        "isContextClickable": false,
+                        "isFocusable": true,
+                        "isFocused": false,
+                        "isAccessibilityFocused": false,
+                        "isSelected": false,
+                        "isCheckable": false,
+                        "isChecked": false,
+                        "isEnabled": true,
+                        "isVisibleToUser": true,
+                        "isEditable": false,
+                        "isPassword": false,
+                        "isShowingHintText": false,
+                        "isScrollable": false,
+                        "isDismissable": false,
+                        "isMultiLine": false,
+                        "isImportantForAccessibility": true,
+                        "isScreenReaderFocusable": false,
+                        "isHeading": false,
+                        "isTextSelectable": false,
+                        "inputType": 0,
+                        "liveRegion": 0,
+                        "windowId": 746,
+                        "drawingOrder": 1,
+                        "maxTextLength": -1,
+                        "movementGranularities": 0,
+                        "childCount": 2,
+                        "actionCount": 6,
+                        "actionList": [
+                          {
+                            "id": 1,
+                            "label": "",
+                            "name": "FOCUS"
+                          },
+                          {
+                            "id": 4,
+                            "label": "",
+                            "name": "SELECT"
+                          },
+                          {
+                            "id": 8,
+                            "label": "",
+                            "name": "CLEAR_SELECTION"
+                          },
+                          {
+                            "id": 16,
+                            "label": "",
+                            "name": "CLICK"
+                          },
+                          {
+                            "id": 64,
+                            "label": "",
+                            "name": "UNKNOWN_64"
+                          },
+                          {
+                            "id": 16908342,
+                            "label": "",
+                            "name": "UNKNOWN_16908342"
+                          }
+                        ],
+                        "children": [
+                          {
+                            "resourceId": "com.hpbr.bosszhipin:id/tv_title",
+                            "className": "android.widget.TextView",
+                            "packageName": "com.hpbr.bosszhipin",
+                            "text": "已上传简历",
+                            "contentDescription": "",
+                            "hint": "",
+                            "stateDescription": "",
+                            "tooltipText": "",
+                            "paneTitle": "",
+                            "error": "",
+                            "boundsInScreen": {
+                              "left": 136,
+                              "top": 782,
+                              "right": 488,
+                              "bottom": 820
+                            },
+                            "boundsInParent": {
+                              "left": 0,
+                              "top": 0,
+                              "right": 352,
+                              "bottom": 38
+                            },
+                            "isClickable": false,
+                            "isLongClickable": false,
+                            "isContextClickable": false,
+                            "isFocusable": false,
+                            "isFocused": false,
+                            "isAccessibilityFocused": false,
+                            "isSelected": false,
+                            "isCheckable": false,
+                            "isChecked": false,
+                            "isEnabled": true,
+                            "isVisibleToUser": true,
+                            "isEditable": false,
+                            "isPassword": false,
+                            "isShowingHintText": false,
+                            "isScrollable": false,
+                            "isDismissable": false,
+                            "isMultiLine": false,
+                            "isImportantForAccessibility": true,
+                            "isScreenReaderFocusable": false,
+                            "isHeading": false,
+                            "isTextSelectable": false,
+                            "textSelectionStart": -1,
+                            "textSelectionEnd": -1,
+                            "inputType": 0,
+                            "liveRegion": 0,
+                            "windowId": 746,
+                            "drawingOrder": 1,
+                            "maxTextLength": -1,
+                            "movementGranularities": 31,
+                            "childCount": 0,
+                            "actionCount": 7,
+                            "actionList": [
+                              {
+                                "id": 4,
+                                "label": "",
+                                "name": "SELECT"
+                              },
+                              {
+                                "id": 8,
+                                "label": "",
+                                "name": "CLEAR_SELECTION"
+                              },
+                              {
+                                "id": 64,
+                                "label": "",
+                                "name": "UNKNOWN_64"
+                              },
+                              {
+                                "id": 256,
+                                "label": "",
+                                "name": "UNKNOWN_256"
+                              },
+                              {
+                                "id": 512,
+                                "label": "",
+                                "name": "UNKNOWN_512"
+                              },
+                              {
+                                "id": 131072,
+                                "label": "",
+                                "name": "UNKNOWN_131072"
+                              },
+                              {
+                                "id": 16908342,
+                                "label": "",
+                                "name": "UNKNOWN_16908342"
+                              }
+                            ],
+                            "children": []
+                          },
+                          {
+                            "resourceId": "com.hpbr.bosszhipin:id/btn_desc",
+                            "className": "android.widget.Button",
+                            "packageName": "com.hpbr.bosszhipin",
+                            "text": "沟通获取",
+                            "contentDescription": "",
+                            "hint": "",
+                            "stateDescription": "",
+                            "tooltipText": "",
+                            "paneTitle": "",
+                            "error": "",
+                            "boundsInScreen": {
+                              "left": 508,
+                              "top": 775,
+                              "right": 652,
+                              "bottom": 828
+                            },
+                            "boundsInParent": {
+                              "left": 0,
+                              "top": 0,
+                              "right": 144,
+                              "bottom": 53
+                            },
+                            "isClickable": false,
+                            "isLongClickable": false,
+                            "isContextClickable": false,
+                            "isFocusable": false,
+                            "isFocused": false,
+                            "isAccessibilityFocused": false,
+                            "isSelected": false,
+                            "isCheckable": false,
+                            "isChecked": false,
+                            "isEnabled": true,
+                            "isVisibleToUser": true,
+                            "isEditable": false,
+                            "isPassword": false,
+                            "isShowingHintText": false,
+                            "isScrollable": false,
+                            "isDismissable": false,
+                            "isMultiLine": true,
+                            "isImportantForAccessibility": true,
+                            "isScreenReaderFocusable": false,
+                            "isHeading": false,
+                            "isTextSelectable": false,
+                            "textSelectionStart": -1,
+                            "textSelectionEnd": -1,
+                            "inputType": 0,
+                            "liveRegion": 0,
+                            "windowId": 746,
+                            "drawingOrder": 2,
+                            "maxTextLength": 5,
+                            "movementGranularities": 31,
+                            "childCount": 0,
+                            "actionCount": 7,
+                            "actionList": [
+                              {
+                                "id": 4,
+                                "label": "",
+                                "name": "SELECT"
+                              },
+                              {
+                                "id": 8,
+                                "label": "",
+                                "name": "CLEAR_SELECTION"
+                              },
+                              {
+                                "id": 64,
+                                "label": "",
+                                "name": "UNKNOWN_64"
+                              },
+                              {
+                                "id": 256,
+                                "label": "",
+                                "name": "UNKNOWN_256"
+                              },
+                              {
+                                "id": 512,
+                                "label": "",
+                                "name": "UNKNOWN_512"
+                              },
+                              {
+                                "id": 131072,
+                                "label": "",
+                                "name": "UNKNOWN_131072"
+                              },
+                              {
+                                "id": 16908342,
+                                "label": "",
+                                "name": "UNKNOWN_16908342"
+                              }
+                            ],
+                            "children": []
+                          }
+                        ]
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "resourceId": "",
+                "className": "android.view.ViewGroup",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 857,
+                  "right": 720,
+                  "bottom": 945
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 88
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 5,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 1,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_section_title",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "求职期望",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 897,
+                      "right": 720,
+                      "bottom": 945
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 680,
+                      "bottom": 48
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "resourceId": "",
+                "className": "android.view.ViewGroup",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 945,
+                  "right": 720,
+                  "bottom": 1126
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 181
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 6,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 3,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_job_and_city",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "经纪人/星探，广州",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 985,
+                      "right": 423,
+                      "bottom": 1028
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 383,
+                      "bottom": 43
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_salary",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "5000-9000元",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 453,
+                      "top": 981,
+                      "right": 680,
+                      "bottom": 1029
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 227,
+                      "bottom": 48
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 2,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_industry",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "行业不限",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 1048,
+                      "right": 152,
+                      "bottom": 1086
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 112,
+                      "bottom": 38
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 3,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "resourceId": "",
+                "className": "android.widget.FrameLayout",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 1126,
+                  "right": 720,
+                  "bottom": 1127
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 1
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 7,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 0,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": []
+              },
+              {
+                "resourceId": "",
+                "className": "android.view.ViewGroup",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 1127,
+                  "right": 720,
+                  "bottom": 1215
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 88
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 8,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 1,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_section_title",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "工作经历",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 1167,
+                      "right": 720,
+                      "bottom": 1215
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 680,
+                      "bottom": 48
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "resourceId": "com.hpbr.bosszhipin:id/fl_root",
+                "className": "android.widget.FrameLayout",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 40,
+                  "top": 1215,
+                  "right": 680,
+                  "bottom": 1343
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 640,
+                  "bottom": 128
+                },
+                "isClickable": true,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": true,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 9,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 3,
+                "actionCount": 6,
+                "actionList": [
+                  {
+                    "id": 1,
+                    "label": "",
+                    "name": "FOCUS"
+                  },
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 16,
+                    "label": "",
+                    "name": "CLICK"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/iv_close",
+                    "className": "android.widget.ImageView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 1261,
+                      "right": 116,
+                      "bottom": 1337
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 76,
+                      "bottom": 76
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 0,
+                    "childCount": 0,
+                    "actionCount": 4,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_tip",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "最近一份工作经历可能未更新",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 120,
+                      "top": 1281,
+                      "right": 512,
+                      "bottom": 1317
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 392,
+                      "bottom": 36
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 2,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_ask_ta",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "询问Ta",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 538,
+                      "top": 1261,
+                      "right": 660,
+                      "bottom": 1337
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 122,
+                      "bottom": 76
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 3,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  }
+                ]
+              },
+              {
+                "resourceId": "",
+                "className": "android.widget.LinearLayout",
+                "packageName": "com.hpbr.bosszhipin",
+                "text": "",
+                "contentDescription": "",
+                "hint": "",
+                "stateDescription": "",
+                "tooltipText": "",
+                "paneTitle": "",
+                "error": "",
+                "boundsInScreen": {
+                  "left": 0,
+                  "top": 1343,
+                  "right": 720,
+                  "bottom": 1462
+                },
+                "boundsInParent": {
+                  "left": 0,
+                  "top": 0,
+                  "right": 720,
+                  "bottom": 1153
+                },
+                "isClickable": false,
+                "isLongClickable": false,
+                "isContextClickable": false,
+                "isFocusable": false,
+                "isFocused": false,
+                "isAccessibilityFocused": false,
+                "isSelected": false,
+                "isCheckable": false,
+                "isChecked": false,
+                "isEnabled": true,
+                "isVisibleToUser": true,
+                "isEditable": false,
+                "isPassword": false,
+                "isShowingHintText": false,
+                "isScrollable": false,
+                "isDismissable": false,
+                "isMultiLine": false,
+                "isImportantForAccessibility": true,
+                "isScreenReaderFocusable": false,
+                "isHeading": false,
+                "isTextSelectable": false,
+                "inputType": 0,
+                "liveRegion": 0,
+                "windowId": 746,
+                "drawingOrder": 10,
+                "maxTextLength": -1,
+                "movementGranularities": 0,
+                "childCount": 9,
+                "actionCount": 4,
+                "actionList": [
+                  {
+                    "id": 4,
+                    "label": "",
+                    "name": "SELECT"
+                  },
+                  {
+                    "id": 8,
+                    "label": "",
+                    "name": "CLEAR_SELECTION"
+                  },
+                  {
+                    "id": 64,
+                    "label": "",
+                    "name": "UNKNOWN_64"
+                  },
+                  {
+                    "id": 16908342,
+                    "label": "",
+                    "name": "UNKNOWN_16908342"
+                  }
+                ],
+                "children": [
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/cl_company",
+                    "className": "android.view.ViewGroup",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 1383,
+                      "right": 680,
+                      "bottom": 1426
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 640,
+                      "bottom": 43
+                    },
+                    "isClickable": true,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": true,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": false,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 1,
+                    "maxTextLength": -1,
+                    "movementGranularities": 0,
+                    "childCount": 2,
+                    "actionCount": 6,
+                    "actionList": [
+                      {
+                        "id": 1,
+                        "label": "",
+                        "name": "FOCUS"
+                      },
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 16,
+                        "label": "",
+                        "name": "CLICK"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": [
+                      {
+                        "resourceId": "com.hpbr.bosszhipin:id/tv_work_company",
+                        "className": "android.widget.TextView",
+                        "packageName": "com.hpbr.bosszhipin",
+                        "text": "飞趣游戏",
+                        "contentDescription": "",
+                        "hint": "",
+                        "stateDescription": "",
+                        "tooltipText": "",
+                        "paneTitle": "",
+                        "error": "",
+                        "boundsInScreen": {
+                          "left": 40,
+                          "top": 1383,
+                          "right": 168,
+                          "bottom": 1426
+                        },
+                        "boundsInParent": {
+                          "left": 0,
+                          "top": 0,
+                          "right": 128,
+                          "bottom": 43
+                        },
+                        "isClickable": false,
+                        "isLongClickable": false,
+                        "isContextClickable": false,
+                        "isFocusable": false,
+                        "isFocused": false,
+                        "isAccessibilityFocused": false,
+                        "isSelected": false,
+                        "isCheckable": false,
+                        "isChecked": false,
+                        "isEnabled": true,
+                        "isVisibleToUser": true,
+                        "isEditable": false,
+                        "isPassword": false,
+                        "isShowingHintText": false,
+                        "isScrollable": false,
+                        "isDismissable": false,
+                        "isMultiLine": true,
+                        "isImportantForAccessibility": true,
+                        "isScreenReaderFocusable": false,
+                        "isHeading": false,
+                        "isTextSelectable": false,
+                        "textSelectionStart": -1,
+                        "textSelectionEnd": -1,
+                        "inputType": 0,
+                        "liveRegion": 0,
+                        "windowId": 746,
+                        "drawingOrder": 1,
+                        "maxTextLength": -1,
+                        "movementGranularities": 31,
+                        "childCount": 0,
+                        "actionCount": 7,
+                        "actionList": [
+                          {
+                            "id": 4,
+                            "label": "",
+                            "name": "SELECT"
+                          },
+                          {
+                            "id": 8,
+                            "label": "",
+                            "name": "CLEAR_SELECTION"
+                          },
+                          {
+                            "id": 64,
+                            "label": "",
+                            "name": "UNKNOWN_64"
+                          },
+                          {
+                            "id": 256,
+                            "label": "",
+                            "name": "UNKNOWN_256"
+                          },
+                          {
+                            "id": 512,
+                            "label": "",
+                            "name": "UNKNOWN_512"
+                          },
+                          {
+                            "id": 131072,
+                            "label": "",
+                            "name": "UNKNOWN_131072"
+                          },
+                          {
+                            "id": 16908342,
+                            "label": "",
+                            "name": "UNKNOWN_16908342"
+                          }
+                        ],
+                        "children": []
+                      },
+                      {
+                        "resourceId": "com.hpbr.bosszhipin:id/tv_time_range",
+                        "className": "android.widget.TextView",
+                        "packageName": "com.hpbr.bosszhipin",
+                        "text": "2021.10-2025.08",
+                        "contentDescription": "",
+                        "hint": "",
+                        "stateDescription": "",
+                        "tooltipText": "",
+                        "paneTitle": "",
+                        "error": "",
+                        "boundsInScreen": {
+                          "left": 456,
+                          "top": 1389,
+                          "right": 680,
+                          "bottom": 1425
+                        },
+                        "boundsInParent": {
+                          "left": 1048372,
+                          "top": 0,
+                          "right": 1048596,
+                          "bottom": 36
+                        },
+                        "isClickable": false,
+                        "isLongClickable": false,
+                        "isContextClickable": false,
+                        "isFocusable": false,
+                        "isFocused": false,
+                        "isAccessibilityFocused": false,
+                        "isSelected": false,
+                        "isCheckable": false,
+                        "isChecked": false,
+                        "isEnabled": true,
+                        "isVisibleToUser": true,
+                        "isEditable": false,
+                        "isPassword": false,
+                        "isShowingHintText": false,
+                        "isScrollable": false,
+                        "isDismissable": false,
+                        "isMultiLine": false,
+                        "isImportantForAccessibility": true,
+                        "isScreenReaderFocusable": false,
+                        "isHeading": false,
+                        "isTextSelectable": false,
+                        "textSelectionStart": -1,
+                        "textSelectionEnd": -1,
+                        "inputType": 0,
+                        "liveRegion": 0,
+                        "windowId": 746,
+                        "drawingOrder": 2,
+                        "maxTextLength": -1,
+                        "movementGranularities": 31,
+                        "childCount": 0,
+                        "actionCount": 7,
+                        "actionList": [
+                          {
+                            "id": 4,
+                            "label": "",
+                            "name": "SELECT"
+                          },
+                          {
+                            "id": 8,
+                            "label": "",
+                            "name": "CLEAR_SELECTION"
+                          },
+                          {
+                            "id": 64,
+                            "label": "",
+                            "name": "UNKNOWN_64"
+                          },
+                          {
+                            "id": 256,
+                            "label": "",
+                            "name": "UNKNOWN_256"
+                          },
+                          {
+                            "id": 512,
+                            "label": "",
+                            "name": "UNKNOWN_512"
+                          },
+                          {
+                            "id": 131072,
+                            "label": "",
+                            "name": "UNKNOWN_131072"
+                          },
+                          {
+                            "id": 16908342,
+                            "label": "",
+                            "name": "UNKNOWN_16908342"
+                          }
+                        ],
+                        "children": []
+                      }
+                    ]
+                  },
+                  {
+                    "resourceId": "com.hpbr.bosszhipin:id/tv_job_name",
+                    "className": "android.widget.TextView",
+                    "packageName": "com.hpbr.bosszhipin",
+                    "text": "用户运营",
+                    "contentDescription": "",
+                    "hint": "",
+                    "stateDescription": "",
+                    "tooltipText": "",
+                    "paneTitle": "",
+                    "error": "",
+                    "boundsInScreen": {
+                      "left": 40,
+                      "top": 1456,
+                      "right": 168,
+                      "bottom": 1462
+                    },
+                    "boundsInParent": {
+                      "left": 0,
+                      "top": 0,
+                      "right": 128,
+                      "bottom": 43
+                    },
+                    "isClickable": false,
+                    "isLongClickable": false,
+                    "isContextClickable": false,
+                    "isFocusable": false,
+                    "isFocused": false,
+                    "isAccessibilityFocused": false,
+                    "isSelected": false,
+                    "isCheckable": false,
+                    "isChecked": false,
+                    "isEnabled": true,
+                    "isVisibleToUser": true,
+                    "isEditable": false,
+                    "isPassword": false,
+                    "isShowingHintText": false,
+                    "isScrollable": false,
+                    "isDismissable": false,
+                    "isMultiLine": true,
+                    "isImportantForAccessibility": true,
+                    "isScreenReaderFocusable": false,
+                    "isHeading": false,
+                    "isTextSelectable": false,
+                    "textSelectionStart": -1,
+                    "textSelectionEnd": -1,
+                    "inputType": 0,
+                    "liveRegion": 0,
+                    "windowId": 746,
+                    "drawingOrder": 2,
+                    "maxTextLength": -1,
+                    "movementGranularities": 31,
+                    "childCount": 0,
+                    "actionCount": 7,
+                    "actionList": [
+                      {
+                        "id": 4,
+                        "label": "",
+                        "name": "SELECT"
+                      },
+                      {
+                        "id": 8,
+                        "label": "",
+                        "name": "CLEAR_SELECTION"
+                      },
+                      {
+                        "id": 64,
+                        "label": "",
+                        "name": "UNKNOWN_64"
+                      },
+                      {
+                        "id": 256,
+                        "label": "",
+                        "name": "UNKNOWN_256"
+                      },
+                      {
+                        "id": 512,
+                        "label": "",
+                        "name": "UNKNOWN_512"
+                      },
+                      {
+                        "id": 131072,
+                        "label": "",
+                        "name": "UNKNOWN_131072"
+                      },
+                      {
+                        "id": 16908342,
+                        "label": "",
+                        "name": "UNKNOWN_16908342"
+                      }
+                    ],
+                    "children": []
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "resourceId": "",
+        "className": "android.widget.Button",
+        "packageName": "com.hpbr.bosszhipin",
+        "text": "立即沟通",
+        "contentDescription": "",
+        "hint": "",
+        "stateDescription": "",
+        "tooltipText": "",
+        "paneTitle": "",
+        "error": "",
+        "boundsInScreen": {
+          "left": 40,
+          "top": 1492,
+          "right": 680,
+          "bottom": 1582
+        },
+        "boundsInParent": {
+          "left": 0,
+          "top": 0,
+          "right": 640,
+          "bottom": 90
+        },
+        "isClickable": true,
+        "isLongClickable": false,
+        "isContextClickable": false,
+        "isFocusable": true,
+        "isFocused": false,
+        "isAccessibilityFocused": false,
+        "isSelected": false,
+        "isCheckable": false,
+        "isChecked": false,
+        "isEnabled": true,
+        "isVisibleToUser": true,
+        "isEditable": false,
+        "isPassword": false,
+        "isShowingHintText": false,
+        "isScrollable": false,
+        "isDismissable": false,
+        "isMultiLine": true,
+        "isImportantForAccessibility": true,
+        "isScreenReaderFocusable": false,
+        "isHeading": false,
+        "isTextSelectable": false,
+        "textSelectionStart": -1,
+        "textSelectionEnd": -1,
+        "inputType": 0,
+        "liveRegion": 0,
+        "windowId": 746,
+        "drawingOrder": 14,
+        "maxTextLength": -1,
+        "movementGranularities": 31,
+        "childCount": 0,
+        "actionCount": 9,
+        "actionList": [
+          {
+            "id": 1,
+            "label": "",
+            "name": "FOCUS"
+          },
+          {
+            "id": 4,
+            "label": "",
+            "name": "SELECT"
+          },
+          {
+            "id": 8,
+            "label": "",
+            "name": "CLEAR_SELECTION"
+          },
+          {
+            "id": 16,
+            "label": "",
+            "name": "CLICK"
+          },
+          {
+            "id": 64,
+            "label": "",
+            "name": "UNKNOWN_64"
+          },
+          {
+            "id": 256,
+            "label": "",
+            "name": "UNKNOWN_256"
+          },
+          {
+            "id": 512,
+            "label": "",
+            "name": "UNKNOWN_512"
+          },
+          {
+            "id": 131072,
+            "label": "",
+            "name": "UNKNOWN_131072"
+          },
+          {
+            "id": 16908342,
+            "label": "",
+            "name": "UNKNOWN_16908342"
+          }
+        ],
+        "children": []
+      }
+    ]
+  },
+  "screenshot_path": "after_greet_open_20260508.png"
+}

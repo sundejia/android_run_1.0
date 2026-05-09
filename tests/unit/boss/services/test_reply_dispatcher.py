@@ -252,7 +252,28 @@ async def test_blacklist_check_callback_signature() -> None:
     )
     outcome = await dispatcher.dispatch_one(is_blacklisted=cb_typed)
     assert outcome.kind == DispatchKind.SENT_TEMPLATE
-    # AGENTS.md guardrail: blacklist re-checked at start AND right
-    # before send → callback fires twice for a successful dispatch.
     assert received == ["CAND20260507A", "CAND20260507A"]
     _ = adb  # keep reference (unused)
+
+
+@pytest.mark.asyncio
+async def test_dry_run_prepares_reply_without_sending() -> None:
+    adb = FakeAdbPort(
+        [
+            _load("messages_list/with_unread.json"),
+            _load("conversation_detail/text_only.json"),
+            _load("resume_view/full_resume.json"),
+        ]
+    )
+    dispatcher = ReplyDispatcher(
+        adb=adb,
+        template_provider=_default_template_provider,
+        ai_client=None,
+    )
+
+    outcome = await dispatcher.dispatch_one(dry_run=True)
+
+    assert outcome.kind == DispatchKind.DRY_RUN_READY
+    assert outcome.text_sent is not None
+    assert adb.type_text_calls == []
+    assert "发送" not in adb.tap_text_calls

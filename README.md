@@ -4,7 +4,14 @@
 >
 > A modular automation framework for WeCom on Android devices using DroidRun's non-LLM APIs.
 
-**[📖 中文文档](README_zh.md)** | **[📚 Documentation Index](docs/INDEX.md)**
+## BOSS 直聘 Pivot Status
+
+This repository is mid-pivot from WeCom automation to BOSS 直聘 recruitment
+automation. The BOSS stack lives alongside the legacy WeCom stack under
+[src/boss_automation/](src/boss_automation/) and [tests/unit/boss/](tests/unit/boss/).
+See [docs/00-boss-pivot/README.md](docs/00-boss-pivot/README.md) for the current
+operator/developer entry point and [docs/implementation/2026-05-08-boss-e2e-test-report.md](docs/implementation/2026-05-08-boss-e2e-test-report.md)
+for the latest real-device E2E status.
 
 ## Features
 
@@ -513,12 +520,12 @@ pip install -r requirements.txt
 # Or using uv:
 uv pip install fastapi uvicorn websockets pydantic
 
-# Start backend (Terminal 1)
-cd backend
-uvicorn main:app --reload --port 8765
+# Start backend (Terminal 1, from the repository root)
+python -m uvicorn main:app --app-dir wecom-desktop/backend --reload --port 8765 \
+  --ws-ping-interval 20 --ws-ping-timeout 30
 
 # Start Electron app (Terminal 2)
-cd ..
+cd wecom-desktop
 npm run dev:electron
 ```
 
@@ -553,7 +560,7 @@ For detailed documentation, see [wecom-desktop/README.md](wecom-desktop/README.m
 ## Project Structure
 
 ```
-android_run_test-backup/
+boss-automation/
 ├── docs/                           # 📚 Documentation (248 files)
 │   ├── 00-meta/                    # Meta documentation
 │   ├── 01-product/                 # Feature specifications

@@ -161,7 +161,7 @@ def test_dispatch_returns_503_when_no_adb_factory(
     assert response.status_code == 503
 
 
-def test_dispatch_uses_template_and_persists_message(
+def test_dispatch_defaults_to_dry_run_without_persisting_message(
     client: TestClient,
     db_path: str,
     seeded_conversation: int,
@@ -186,6 +186,41 @@ def test_dispatch_uses_template_and_persists_message(
     response = client.post(
         "/api/boss/messages/dispatch",
         json={"device_serial": "EMU-1"},
+    )
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["outcome"] == "dry_run_ready"
+    assert body["text_sent"] is not None
+    assert fake_adb.type_text_calls == []
+    assert "发送" not in fake_adb.tap_text_calls
+    assert MessageRepository(db_path).list_for_conversation(seeded_conversation) == []
+
+
+def test_dispatch_uses_template_and_persists_message(
+    client: TestClient,
+    db_path: str,
+    seeded_conversation: int,
+    recruiter_id: int,
+) -> None:
+    TemplateRepository(db_path).insert(
+        name="default-reply",
+        scenario="reply",
+        content="您好 {name}，我们职位在招",
+        is_default=True,
+    )
+
+    fake_adb = _FakeAdbPort(
+        [
+            _tree("messages_list/with_unread.json"),
+            _tree("conversation_detail/text_only.json"),
+            _tree("resume_view/full_resume.json"),
+        ]
+    )
+    boss_messages.set_adb_port_factory(lambda _serial: fake_adb)
+
+    response = client.post(
+        "/api/boss/messages/dispatch",
+        json={"device_serial": "EMU-1", "dry_run": False, "confirm_send": True},
     )
     assert response.status_code == 200, response.text
     body = response.json()

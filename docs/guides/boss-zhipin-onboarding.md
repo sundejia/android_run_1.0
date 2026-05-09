@@ -74,9 +74,12 @@ export BOSS_FEATURES_ENABLED=true
 ## 3. Start the backend
 
 ```bash
-cd wecom-desktop/backend
-uvicorn main:app --reload --port 8765
+python -m uvicorn main:app --app-dir wecom-desktop/backend --reload --port 8765 \
+  --ws-ping-interval 20 --ws-ping-timeout 30
 ```
+
+Using `python -m uvicorn` avoids stale virtualenv shebangs after moving or
+renaming the repo.
 
 Hit each BOSS endpoint to confirm the routers mounted:
 
@@ -137,14 +140,40 @@ You can also drive them from the API; see the OpenSpec `0004-greet`
 and `0005-message-reply` change folders for the request/response
 shapes.
 
-## 7. Configure re-engagement
+## 7. Safe greet and reply probes
+
+Use the API probes from the repo root after the recruiter row exists and the
+BOSS app is on the matching tab.
+
+Candidate greeting opens a real card and can click `立即沟通`, so run it only
+when a real greet is acceptable:
+
+```bash
+curl -X POST http://localhost:8765/api/boss/greet/test-run \
+  -H 'content-type: application/json' \
+  -d '{"device_serial":"<ADB_SERIAL>"}'
+```
+
+Message dispatch defaults to dry-run. It can parse unread conversations, open
+the chat/resume, and render text without typing or tapping `发送`:
+
+```bash
+curl -X POST http://localhost:8765/api/boss/messages/dispatch \
+  -H 'content-type: application/json' \
+  -d '{"device_serial":"<ADB_SERIAL>","dry_run":true}'
+```
+
+A real message send requires both `"dry_run": false` and `"confirm_send": true`.
+Keep the dry-run probe as the default troubleshooting path.
+
+## 8. Configure re-engagement
 
 - *复聊跟进 / Reengagement* page → silent days, cooldown, daily cap.
 - Hit *Scan* to preview eligible candidates.
 - Hit *Run* (with the dispatcher hook disabled) for a dry-run that
   records an attempt without sending.
 
-## 8. Day-2 ops checklist
+## 9. Day-2 ops checklist
 
 - Watch the dashboard's `silent_candidates_eligible` counter — if it
   trends up, the followup queue is falling behind.
@@ -173,6 +202,7 @@ shapes.
 | `GET / PUT /api/boss/greet/settings/{device_serial}` | Greet config. |
 | `GET / PUT /api/boss/reengagement/settings/{device_serial}` | Reengage config. |
 | `POST /api/boss/reengagement/scan` | Preview eligible candidates. |
+| `POST /api/boss/messages/dispatch` | Reply to one unread conversation; defaults to dry-run unless `dry_run=false` and `confirm_send=true`. |
 | `POST /api/boss/reengagement/run` | Execute one re-engagement attempt. |
 
 ## Reference: where things live

@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -80,7 +81,7 @@ def reset_resilience_metrics() -> None:
 
 
 def _empty_metrics() -> dict[str, int]:
-    return {k: 0 for k in _METRIC_KEYS}
+    return dict.fromkeys(_METRIC_KEYS, 0)
 
 
 def _incr(serial: str, key: str) -> None:
@@ -232,6 +233,14 @@ class DroidRunAdapter:
             self._log.debug("native tap_by_text(%r) failed on %s: %s", text, self._serial, exc)
             return False
 
+    async def tap(self, x: int, y: int) -> bool:
+        rc, _, _ = await self._shell(
+            self._adb_binary,
+            self._serial,
+            ["shell", "input", "tap", str(x), str(y)],
+        )
+        return rc == 0
+
     async def swipe(
         self, x1: int, y1: int, x2: int, y2: int, duration_ms: int = 300
     ) -> None:
@@ -261,6 +270,11 @@ class DroidRunAdapter:
             return {}, []
         tree = state[0] if state else {}
         elements = state[1] if len(state) > 1 else []
+        if isinstance(tree, str):
+            parsed_tree = _tree_from_clickable_state_text(tree)
+            if parsed_tree is not None:
+                return parsed_tree, []
+            return {}, elements if isinstance(elements, list) else []
         return tree, elements
 
     async def _get_state_fallback(self) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -342,6 +356,63 @@ class DroidRunAdapter:
             ["shell", "input", "text", escaped],
         )
         return rc == 0
+
+
+_CLICKABLE_LINE_RE = re.compile(
+    r"^\s*\d+\.\s+(?P<class_name>[^:]+):\s+(?P<body>.*?)\s+-\s+"
+    r"(?:bounds)?\((?P<left>-?\d+),(?P<top>-?\d+),(?P<right>-?\d+),(?P<bottom>-?\d+)\)\s*$"
+)
+_QUOTED_RE = re.compile(r'"([^"]*)"')
+
+
+def _tree_from_clickable_state_text(state_text: str) -> dict[str, Any] | None:
+    children: list[dict[str, Any]] = []
+    for line in state_text.splitlines():
+        match = _CLICKABLE_LINE_RE.match(line)
+        if not match:
+            continue
+        quoted = _QUOTED_RE.findall(match.group("body"))
+        resource_id = _resource_id_from_quoted(quoted)
+        text = _text_from_quoted(quoted)
+        children.append(
+            {
+                "resourceId": resource_id,
+                "className": match.group("class_name").strip(),
+                "text": text,
+                "contentDescription": text,
+                "boundsInScreen": {
+                    "left": int(match.group("left")),
+                    "top": int(match.group("top")),
+                    "right": int(match.group("right")),
+                    "bottom": int(match.group("bottom")),
+                },
+                "children": [],
+            }
+        )
+    if not children:
+        return None
+    return {
+        "resourceId": "",
+        "className": "DroidRunClickableState",
+        "text": "",
+        "contentDescription": "",
+        "boundsInScreen": {"left": 0, "top": 0, "right": 0, "bottom": 0},
+        "children": children,
+    }
+
+
+def _resource_id_from_quoted(values: list[str]) -> str:
+    for value in values:
+        if ":id/" in value:
+            return value
+    return ""
+
+
+def _text_from_quoted(values: list[str]) -> str:
+    for value in reversed(values):
+        if ":id/" not in value and not value.startswith("android."):
+            return value
+    return ""
 
 
 # --- Tree walking utilities -----------------------------------------

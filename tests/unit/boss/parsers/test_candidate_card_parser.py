@@ -20,6 +20,10 @@ def _tree(label: str) -> dict:
     return load_fixture(FIXTURE_ROOT / "candidates_feed" / f"{label}.json").ui_tree
 
 
+def _runtime_tree(label: str) -> dict:
+    return load_fixture(FIXTURE_ROOT / "runtime_probe" / f"{label}.json").ui_tree
+
+
 class TestParseCandidateFeed:
     def test_yields_two_cards_from_feed(self) -> None:
         cards = parse_candidate_feed(_tree("feed_with_cards"))
@@ -75,6 +79,21 @@ class TestParseCandidateFeed:
             ],
         }
         assert parse_candidate_feed(tree) == []
+
+    def test_parses_live_may_2026_candidate_feed(self) -> None:
+        cards = parse_candidate_feed(_runtime_tree("retry_20260508_185850"))
+
+        assert [c.name for c in cards[:2]] == ["王卓", "吴思彤"]
+        first = cards[0]
+        assert first.boss_candidate_id.startswith("live:")
+        assert first.education == "大专"
+        assert first.experience_years == 10
+        assert first.current_company == "飞趣游戏"
+        assert first.current_position == "用户运营"
+        assert first.matched_job_title == "经纪人/星探"
+
+        reparsed = parse_candidate_feed(_runtime_tree("retry_20260508_185850"))
+        assert reparsed[0].boss_candidate_id == first.boss_candidate_id
 
 
 class TestCandidateCardDataclass:

@@ -45,6 +45,7 @@ from boss_automation.services.template_engine import render_template
 class DispatchKind(StrEnum):
     SENT_TEMPLATE = "sent_template"
     SENT_AI = "sent_ai"
+    DRY_RUN_READY = "dry_run_ready"
     SKIPPED_NO_UNREAD = "skipped_no_unread"
     SKIPPED_BLACKLISTED = "skipped_blacklisted"
     HALTED_UNKNOWN_UI = "halted_unknown_ui"
@@ -94,6 +95,7 @@ class ReplyDispatcher:
         self,
         *,
         is_blacklisted: Callable[[str], Awaitable[bool]] | None = None,
+        dry_run: bool = False,
     ) -> DispatchOutcome:
         list_tree, _ = await self._adb.get_state()
         rows = parse_message_list(list_tree)
@@ -155,6 +157,15 @@ class ReplyDispatcher:
                 boss_candidate_id=partner_id,
                 candidate_name=target.candidate_name,
                 text_sent=None,
+            )
+
+        if dry_run:
+            return DispatchOutcome(
+                kind=DispatchKind.DRY_RUN_READY,
+                boss_candidate_id=partner_id,
+                candidate_name=target.candidate_name,
+                text_sent=rendered_text,
+                template_warnings=warnings,
             )
 
         await self._adb.type_text(rendered_text)

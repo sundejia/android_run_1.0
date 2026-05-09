@@ -11,7 +11,16 @@ tree; BOSS modules ship alongside it.
 greet → reply → re-engage) plus ops monitoring and smoke regression is
 implemented and covered by tests.
 
+Runtime E2E smoke on the May-2026 BOSS app is green for the two user-visible
+send paths after the parser/runtime compatibility fixes:
+
+- Candidate feed → card open → `立即沟通` returned `sent` on device
+  `10AE9P1DTT002LE`.
+- Message list → unread selection → reply generation returned `dry_run_ready`
+  for an unread conversation; no message was sent in dry-run mode.
+
 High-level completion summary: **`docs/implementation/2026-05-07-boss-pivot-m0-m6-complete.md`**.
+Latest live-device runtime report: **`docs/implementation/2026-05-08-boss-e2e-test-report.md`**.
 
 ## Where things live
 

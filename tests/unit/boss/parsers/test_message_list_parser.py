@@ -17,6 +17,18 @@ def _tree(label: str) -> dict:
     return load_fixture(FIXTURE_ROOT / "messages_list" / f"{label}.json").ui_tree
 
 
+def test_parses_live_may_2026_messages_list() -> None:
+    rows = parse_message_list(_tree("e2e_20260508_retry"))
+
+    names = [r.candidate_name for r in rows]
+    assert "刘女士" in names
+    assert "李先生" in names
+    li = next(r for r in rows if r.candidate_name == "李先生")
+    assert li.boss_candidate_id.startswith("live:")
+    assert li.unread_count == 1
+    assert li.last_message_text == "我对您发布的这个职位很感兴趣，能否见面详聊呢？"
+
+
 def test_parses_three_conversations() -> None:
     rows = parse_message_list(_tree("with_unread"))
     assert len(rows) == 3
