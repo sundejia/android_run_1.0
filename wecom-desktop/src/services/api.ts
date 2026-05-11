@@ -867,6 +867,8 @@ export interface AutoGroupInviteSettings {
   group_name_template: string
   skip_if_group_exists: boolean
   member_source?: string
+  send_message_before_create: boolean
+  pre_create_message_text: string
   send_test_message_after_create: boolean
   test_message_text: string
   post_confirm_wait_seconds: number

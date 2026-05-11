@@ -25,6 +25,8 @@ const defaultSettings: MediaAutoActionSettings = {
     group_members: [],
     group_name_template: '{customer_name}-服务群',
     skip_if_group_exists: true,
+    send_message_before_create: false,
+    pre_create_message_text: '',
     send_test_message_after_create: true,
     test_message_text: '测试',
     post_confirm_wait_seconds: 1,
@@ -70,6 +72,14 @@ const groupMessagePreview = computed(() =>
 
 const contactShareMessagePreview = computed(() =>
   renderMediaActionTemplate(settings.value.auto_contact_share.pre_share_message_text, {
+    customer_name: testCustomerName.value.trim() || '测试客户',
+    kefu_name: previewKefuName,
+    device_serial: testDeviceSerial.value.trim() || 'test_device',
+  })
+)
+
+const groupPreCreateMessagePreview = computed(() =>
+  renderMediaActionTemplate(settings.value.auto_group_invite.pre_create_message_text, {
     customer_name: testCustomerName.value.trim() || '测试客户',
     kefu_name: previewKefuName,
     device_serial: testDeviceSerial.value.trim() || 'test_device',
@@ -470,6 +480,54 @@ onMounted(loadSettings)
             <p class="text-xs text-gray-500 mt-1">
               {{ t('media_actions.group_name_template_hint') }}
             </p>
+          </div>
+
+          <div class="space-y-3 rounded-lg border border-gray-700/80 bg-gray-800/40 p-4">
+            <div class="flex items-center gap-2">
+              <input
+                id="send-message-before-group-create"
+                v-model="settings.auto_group_invite.send_message_before_create"
+                type="checkbox"
+                class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+              />
+              <label for="send-message-before-group-create" class="text-sm text-gray-300">
+                {{ t('media_actions.send_message_before_group_create') }}
+              </label>
+            </div>
+
+            <div>
+              <label
+                for="group-pre-create-message-template"
+                class="block text-sm font-medium text-gray-300 mb-1"
+              >
+                {{ t('media_actions.group_pre_create_message_text_label') }}
+              </label>
+              <textarea
+                id="group-pre-create-message-template"
+                v-model="settings.auto_group_invite.pre_create_message_text"
+                rows="4"
+                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                :placeholder="t('media_actions.group_pre_create_message_text_placeholder')"
+              ></textarea>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ t('media_actions.group_pre_create_message_text_hint') }}
+              </p>
+            </div>
+
+            <div>
+              <div class="text-xs font-medium uppercase tracking-wide text-gray-400">
+                {{ t('media_actions.test_message_preview_label') }}
+              </div>
+              <div
+                id="group-pre-create-message-preview"
+                class="mt-2 whitespace-pre-wrap rounded-md border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-gray-200"
+              >
+                {{ groupPreCreateMessagePreview }}
+              </div>
+              <p class="text-xs text-gray-500 mt-1">
+                {{ t('media_actions.test_message_preview_hint') }}
+              </p>
+            </div>
           </div>
 
           <div class="space-y-3 rounded-lg border border-gray-700/80 bg-gray-800/40 p-4">

@@ -45,7 +45,7 @@ class AutoGroupInviteAction(IMediaAction):
 
     async def should_execute(self, event: MediaEvent, settings: dict) -> bool:
         if not settings.get("enabled", False):
-            logger.debug(
+            logger.info(
                 "Skipping auto-group-invite: media actions disabled "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -57,7 +57,7 @@ class AutoGroupInviteAction(IMediaAction):
 
         gi_settings = settings.get("auto_group_invite", {})
         if not gi_settings.get("enabled", False):
-            logger.debug(
+            logger.info(
                 "Skipping auto-group-invite: action disabled "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -68,7 +68,7 @@ class AutoGroupInviteAction(IMediaAction):
             return False
 
         if not event.is_media:
-            logger.debug(
+            logger.info(
                 "Skipping auto-group-invite: message is not media "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -80,7 +80,7 @@ class AutoGroupInviteAction(IMediaAction):
 
         members = gi_settings.get("group_members", [])
         if not members:
-            logger.debug(
+            logger.info(
                 "Skipping auto-group-invite: no group members configured "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -93,7 +93,7 @@ class AutoGroupInviteAction(IMediaAction):
         if gi_settings.get("skip_if_group_exists", True):
             group_name = self._resolve_group_name(event, gi_settings)
             try:
-                logger.debug(
+                logger.info(
                     "Checking existing group before auto-group-invite "
                     "(device=%s, customer=%s, group_name=%s)",
                     event.device_serial,
@@ -106,7 +106,7 @@ class AutoGroupInviteAction(IMediaAction):
                     group_name=group_name,
                 )
                 if exists:
-                    logger.debug(
+                    logger.info(
                         "Group '%s' already exists for %s; skipping",
                         group_name,
                         event.customer_name,
@@ -171,7 +171,7 @@ class AutoGroupInviteAction(IMediaAction):
                 decision.details,
             )
 
-        logger.debug(
+        logger.info(
             "Auto-group-invite eligible "
             "(device=%s, customer=%s, kefu=%s, message_type=%s, message_id=%s, members=%s)",
             event.device_serial,
@@ -189,12 +189,18 @@ class AutoGroupInviteAction(IMediaAction):
         group_name = self._resolve_group_name(event, gi_settings)
         test_message_text = self._resolve_test_message(event, gi_settings)
 
+        pre_create_text = ""
+        if gi_settings.get("send_message_before_create", False):
+            template = gi_settings.get("pre_create_message_text", "")
+            if template.strip():
+                pre_create_text = render_media_template(template, event, preserve_on_error=True)
+
         try:
             logger.info(
                 "Starting auto-group-invite "
                 "(device=%s, customer=%s, kefu=%s, message_type=%s, message_id=%s, "
-                "group_name=%s, members=%s, send_test_message=%s, duplicate_policy=%s, "
-                "post_confirm_wait=%.2f)",
+                "group_name=%s, members=%s, send_pre_message=%s, pre_message_length=%d, "
+                "send_test_message=%s, duplicate_policy=%s, post_confirm_wait=%.2f)",
                 event.device_serial,
                 event.customer_name,
                 event.kefu_name,
@@ -202,6 +208,8 @@ class AutoGroupInviteAction(IMediaAction):
                 event.message_id,
                 group_name,
                 members,
+                bool(pre_create_text),
+                len(pre_create_text),
                 gi_settings.get("send_test_message_after_create", True),
                 gi_settings.get("duplicate_name_policy", "first"),
                 float(gi_settings.get("post_confirm_wait_seconds", 1.0)),
@@ -215,6 +223,8 @@ class AutoGroupInviteAction(IMediaAction):
                 test_message_text=test_message_text,
                 duplicate_name_policy=gi_settings.get("duplicate_name_policy", "first"),
                 post_confirm_wait_seconds=float(gi_settings.get("post_confirm_wait_seconds", 1.0)),
+                send_message_before_create=bool(pre_create_text),
+                pre_create_message_text=pre_create_text,
             )
 
             if success:

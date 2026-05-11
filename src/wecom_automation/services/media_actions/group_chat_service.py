@@ -69,6 +69,8 @@ class IGroupChatService(ABC):
         test_message_text: str = "测试",
         duplicate_name_policy: str = DuplicateNamePolicy.FIRST.value,
         post_confirm_wait_seconds: float = 1.0,
+        send_message_before_create: bool = False,
+        pre_create_message_text: str = "",
     ) -> bool:
         """
         Create a group chat including the customer and specified members.
@@ -176,6 +178,8 @@ class GroupChatService(IGroupChatService):
         test_message_text: str = "测试",
         duplicate_name_policy: str = DuplicateNamePolicy.FIRST.value,
         post_confirm_wait_seconds: float = 1.0,
+        send_message_before_create: bool = False,
+        pre_create_message_text: str = "",
     ) -> bool:
         """
         Create a group chat via WeCom UI automation.
@@ -185,11 +189,14 @@ class GroupChatService(IGroupChatService):
         """
         logger.info(
             "Creating group chat: device=%s, customer=%s, members=%s, name=%s, "
+            "send_message_before_create=%s, pre_create_message_length=%d, "
             "send_test_message=%s, duplicate_policy=%s, post_confirm_wait=%.2f",
             device_serial,
             customer_name,
             group_members,
             group_name,
+            send_message_before_create,
+            len(pre_create_message_text),
             send_test_message,
             duplicate_name_policy,
             post_confirm_wait_seconds,
@@ -206,6 +213,8 @@ class GroupChatService(IGroupChatService):
                     test_message_text=test_message_text,
                     duplicate_name_policy=duplicate_name_policy,
                     post_confirm_wait_seconds=post_confirm_wait_seconds,
+                    send_message_before_create=send_message_before_create,
+                    pre_create_message_text=pre_create_message_text,
                 )
             else:
                 logger.warning("No WeComService available; recording group creation intent only")
@@ -253,6 +262,8 @@ class GroupChatService(IGroupChatService):
         test_message_text: str = "测试",
         duplicate_name_policy: str = DuplicateNamePolicy.FIRST.value,
         post_confirm_wait_seconds: float = 1.0,
+        send_message_before_create: bool = False,
+        pre_create_message_text: str = "",
     ) -> bool:
         """
         Execute the ADB UI automation steps for group creation.
@@ -282,6 +293,8 @@ class GroupChatService(IGroupChatService):
                 group_name=group_name,
                 duplicate_name_policy=duplicate_policy,
                 post_confirm_wait_seconds=post_confirm_wait_seconds,
+                send_message_before_create=send_message_before_create,
+                pre_create_message_text=pre_create_message_text,
                 send_test_message=send_test_message,
                 test_message_text=test_message_text,
             )

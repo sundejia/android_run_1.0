@@ -72,11 +72,28 @@ def build_media_event_bus(
 
     # Registration order matters: the bus dispatches actions in the order they
     # are registered, so this ordering encodes product semantics —
-    #   1) contact-card share happens first while we are still in the active
-    #      chat (no navigation restore so the next action stays in context),
+    #   1) blacklist runs first so the customer is blocked from AI reply/follow-up,
     #   2) group invite then pulls the customer into the service group,
-    #   3) blacklist runs last so the 1:1 chat is closed off only after the
-    #      preceding UI flows have completed.
+    #   3) contact-card share happens last (no navigation restore so it stays
+    #      in context for any UI that follows).
+    bus.register(AutoBlacklistAction(BlacklistWriter(effects_db_path), db_path=db_path))
+
+    if wecom_service is not None:
+        try:
+            from wecom_automation.services.media_actions.actions.auto_group_invite import (
+                AutoGroupInviteAction,
+            )
+            from wecom_automation.services.media_actions.group_chat_service import GroupChatService
+
+            bus.register(
+                AutoGroupInviteAction(
+                    GroupChatService(wecom_service=wecom_service, db_path=effects_db_path),
+                    db_path=db_path,
+                )
+            )
+        except Exception as exc:
+            logger.warning("Could not register AutoGroupInviteAction: %s", exc)
+
     if wecom_service is not None:
         try:
             from wecom_automation.services.contact_share.service import ContactShareService
@@ -98,27 +115,5 @@ def build_media_event_bus(
             ))
         except Exception as exc:
             logger.warning("Could not register AutoContactShareAction: %s", exc)
-
-    if wecom_service is not None:
-        try:
-            from wecom_automation.services.media_actions.actions.auto_group_invite import (
-                AutoGroupInviteAction,
-            )
-            from wecom_automation.services.media_actions.group_chat_service import GroupChatService
-
-            # Same db_path semantics as auto_contact_share above:
-            # GroupChatService keeps ``effects_db_path`` (group tracking is
-            # control-level), but the action itself uses the conversation DB
-            # so ``evaluate_gate_pass`` resolves correctly.
-            bus.register(
-                AutoGroupInviteAction(
-                    GroupChatService(wecom_service=wecom_service, db_path=effects_db_path),
-                    db_path=db_path,
-                )
-            )
-        except Exception as exc:
-            logger.warning("Could not register AutoGroupInviteAction: %s", exc)
-
-    bus.register(AutoBlacklistAction(BlacklistWriter(effects_db_path), db_path=db_path))
 
     return bus, settings

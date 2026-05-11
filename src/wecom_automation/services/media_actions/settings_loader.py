@@ -38,6 +38,8 @@ DEFAULT_MEDIA_AUTO_ACTION_SETTINGS: dict[str, Any] = {
         "post_confirm_wait_seconds": 1.0,
         "duplicate_name_policy": "first",
         "video_invite_policy": "extract_frame",
+        "send_message_before_create": False,
+        "pre_create_message_text": "",
     },
     "auto_contact_share": {
         "enabled": False,

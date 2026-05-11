@@ -283,6 +283,8 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
             "post_confirm_wait_seconds": 1.0,
             "duplicate_name_policy": "first",
             "video_invite_policy": "extract_frame",
+            "send_message_before_create": False,
+            "pre_create_message_text": "",
         },
         "自动拉群子配置",
         False,

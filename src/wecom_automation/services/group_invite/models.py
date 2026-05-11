@@ -31,6 +31,8 @@ class GroupInviteRequest:
     entry_mode: GroupInviteEntryMode = GroupInviteEntryMode.FROM_CUSTOMER_CHAT
     duplicate_name_policy: DuplicateNamePolicy = DuplicateNamePolicy.FIRST
     post_confirm_wait_seconds: float = 1.0
+    send_message_before_create: bool = False
+    pre_create_message_text: str = ""
     send_test_message: bool = True
     test_message_text: str = "测试"
 

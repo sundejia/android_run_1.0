@@ -105,9 +105,10 @@
 
 ### 触发位置与 AI 回复截断（2026-05-07）
 
-`AutoBlacklistAction` 在 `MediaEventBus` 注册顺序中**最后**执行（`contact_share → group_invite → blacklist`，见 `services/media_actions/factory.py`）。这个顺序保证：
+`AutoBlacklistAction` 在 `MediaEventBus` 注册顺序中**最先**执行（`blacklist → group_invite → contact_share`，见 `services/media_actions/factory.py`，2026-05-11 重排）。这个顺序保证：
 
-- **不影响发名片链路**：`AutoContactShareAction` 在 `AutoBlacklistAction` 之前完成；即便后者改变行为也不会回退/挤掉名片
+- **拉黑在先，截断 AI 回复**：blacklist 最先执行，确保客户被标记后 AI 不再回复
+- **不影响拉群/发名片链路**：`AutoGroupInviteAction` 和 `AutoContactShareAction` 在 blacklist 之后独立执行；MediaEventBus 不会因前一个 action 成功就跳过后续 action
 - **本轮 AI 回复被截断**：`response_detector` 中 `suppress_ai_actions = {"auto_group_invite", "auto_blacklist"}`；只要拉黑成功，客户键被加入 `_media_action_handled_keys`，本轮的 `_process_unread_user_with_wait` / `_interactive_wait_loop` 跳过 AI
 - **后续轮次也截断**：客户被写入 `blacklist` 表后，`response_detector` 在 3 处都会 `BlacklistChecker.is_blacklisted(..., fail_closed=True)` 直接 skip：处理用户前（line 1155）、最终发送前（line 3143）、回复路径兜底（line 3296）
 

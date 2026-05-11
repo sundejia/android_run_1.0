@@ -96,7 +96,7 @@ class TestBuildMediaEventBusEnabled:
         assert "auto_group_invite" in action_names
         assert "auto_contact_share" in action_names
 
-    def test_registers_contact_share_before_blacklist(self, tmp_path):
+    def test_registers_blacklist_before_others(self, tmp_path):
         db_path = str(tmp_path / "test.db")
         _create_settings_db(db_path, enabled=True)
 
@@ -104,7 +104,8 @@ class TestBuildMediaEventBusEnabled:
 
         assert bus is not None
         action_names = [a.action_name for a in bus._actions]
-        assert action_names.index("auto_contact_share") < action_names.index("auto_blacklist")
+        assert action_names.index("auto_blacklist") < action_names.index("auto_group_invite")
+        assert action_names.index("auto_group_invite") < action_names.index("auto_contact_share")
         contact_action = bus._actions[action_names.index("auto_contact_share")]
         assert contact_action._restore_navigation_after_execute is False
 

@@ -43,6 +43,8 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "post_confirm_wait_seconds": 1.0,
         "duplicate_name_policy": "first",
         "video_invite_policy": "extract_frame",
+        "send_message_before_create": False,
+        "pre_create_message_text": "",
     },
     "auto_contact_share": {
         "enabled": False,
@@ -85,6 +87,8 @@ class AutoGroupInviteSettings(BaseModel):
     group_name_template: str = "{customer_name}-服务群"
     skip_if_group_exists: bool = True
     member_source: str = "manual"
+    send_message_before_create: bool = False
+    pre_create_message_text: str = ""
     send_test_message_after_create: bool = True
     test_message_text: str = "测试"
     post_confirm_wait_seconds: float = 1.0

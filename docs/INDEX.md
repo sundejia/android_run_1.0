@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-05-09 (Contact share **review gate** E2E: device conversation DB for `evaluate_gate_pass` + `upload_image_for_review` persist; control DB for `media_action_contact_shares`; observability keywords in `implementation/2026-05-09-contact-share-review-gate.md`. Earlier 2026-05-07: auto-blacklist `require_review_pass`; contact share picker **`nmf`** vs **`nma`**; see `implementation/2026-05-07-contact-share-reliability.md` and resolved bug docs under `04-bugs-and-fixes/resolved/`.)
+> Last Updated: 2026-05-11 (**Pre-group message** for auto_group_invite + **action reorder** (`blacklist → group_invite → contact_share`) + **log-level fix** (debug→info for skip reasons). See `implementation/2026-05-11-media-actions-log-level-fix-and-pre-group-message.md`. Earlier: 2026-05-09 contact share review gate; 2026-05-07 auto-blacklist `require_review_pass`; contact picker `nmf` vs `nma`.)
 
 ---
 
@@ -174,6 +174,7 @@ See [Current Architecture](03-impl-and-arch/) for high-level design.
 - [Android group invite workflow](implementation/2026-04-04-android-group-invite-workflow.md) - Modular `group_invite` service, `WeComService` UI steps, `GroupChatService` delegation
 - [Auto group invite multi-device reliability](implementation/2026-04-12-auto-group-invite-multi-device-reliability.md) - Diagnostics, parser/selector/scaling changes, real-device validation, `run_group_invite_*` scripts
 - [Auto contact share + review gate (E2E, dual DB)](implementation/2026-05-09-contact-share-review-gate.md) - `evaluate_gate_pass`, `build_media_event_bus` session vs control DB, image/video review persist path, log keywords, dedupe limitation
+- [Media actions: log-level fix, pre-group message & action reorder](implementation/2026-05-11-media-actions-log-level-fix-and-pre-group-message.md) - `debug→info` for skip reasons, `send_message_before_create` + `pre_create_message_text` fields, `blacklist→group_invite→contact_share` reorder
 - [Media auto-actions: custom post-group message + chat header menu](implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) - `template_resolver`, API/UI alignment, `test-trigger` semantics, device validation notes
 - [Blacklist shim, sync media bus, Windows runbook](implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md) - Desktop `blacklist_service` shim, `test_sync_factory`, `_is_chat_screen` for external groups
 - [Multi-Device Sync Storage Isolation](implementation/2026-04-02-multi-device-sync-storage-isolation.md) - Default per-device media output roots for parallel sync

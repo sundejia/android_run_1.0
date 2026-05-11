@@ -55,12 +55,15 @@ class GroupInviteWorkflowService:
         self._logger.info(
             "Group invite workflow started "
             "(device=%s, customer=%s, group_name=%s, requested_members=%s, normalized_members=%s, "
+            "send_message_before_create=%s, pre_create_message_length=%d, "
             "send_test_message=%s, duplicate_policy=%s, post_confirm_wait=%.2f)",
             request.device_serial,
             request.customer_name,
             request.group_name,
             request.members,
             members,
+            request.send_message_before_create,
+            len(request.pre_create_message_text),
             request.send_test_message,
             request.duplicate_name_policy.value,
             request.post_confirm_wait_seconds,
@@ -97,6 +100,39 @@ class GroupInviteWorkflowService:
                 request.customer_name,
             )
             return result
+
+        # Pre-create message: send a fixed message in the customer's private chat
+        # before navigating to the chat info panel for group creation.
+        if request.send_message_before_create and request.pre_create_message_text:
+            try:
+                self._logger.info(
+                    "Group invite step: send pre-create message "
+                    "(device=%s, customer=%s, text_length=%d)",
+                    request.device_serial,
+                    request.customer_name,
+                    len(request.pre_create_message_text),
+                )
+                sent, _ = await self._navigator.send_message(request.pre_create_message_text)
+                if not sent:
+                    self._logger.warning(
+                        "Pre-create message failed to send, continuing with group creation "
+                        "(device=%s, customer=%s)",
+                        request.device_serial,
+                        request.customer_name,
+                    )
+                else:
+                    self._logger.info(
+                        "Pre-create message sent before group creation "
+                        "(device=%s, customer=%s)",
+                        request.device_serial,
+                        request.customer_name,
+                    )
+            except Exception as exc:
+                self._logger.warning(
+                    "Pre-create message error (continuing with group creation): %s", exc
+                )
+            import asyncio
+            await asyncio.sleep(1.5)
 
         self._logger.debug(
             "Group invite step: open chat info (device=%s, customer=%s)",

@@ -52,7 +52,7 @@ Combined with a **separate** observation in the same log — the realtime AI-rep
 
 Before changing code, the following invariants were re-checked so the fix would not regress the freshly-stabilised contact-share flow:
 
-- **Action ordering** in `factory.py` is `auto_contact_share → auto_group_invite → auto_blacklist`. Blacklist runs **last** by design. ✅ No change needed.
+- **Action ordering** in `factory.py` is `auto_blacklist → auto_group_invite → auto_contact_share` (reordered 2026-05-11; was `auto_contact_share → auto_group_invite → auto_blacklist` at the time of this fix). Blacklist runs **first** so the customer is blocked from AI reply before group invite / contact share execute. ✅ No regression.
 - **AI suppression** is owned by `response_detector`:
   - `_on_media_results` adds the customer to `_media_action_handled_keys` whenever any of `{auto_group_invite, auto_blacklist}` reports `ActionStatus.SUCCESS` (line 545-552).
   - The wait loop and the unread-user processor both consult that set before calling AI (lines 1364, 1662).
