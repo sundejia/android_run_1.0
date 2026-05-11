@@ -60,7 +60,7 @@ class AutoContactShareAction(IMediaAction):
 
     async def should_execute(self, event: MediaEvent, settings: dict) -> bool:
         if not settings.get("enabled", False):
-            logger.debug(
+            logger.info(
                 "Skipping auto-contact-share: media actions disabled "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -72,7 +72,7 @@ class AutoContactShareAction(IMediaAction):
 
         cs = settings.get("auto_contact_share", {})
         if not cs.get("enabled", False):
-            logger.debug(
+            logger.info(
                 "Skipping auto-contact-share: action disabled "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -83,7 +83,7 @@ class AutoContactShareAction(IMediaAction):
             return False
 
         if not self._service or not getattr(self._service, "_wecom", None):
-            logger.debug(
+            logger.info(
                 "Skipping auto-contact-share: ContactShareService has no WeComService "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -94,7 +94,7 @@ class AutoContactShareAction(IMediaAction):
             return False
 
         if not event.is_media:
-            logger.debug(
+            logger.info(
                 "Skipping auto-contact-share: message is not media "
                 "(device=%s, customer=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -152,7 +152,7 @@ class AutoContactShareAction(IMediaAction):
 
         contact_name = self._resolve_contact_name(event, cs)
         if not contact_name:
-            logger.debug(
+            logger.info(
                 "Skipping auto-contact-share: no contact name configured "
                 "(device=%s, customer=%s, kefu=%s, message_type=%s, message_id=%s)",
                 event.device_serial,
@@ -165,7 +165,7 @@ class AutoContactShareAction(IMediaAction):
 
         if cs.get("skip_if_already_shared", True):
             try:
-                logger.debug(
+                logger.info(
                     "Checking contact share history before auto-contact-share "
                     "(device=%s, customer=%s, contact=%s)",
                     event.device_serial,
@@ -178,7 +178,7 @@ class AutoContactShareAction(IMediaAction):
                     contact_name=contact_name,
                 )
                 if already:
-                    logger.debug(
+                    logger.info(
                         "Contact card already shared to %s; skipping",
                         event.customer_name,
                     )
@@ -194,7 +194,7 @@ class AutoContactShareAction(IMediaAction):
                     exc_info=True,
                 )
 
-        logger.debug(
+        logger.info(
             "Auto-contact-share eligible "
             "(device=%s, customer=%s, kefu=%s, contact=%s, message_type=%s, message_id=%s)",
             event.device_serial,
