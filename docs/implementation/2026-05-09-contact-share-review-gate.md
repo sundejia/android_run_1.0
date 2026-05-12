@@ -49,6 +49,8 @@
 
 - Webhook / 占位注册的 `AutoContactShareAction` 仍可能 `db_path=None`；真机路径以 `response_detector` → `build_media_event_bus` 为准。
 
+**2026-05-12 更正（SSOT）**：图片审核服务器的 **HTTP 基址与超时** 不再存放在 `media_auto_actions.review_gate`（已移除 `rating_server_url` / `upload_timeout_seconds` / `upload_max_attempts`）。与实时回复路径一致，统一在 **`general.image_server_ip`**、**`general.image_review_timeout_seconds`**、**`general.image_upload_enabled`**（系统设置「图片审核」页）配置；`review_gate` 仅保留门控开关与 `video_review_policy`。详见 [Media actions settings dedup (SSOT)](./2026-05-12-media-actions-settings-dedup-ssot.md)。
+
 ## 端到端数据流（实时回复）
 
 ```
@@ -68,7 +70,7 @@
 
 在设备日志 / `realtime_reply` 日志中可按序检索：
 
-1. `image_review_client: uploading` — 上传至 `rating_server_url`（如 `POST .../api/v1/upload`）。
+1. `image_review_client: uploading` — 上传至 **`general.image_server_ip`** 所配置的 rating-server 基址（如 `POST .../api/v1/upload`）；与 `build_review_components` 使用的地址同源（2026-05-12 起不再使用 `review_gate.rating_server_url`）。
 2. `image_review_client: review completed ... decision=合格|不合格` — 审核结束。
 3. `Auto-contact-share gate passed` 或 `Skipping auto-contact-share: review gate rejected` — 门控结果（含 `message_id`、`details`）。
 4. `Starting auto-contact-share` / `Pre-share message sent` / `Shared contact card` — 名片链路。

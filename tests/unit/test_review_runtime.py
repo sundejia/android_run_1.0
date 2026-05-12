@@ -1,4 +1,11 @@
-"""Tests for the review runtime assembly helper."""
+"""Tests for the review runtime assembly helper.
+
+Locks the 2026-05-12 dedup contract: the rating-server URL and upload
+timeout come from ``general.image_server_ip`` /
+``general.image_review_timeout_seconds`` (the same source the realtime
+``image_review_client`` already used), NOT from
+``media_auto_actions.review_gate``.
+"""
 
 from __future__ import annotations
 
@@ -31,11 +38,11 @@ class TestBuildReviewComponents:
     def test_returns_components_when_enabled(self, db_path: str) -> None:
         storage, sub, on = build_review_components(
             db_path=db_path,
-            media_settings={
-                "review_gate": {
-                    "enabled": True,
-                    "rating_server_url": "http://127.0.0.1:8080",
-                }
+            media_settings={"review_gate": {"enabled": True}},
+            general_settings={
+                "image_server_ip": "http://review.local:8080",
+                "image_review_timeout_seconds": 25,
+                "image_upload_enabled": True,
             },
         )
         assert on is True
@@ -47,6 +54,50 @@ class TestBuildReviewComponents:
         assert on is False
         assert storage is None
         assert sub is None
+
+    def test_disabled_when_image_upload_disabled(self, db_path: str) -> None:
+        """Even with the gate switched on, disabling the system-level image
+        upload toggle must short-circuit the gate so the realtime path and
+        the gate path stay in lock-step."""
+        storage, sub, on = build_review_components(
+            db_path=db_path,
+            media_settings={"review_gate": {"enabled": True}},
+            general_settings={
+                "image_server_ip": "http://review.local:8080",
+                "image_review_timeout_seconds": 30,
+                "image_upload_enabled": False,
+            },
+        )
+        assert (storage, sub, on) == (None, None, False)
+
+    def test_disabled_when_server_url_blank(self, db_path: str) -> None:
+        """No URL configured -> short-circuit. Prevents the silent
+        fallback-to-localhost behaviour the legacy default produced."""
+        storage, sub, on = build_review_components(
+            db_path=db_path,
+            media_settings={"review_gate": {"enabled": True}},
+            general_settings={"image_server_ip": "   "},
+        )
+        assert (storage, sub, on) == (None, None, False)
+
+    def test_legacy_review_gate_url_is_ignored(self, db_path: str) -> None:
+        """Locks the dedup contract: rating_server_url under review_gate is
+        no longer consulted; only general.image_server_ip drives the URL."""
+        storage, sub, on = build_review_components(
+            db_path=db_path,
+            media_settings={
+                "review_gate": {
+                    "enabled": True,
+                    # Legacy field — should be ignored.
+                    "rating_server_url": "http://legacy.local:9999",
+                }
+            },
+            general_settings={"image_server_ip": ""},
+        )
+        # general URL is empty, so even with the legacy field set the gate
+        # must short-circuit. If this regresses, the legacy field will
+        # silently re-introduce the dual-write divergence the dedup fixed.
+        assert (storage, sub, on) == (None, None, False)
 
 
 class TestEnabledFlag:

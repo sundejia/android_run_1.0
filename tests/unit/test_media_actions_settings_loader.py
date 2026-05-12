@@ -9,7 +9,10 @@ import tempfile
 from pathlib import Path
 
 from wecom_automation.services.media_actions.settings_loader import (
+    DEFAULT_IMAGE_REVIEW_TIMEOUT_SECONDS,
+    DEFAULT_IMAGE_UPLOAD_ENABLED,
     DEFAULT_MEDIA_AUTO_ACTION_SETTINGS,
+    load_general_image_review_settings,
     load_media_auto_action_settings,
 )
 
@@ -103,6 +106,12 @@ def test_load_group_invite_defaults_are_backward_compatible():
     assert out["auto_group_invite"]["video_invite_policy"] == "extract_frame"
     assert out["review_gate"]["enabled"] is False
     assert out["review_gate"]["video_review_policy"] == "extract_frame"
+    # 2026-05-12 dedup: review_gate no longer carries a server URL of its own.
+    # Asserting the negative locks the schema so a future reviewer cannot
+    # silently re-introduce the dual-write divergence.
+    assert "rating_server_url" not in out["review_gate"]
+    assert "upload_timeout_seconds" not in out["review_gate"]
+    assert "upload_max_attempts" not in out["review_gate"]
 
 
 def test_load_merges_new_group_invite_fields():
@@ -155,7 +164,13 @@ def test_load_merges_new_group_invite_fields():
         Path(p).unlink(missing_ok=True)
 
 
-def test_load_merges_review_gate_fields():
+def test_load_strips_legacy_review_gate_url_and_timeout():
+    """2026-05-12 dedup regression: legacy review_gate.rating_server_url /
+    upload_timeout_seconds / upload_max_attempts rows that survive in old
+    DBs MUST be silently stripped when loading. The single source for these
+    values is now general.image_server_ip / image_review_timeout_seconds.
+    Letting them through would re-introduce the dual-source divergence.
+    """
     fd, p = tempfile.mkstemp(suffix=".db")
     os.close(fd)
     try:
@@ -176,9 +191,10 @@ def test_load_merges_review_gate_fields():
                 json.dumps(
                     {
                         "enabled": True,
-                        "rating_server_url": "http://review.local:8080",
+                        "rating_server_url": "http://legacy.local:9999",
                         "upload_timeout_seconds": 45.0,
                         "upload_max_attempts": 2,
+                        "video_review_policy": "skip",
                     },
                     ensure_ascii=False,
                 ),
@@ -189,9 +205,73 @@ def test_load_merges_review_gate_fields():
 
         out = load_media_auto_action_settings(p)
         assert out["review_gate"]["enabled"] is True
-        assert out["review_gate"]["rating_server_url"] == "http://review.local:8080"
-        assert out["review_gate"]["upload_timeout_seconds"] == 45.0
-        assert out["review_gate"]["upload_max_attempts"] == 2
-        assert out["review_gate"]["video_review_policy"] == "extract_frame"
+        assert out["review_gate"]["video_review_policy"] == "skip"
+        # Legacy fields must be dropped at read time even when they exist
+        # on disk, otherwise downstream consumers would silently see a
+        # different rating-server URL than the realtime path.
+        assert "rating_server_url" not in out["review_gate"]
+        assert "upload_timeout_seconds" not in out["review_gate"]
+        assert "upload_max_attempts" not in out["review_gate"]
+    finally:
+        Path(p).unlink(missing_ok=True)
+
+
+# ---------------------------------------------------------------------------
+# load_general_image_review_settings
+# ---------------------------------------------------------------------------
+
+
+def test_general_image_review_defaults_when_no_table():
+    out = load_general_image_review_settings(":memory:")
+    assert out["image_server_ip"] == ""
+    assert out["image_review_timeout_seconds"] == DEFAULT_IMAGE_REVIEW_TIMEOUT_SECONDS
+    assert out["image_upload_enabled"] is DEFAULT_IMAGE_UPLOAD_ENABLED
+
+
+def test_general_image_review_reads_stored_rows():
+    fd, p = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _init_settings_db(Path(p))
+        conn = sqlite3.connect(p)
+        conn.execute(
+            "INSERT INTO settings (category, key, value_type, value_string) "
+            "VALUES ('general', 'image_server_ip', 'string', '  http://review.local:8080  ')"
+        )
+        conn.execute(
+            "INSERT INTO settings (category, key, value_type, value_int) "
+            "VALUES ('general', 'image_review_timeout_seconds', 'int', 25)"
+        )
+        conn.execute(
+            "INSERT INTO settings (category, key, value_type, value_bool) "
+            "VALUES ('general', 'image_upload_enabled', 'boolean', 0)"
+        )
+        conn.commit()
+        conn.close()
+
+        out = load_general_image_review_settings(p)
+        # whitespace is trimmed so consumers do not have to defend against it.
+        assert out["image_server_ip"] == "http://review.local:8080"
+        assert out["image_review_timeout_seconds"] == 25
+        assert out["image_upload_enabled"] is False
+    finally:
+        Path(p).unlink(missing_ok=True)
+
+
+def test_general_image_review_clamps_timeout_to_at_least_one():
+    fd, p = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    try:
+        _init_settings_db(Path(p))
+        conn = sqlite3.connect(p)
+        conn.execute(
+            "INSERT INTO settings (category, key, value_type, value_int) "
+            "VALUES ('general', 'image_review_timeout_seconds', 'int', 0)"
+        )
+        conn.commit()
+        conn.close()
+
+        out = load_general_image_review_settings(p)
+        assert out["image_review_timeout_seconds"] == 1
     finally:
         Path(p).unlink(missing_ok=True)

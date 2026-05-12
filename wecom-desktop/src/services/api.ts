@@ -888,9 +888,10 @@ export interface AutoContactShareSettings {
 
 export interface ReviewGateSettings {
   enabled: boolean
-  rating_server_url: string
-  upload_timeout_seconds: number
-  upload_max_attempts: number
+  // Server URL and upload timeout are app-level singletons configured in
+  // System Settings (`general.image_server_ip` /
+  // `general.image_review_timeout_seconds`); they are NOT carried on the
+  // review_gate payload anymore. See plan "media-actions dedup" (2026-05-12).
   video_review_policy: string
 }
 

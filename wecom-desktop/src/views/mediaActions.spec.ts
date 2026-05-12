@@ -39,9 +39,6 @@ describe('Media Actions API', () => {
 
   const defaultReviewGate = {
     enabled: false,
-    rating_server_url: 'http://127.0.0.1:8080',
-    upload_timeout_seconds: 30,
-    upload_max_attempts: 3,
     video_review_policy: 'extract_frame',
   }
 
@@ -272,9 +269,6 @@ describe('MediaAutoActionSettings type', () => {
       },
       review_gate: {
         enabled: true,
-        rating_server_url: 'http://127.0.0.1:8080',
-        upload_timeout_seconds: 30,
-        upload_max_attempts: 3,
         video_review_policy: 'extract_frame',
       },
     }

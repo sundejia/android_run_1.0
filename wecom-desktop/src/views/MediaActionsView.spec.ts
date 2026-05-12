@@ -56,9 +56,6 @@ const baseSettings = {
   },
   review_gate: {
     enabled: true,
-    rating_server_url: 'http://127.0.0.1:8080',
-    upload_timeout_seconds: 30,
-    upload_max_attempts: 3,
     video_review_policy: 'extract_frame',
   },
 }
@@ -146,14 +143,11 @@ describe('MediaActionsView', () => {
     )
   })
 
-  it('saves review gate settings', async () => {
+  it('saves review gate settings (URL/timeout removed in 2026-05-12 dedup)', async () => {
     const wrapper = mount(MediaActionsView)
     await flushPromises()
 
-    await wrapper.get('#media-review-server-url').setValue('http://review.local:8080')
-    await wrapper.get('#media-review-upload-timeout').setValue(45)
-    await wrapper.get('#media-review-upload-attempts').setValue(2)
-    await wrapper.get('#media-video-review-policy').setValue('extract_frame')
+    await wrapper.get('#media-video-review-policy').setValue('skip')
     await wrapper.get('#save-media-action-settings').trigger('click')
     await flushPromises()
 
@@ -161,12 +155,15 @@ describe('MediaActionsView', () => {
       expect.objectContaining({
         review_gate: expect.objectContaining({
           enabled: true,
-          rating_server_url: 'http://review.local:8080',
-          upload_timeout_seconds: 45,
-          upload_max_attempts: 2,
-          video_review_policy: 'extract_frame',
+          video_review_policy: 'skip',
         }),
       })
     )
+    // Legacy URL/timeout/attempts inputs no longer exist on the page.
+    expect(wrapper.find('#media-review-server-url').exists()).toBe(false)
+    expect(wrapper.find('#media-review-upload-timeout').exists()).toBe(false)
+    expect(wrapper.find('#media-review-upload-attempts').exists()).toBe(false)
+    // The page must point users at the unified settings location instead.
+    expect(wrapper.find('#media-review-server-config-hint').exists()).toBe(true)
   })
 })

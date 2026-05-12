@@ -13,46 +13,50 @@ const reachabilityTesting = ref(false)
 const reachabilityResult = ref<{ reachable: boolean; message: string } | null>(null)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
-const defaultSettings: MediaAutoActionSettings = {
-  enabled: false,
-  auto_blacklist: {
+// Tiny "all-off" placeholder shape used purely as a typed initialiser before
+// the API responds. We deliberately avoid maintaining a frontend-side copy of
+// real default values — those live in the backend (single source of truth at
+// `settings_loader.DEFAULT_MEDIA_AUTO_ACTION_SETTINGS`). Duplicating them here
+// was the entry point for the 2026-05-12 dedup bug.
+function createPlaceholderSettings(): MediaAutoActionSettings {
+  return {
     enabled: false,
-    reason: 'Customer sent media (auto)',
-    skip_if_already_blacklisted: true,
-    require_review_pass: false,
-  },
-  auto_group_invite: {
-    enabled: false,
-    group_members: [],
-    group_name_template: '{customer_name}-服务群',
-    skip_if_group_exists: true,
-    send_message_before_create: false,
-    pre_create_message_text: '',
-    send_test_message_after_create: true,
-    test_message_text: '测试',
-    post_confirm_wait_seconds: 1,
-    duplicate_name_policy: 'first',
-    video_invite_policy: 'extract_frame',
-  },
-  auto_contact_share: {
-    enabled: false,
-    contact_name: '',
-    skip_if_already_shared: true,
-    cooldown_seconds: 0,
-    kefu_overrides: {},
-    send_message_before_share: false,
-    pre_share_message_text: '',
-  },
-  review_gate: {
-    enabled: false,
-    rating_server_url: 'http://127.0.0.1:8080',
-    upload_timeout_seconds: 30,
-    upload_max_attempts: 3,
-    video_review_policy: 'extract_frame',
-  },
+    auto_blacklist: {
+      enabled: false,
+      reason: '',
+      skip_if_already_blacklisted: true,
+      require_review_pass: false,
+    },
+    auto_group_invite: {
+      enabled: false,
+      group_members: [],
+      group_name_template: '',
+      skip_if_group_exists: true,
+      send_message_before_create: false,
+      pre_create_message_text: '',
+      send_test_message_after_create: true,
+      test_message_text: '',
+      post_confirm_wait_seconds: 1,
+      duplicate_name_policy: 'first',
+      video_invite_policy: 'extract_frame',
+    },
+    auto_contact_share: {
+      enabled: false,
+      contact_name: '',
+      skip_if_already_shared: true,
+      cooldown_seconds: 0,
+      kefu_overrides: {},
+      send_message_before_share: false,
+      pre_share_message_text: '',
+    },
+    review_gate: {
+      enabled: false,
+      video_review_policy: 'extract_frame',
+    },
+  }
 }
 
-const settings = ref<MediaAutoActionSettings>(structuredClone(defaultSettings))
+const settings = ref<MediaAutoActionSettings>(createPlaceholderSettings())
 
 const newMember = ref('')
 const newKefuName = ref('')
@@ -97,14 +101,20 @@ function showToast(message: string, type: 'success' | 'error' = 'success') {
 async function loadSettings() {
   loading.value = true
   try {
+    // Backend already merges DB rows over DEFAULT_MEDIA_AUTO_ACTION_SETTINGS
+    // (single source of truth in python core), so the response should be
+    // a complete shape. We still defensively merge over the placeholder
+    // skeleton so a partial mock or in-flight schema migration never
+    // leaves the template with undefined values to .replace() on.
     const loaded = await api.getMediaActionSettings()
+    const placeholder = createPlaceholderSettings()
     settings.value = {
-      ...structuredClone(defaultSettings),
+      ...placeholder,
       ...loaded,
-      auto_blacklist: { ...defaultSettings.auto_blacklist, ...loaded.auto_blacklist },
-      auto_group_invite: { ...defaultSettings.auto_group_invite, ...loaded.auto_group_invite },
-      auto_contact_share: { ...defaultSettings.auto_contact_share, ...loaded.auto_contact_share },
-      review_gate: { ...defaultSettings.review_gate, ...loaded.review_gate },
+      auto_blacklist: { ...placeholder.auto_blacklist, ...loaded.auto_blacklist },
+      auto_group_invite: { ...placeholder.auto_group_invite, ...loaded.auto_group_invite },
+      auto_contact_share: { ...placeholder.auto_contact_share, ...loaded.auto_contact_share },
+      review_gate: { ...placeholder.review_gate, ...loaded.review_gate },
     }
   } catch (err: any) {
     showToast(err.message || t('media_actions.load_failed'), 'error')
@@ -282,44 +292,11 @@ onMounted(loadSettings)
         </div>
 
         <div v-if="settings.review_gate.enabled && settings.enabled" class="space-y-4">
-          <div>
-            <label for="media-review-server-url" class="block text-sm font-medium text-gray-300 mb-1">
-              {{ t('media_actions.review_server_url_label') }}
-            </label>
-            <input
-              id="media-review-server-url"
-              v-model="settings.review_gate.rating_server_url"
-              type="text"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              placeholder="http://127.0.0.1:8080"
-            />
-          </div>
-
-          <div class="grid grid-cols-2 gap-4">
-            <div>
-              <label for="media-review-upload-timeout" class="block text-sm font-medium text-gray-300 mb-1">
-                {{ t('media_actions.review_timeout_label') }}
-              </label>
-              <input
-                id="media-review-upload-timeout"
-                v-model.number="settings.review_gate.upload_timeout_seconds"
-                type="number"
-                min="1"
-                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label for="media-review-upload-attempts" class="block text-sm font-medium text-gray-300 mb-1">
-                {{ t('media_actions.review_attempts_label') }}
-              </label>
-              <input
-                id="media-review-upload-attempts"
-                v-model.number="settings.review_gate.upload_max_attempts"
-                type="number"
-                min="1"
-                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-            </div>
+          <div
+            id="media-review-server-config-hint"
+            class="rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-200"
+          >
+            {{ t('media_actions.review_server_config_hint') }}
           </div>
 
           <div>

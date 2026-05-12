@@ -75,9 +75,6 @@ class TestGetSettings:
             },
             "review_gate": {
                 "enabled": True,
-                "rating_server_url": "http://review.local:8080",
-                "upload_timeout_seconds": 45,
-                "upload_max_attempts": 2,
                 "video_review_policy": "extract_frame",
             },
         }
@@ -94,7 +91,38 @@ class TestGetSettings:
         assert data["auto_group_invite"]["test_message_text"] == "欢迎 {customer_name}"
         assert data["auto_group_invite"]["post_confirm_wait_seconds"] == 2.5
         assert data["review_gate"]["enabled"] is True
-        assert data["review_gate"]["rating_server_url"] == "http://review.local:8080"
+        assert data["review_gate"]["video_review_policy"] == "extract_frame"
+        # 2026-05-12 dedup regression: response payload must NOT include the
+        # legacy server URL/timeout fields. They live under general.* now.
+        assert "rating_server_url" not in data["review_gate"]
+        assert "upload_timeout_seconds" not in data["review_gate"]
+        assert "upload_max_attempts" not in data["review_gate"]
+
+    def test_get_settings_strips_legacy_review_gate_fields(self):
+        """If a legacy DB still has rating_server_url stored, the API must
+        not echo it back to clients (the field is removed from the Pydantic
+        response model)."""
+        stored = {
+            "enabled": True,
+            "review_gate": {
+                "enabled": True,
+                "rating_server_url": "http://legacy.local:9999",
+                "upload_timeout_seconds": 45,
+                "upload_max_attempts": 2,
+                "video_review_policy": "skip",
+            },
+        }
+        with patch("routers.media_actions.get_settings_service") as mock_svc:
+            mock_svc.return_value.get_category.return_value = stored
+            response = client.get("/api/media-actions/settings")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["review_gate"]["enabled"] is True
+        assert data["review_gate"]["video_review_policy"] == "skip"
+        assert "rating_server_url" not in data["review_gate"]
+        assert "upload_timeout_seconds" not in data["review_gate"]
+        assert "upload_max_attempts" not in data["review_gate"]
 
 
 class TestUpdateSettings:
@@ -175,9 +203,6 @@ class TestUpdateSettings:
                     json={
                         "review_gate": {
                             "enabled": True,
-                            "rating_server_url": "http://review.local:8080",
-                            "upload_timeout_seconds": 50,
-                            "upload_max_attempts": 2,
                             "video_review_policy": "extract_frame",
                         }
                     },
@@ -186,9 +211,45 @@ class TestUpdateSettings:
         assert response.status_code == 200
         data = response.json()
         assert data["review_gate"]["enabled"] is True
-        assert data["review_gate"]["rating_server_url"] == "http://review.local:8080"
-        assert data["review_gate"]["upload_timeout_seconds"] == 50
-        assert data["review_gate"]["upload_max_attempts"] == 2
+        assert data["review_gate"]["video_review_policy"] == "extract_frame"
+
+    def test_update_review_gate_ignores_legacy_url_in_request(self):
+        """2026-05-12 dedup regression: if a stale frontend (or external
+        caller) sends rating_server_url in the PUT body, it must be
+        silently discarded so it never leaks into the persisted JSON."""
+        captured: dict = {}
+
+        def _fake_set_category(category, settings, *a, **kw):
+            captured.setdefault("calls", []).append((category, settings))
+            return settings
+
+        with patch("routers.media_actions.get_settings_service") as mock_svc:
+            mock_svc.return_value.get_category.return_value = {}
+            mock_svc.return_value.set_category.side_effect = _fake_set_category
+
+            with patch("routers.global_websocket.get_global_ws_manager", return_value=_mock_ws_manager()):
+                response = client.put(
+                    "/api/media-actions/settings",
+                    json={
+                        "review_gate": {
+                            "enabled": True,
+                            "video_review_policy": "extract_frame",
+                            # Legacy fields a stale frontend might still send.
+                            "rating_server_url": "http://legacy.local:9999",
+                            "upload_timeout_seconds": 99,
+                            "upload_max_attempts": 7,
+                        }
+                    },
+                )
+
+        assert response.status_code == 200
+        # Pydantic's default extra="ignore" strips the legacy fields; the
+        # router writes only the recognised attributes.
+        assert captured["calls"], "set_category was not called"
+        _, persisted = captured["calls"][0]
+        assert "rating_server_url" not in persisted["review_gate"]
+        assert "upload_timeout_seconds" not in persisted["review_gate"]
+        assert "upload_max_attempts" not in persisted["review_gate"]
 
 
 class TestGetLogs:

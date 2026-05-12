@@ -103,6 +103,7 @@ def create_sync_orchestrator(
     review_storage, review_submitter, review_gate_on = build_review_components(
         db_path=db_path,
         media_settings=media_settings,
+        settings_db_path=str(get_default_db_path()),
     )
 
     # 消息处理器
@@ -200,6 +201,7 @@ def create_customer_syncer(
     review_storage, review_submitter, review_gate_on = build_review_components(
         db_path=str(resolved_db),
         media_settings=media_settings,
+        settings_db_path=str(get_default_db_path()),
     )
 
     # 消息处理器

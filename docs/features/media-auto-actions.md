@@ -1,7 +1,7 @@
 # Media Auto-Actions（客户发图/视频后的自动动作）
 
 > **状态**: 已实现  
-> **最后更新**: 2026-05-09（auto_contact_share 新增 `evaluate_gate_pass` 审核门检查：开启 review_gate 时，名片仅在审核通过后推送；与 auto_blacklist / auto_group_invite 共享同一份 `media_review_decision` 判决逻辑）
+> **最后更新**: 2026-05-12（**审核服务器 SSOT**：`general.image_server_ip` / `image_review_timeout_seconds` 为唯一配置入口；`review_gate` 仅保留 `enabled` 与 `video_review_policy`；迁移与实现见 [dedup 说明](../implementation/2026-05-12-media-actions-settings-dedup-ssot.md)。此前：2026-05-09 `evaluate_gate_pass` 与名片/拉群门控。）
 
 ## 功能概述
 
@@ -36,8 +36,9 @@
 | `auto_blacklist`    | json    | `enabled`, `reason`, `skip_if_already_blacklisted`, `require_review_pass`（默认 `false`，`true` 时与 `auto_group_invite` 共用 review 关卡）                                                                                                                                                      |
 | `auto_group_invite` | json    | `enabled`, `group_members`, `group_name_template`, `skip_if_group_exists`, `member_source`, `send_test_message_after_create`, `test_message_text`, `post_confirm_wait_seconds`, `duplicate_name_policy` |
 | `auto_contact_share` | json  | `enabled`, `contact_name`, `skip_if_already_shared`, `cooldown_seconds`, `kefu_overrides`（详见 [Auto Contact Share](auto-contact-share.md)）                                                                                                                      |
+| `review_gate`       | json    | **`enabled`**, **`video_review_policy`**（`extract_frame` / `skip` / `always`）。**不包含**审核服务器 URL 或上传超时 — 与实时回复共用 **`general` 类别**：`image_server_ip`、`image_review_timeout_seconds`、`image_upload_enabled`（系统设置「图片审核」）。旧库中遗留的 `rating_server_url` 等会在后端启动时幂等迁移并剥离。 |
 
-默认值与类型在 `wecom-desktop/backend/services/settings/defaults.py` 的 `SETTING_DEFINITIONS` 中注册，确保 JSON 子配置正确序列化。
+默认值 schema 的 **单一来源** 为 `src/wecom_automation/services/media_actions/settings_loader.py` 中的 `DEFAULT_MEDIA_AUTO_ACTION_SETTINGS`；`defaults.py` 与 `routers/media_actions.py` 通过 import 引用，避免多处硬编码分叉。
 
 ## HTTP API
 
@@ -145,7 +146,7 @@
 | 事件总线与动作         | `tests/unit/test_media_event_bus.py`, `test_auto_blacklist_action.py`, `test_auto_group_invite_action.py`, `test_auto_contact_share_action.py` |
 | 名片分享服务与页面状态 | `tests/unit/test_contact_share_service.py`, `tests/unit/test_page_state_validator.py`, `tests/unit/test_contact_finder_strategy.py` |
 | Processor + 总线集成   | `tests/unit/test_media_action_integration.py`                                                             |
-| 设置加载               | `tests/unit/test_media_actions_settings_loader.py`                                                        |
+| 设置加载               | `tests/unit/test_media_actions_settings_loader.py`、`tests/unit/test_review_runtime.py`；迁移 `wecom-desktop/backend/tests/test_settings_review_url_migration.py` |
 | 拉群工作流/兼容层      | `tests/unit/test_group_invite_workflow.py`, `tests/unit/test_group_chat_service.py`                       |
 | 同步工厂 + 媒体总线    | `tests/unit/test_sync_factory.py`                                                                         |
 | 会话屏检测（拉群确认） | `tests/unit/test_wecom_service_screen_detection.py`                                                       |
@@ -162,6 +163,7 @@
 
 ## 相关文档
 
+- [Media actions settings dedup (SSOT, 2026-05-12)](../implementation/2026-05-12-media-actions-settings-dedup-ssot.md) — 审核服务器地址与超时统一到 `general`；`review_gate` 仅门控与视频策略；迁移与测试索引
 - [Auto Contact Share (自动推送主管名片)](auto-contact-share.md) — 名片分享 UI 流程、per-kefu 配置、幂等表、多版本 Resource ID、页面状态校验与诊断 dump
 - [Contact share reliability (2026-05)](../implementation/2026-05-07-contact-share-reliability.md) — 假成功治理、附件面板 `aij`/`aif`、边缘手势区与滑动参数、测试索引
 - [安卓拉群工作流实现说明](../implementation/2026-04-04-android-group-invite-workflow.md) — 模块划分、时序、配置与限制（含建群后 `restore_navigation`）

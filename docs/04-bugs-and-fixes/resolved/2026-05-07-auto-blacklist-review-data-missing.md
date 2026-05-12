@@ -106,6 +106,10 @@ The previous bug was "blacklist never succeeded", not "blacklist was triggered i
 - `wecom-desktop/backend/tests/test_media_actions_api.py` — API defaults regression locked.
 - Full unit suite: 830 passed in 42s.
 
+## Related (2026-05-12)
+
+A **separate** operator-facing pitfall was fixed later: the image-rating-server URL existed in both **System Settings** (`general.image_server_ip`) and the old **Media Auto-Actions** `review_gate.rating_server_url`. Filling only one side left `ai_review_status` unset for the path that read the empty field (for example `Skipping auto-contact-share: review data missing`). Those duplicate fields were removed and migrated; see [Media actions settings dedup (SSOT)](../../implementation/2026-05-12-media-actions-settings-dedup-ssot.md).
+
 ## References
 
 - Code: `src/wecom_automation/services/media_actions/actions/auto_blacklist.py`

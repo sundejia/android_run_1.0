@@ -2,9 +2,18 @@
 Settings 默认值定义
 
 定义所有设置的默认值、类型和描述信息。
+
+媒体自动操作（``media_auto_actions``）的子结构 schema 单一来源在
+``wecom_automation.services.media_actions.settings_loader``，本文件通过
+``import`` 引用，避免在 desktop backend / python core / 路由层之间
+重复硬编码。
 """
 
 from typing import Any
+
+from wecom_automation.services.media_actions.settings_loader import (
+    DEFAULT_MEDIA_AUTO_ACTION_SETTINGS as _MEDIA_DEFAULTS,
+)
 
 from .models import SettingCategory, ValueType
 
@@ -249,22 +258,22 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     ),
     # ============================================================================
     # Media auto-actions (customer image/video -> optional blacklist + group invite)
+    # The JSON sub-structures come from the python-core single source of truth
+    # so any new field is picked up here automatically on next process start.
     # ============================================================================
-    ("media_auto_actions", "enabled", ValueType.BOOLEAN.value, False, "启用客户发图/视频后的自动动作", False),
+    (
+        "media_auto_actions",
+        "enabled",
+        ValueType.BOOLEAN.value,
+        _MEDIA_DEFAULTS["enabled"],
+        "启用客户发图/视频后的自动动作",
+        False,
+    ),
     (
         "media_auto_actions",
         "auto_blacklist",
         ValueType.JSON.value,
-        {
-            "enabled": False,
-            "reason": "Customer sent media (auto)",
-            "skip_if_already_blacklisted": True,
-            # False (default): customer-sent media → blacklist immediately.
-            # True: defer to the image-rating-server review verdict so the
-            # blacklist gate mirrors auto-group-invite. Flip on only when the
-            # rating pipeline is actually wired in.
-            "require_review_pass": False,
-        },
+        _MEDIA_DEFAULTS["auto_blacklist"],
         "自动拉黑子配置",
         False,
     ),
@@ -272,20 +281,7 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         "media_auto_actions",
         "auto_group_invite",
         ValueType.JSON.value,
-        {
-            "enabled": False,
-            "group_members": [],
-            "group_name_template": "{customer_name}-服务群",
-            "skip_if_group_exists": True,
-            "member_source": "manual",
-            "send_test_message_after_create": True,
-            "test_message_text": "测试",
-            "post_confirm_wait_seconds": 1.0,
-            "duplicate_name_policy": "first",
-            "video_invite_policy": "extract_frame",
-            "send_message_before_create": False,
-            "pre_create_message_text": "",
-        },
+        _MEDIA_DEFAULTS["auto_group_invite"],
         "自动拉群子配置",
         False,
     ),
@@ -293,15 +289,7 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         "media_auto_actions",
         "auto_contact_share",
         ValueType.JSON.value,
-        {
-            "enabled": False,
-            "contact_name": "",
-            "skip_if_already_shared": True,
-            "cooldown_seconds": 0,
-            "kefu_overrides": {},
-            "send_message_before_share": False,
-            "pre_share_message_text": "",
-        },
+        _MEDIA_DEFAULTS["auto_contact_share"],
         "自动发名片子配置",
         False,
     ),
@@ -309,14 +297,8 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         "media_auto_actions",
         "review_gate",
         ValueType.JSON.value,
-        {
-            "enabled": False,
-            "rating_server_url": "http://127.0.0.1:8080",
-            "upload_timeout_seconds": 30.0,
-            "upload_max_attempts": 3,
-            "video_review_policy": "extract_frame",
-        },
-        "媒体动作图片审核门配置",
+        _MEDIA_DEFAULTS["review_gate"],
+        "媒体动作图片审核门配置（服务器地址/超时统一在 general.image_server_ip / image_review_timeout_seconds 配置）",
         False,
     ),
     # ============================================================================

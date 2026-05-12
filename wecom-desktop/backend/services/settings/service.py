@@ -88,6 +88,121 @@ class SettingsService:
         self._repository.initialize_defaults()
         self._repository.sync_definition_metadata()
         self.ensure_device_identity()
+        # One-shot, idempotent migration for legacy review_gate fields
+        # (rating_server_url / upload_timeout_seconds). They've been
+        # promoted to general.image_server_ip / image_review_timeout_seconds.
+        self.migrate_review_gate_url_to_general()
+
+    def migrate_review_gate_url_to_general(self) -> bool:
+        """Promote ``media_auto_actions.review_gate.{rating_server_url,
+        upload_timeout_seconds}`` to ``general.{image_server_ip,
+        image_review_timeout_seconds}`` when the general field is still
+        empty / at its default.
+
+        This runs every process start but is idempotent:
+            * Only copies non-empty / non-default legacy values.
+            * Never overwrites a non-empty general value.
+            * Always rewrites the review_gate JSON without the legacy
+              keys so a second pass becomes a no-op.
+
+        Returns ``True`` when at least one row changed.
+        """
+        try:
+            review_gate = self._repository.get_value(
+                "media_auto_actions", "review_gate", None
+            )
+        except Exception as exc:
+            self._logger.debug("review_gate migration: read failed: %s", exc)
+            return False
+
+        if not isinstance(review_gate, dict):
+            return False
+
+        legacy_url = review_gate.get("rating_server_url")
+        legacy_timeout = review_gate.get("upload_timeout_seconds")
+        legacy_attempts = review_gate.get("upload_max_attempts")
+
+        had_legacy_keys = any(
+            k in review_gate
+            for k in ("rating_server_url", "upload_timeout_seconds", "upload_max_attempts")
+        )
+        if not had_legacy_keys:
+            return False
+
+        changed = False
+
+        if isinstance(legacy_url, str) and legacy_url.strip():
+            current_url = self._repository.get_value(
+                SettingCategory.GENERAL.value, "image_server_ip", ""
+            )
+            if not (isinstance(current_url, str) and current_url.strip()):
+                stripped = legacy_url.strip()
+                if stripped != "http://127.0.0.1:8080":
+                    # Old hard-coded default — don't auto-promote it,
+                    # otherwise every untouched install would silently
+                    # start pointing at localhost:8080.
+                    self._repository.set(
+                        SettingCategory.GENERAL.value,
+                        "image_server_ip",
+                        stripped,
+                        changed_by="migration:review_gate_url",
+                    )
+                    self._logger.info(
+                        "Migrated review_gate.rating_server_url -> general.image_server_ip (%s)",
+                        stripped,
+                    )
+                    changed = True
+
+        if legacy_timeout is not None:
+            try:
+                legacy_timeout_int = max(1, int(float(legacy_timeout)))
+            except (TypeError, ValueError):
+                legacy_timeout_int = None
+            if legacy_timeout_int is not None and legacy_timeout_int not in (30, 40):
+                # 30 was the legacy default; 40 is the new default — both
+                # would be noise. Only promote a deliberately tuned value.
+                current_timeout = self._repository.get_value(
+                    SettingCategory.GENERAL.value, "image_review_timeout_seconds", 40
+                )
+                try:
+                    current_timeout_int = int(current_timeout)
+                except (TypeError, ValueError):
+                    current_timeout_int = 40
+                if current_timeout_int == 40:
+                    self._repository.set(
+                        SettingCategory.GENERAL.value,
+                        "image_review_timeout_seconds",
+                        legacy_timeout_int,
+                        changed_by="migration:review_gate_timeout",
+                    )
+                    self._logger.info(
+                        "Migrated review_gate.upload_timeout_seconds -> "
+                        "general.image_review_timeout_seconds (%s)",
+                        legacy_timeout_int,
+                    )
+                    changed = True
+
+        # Always rewrite the review_gate row without the legacy keys so
+        # subsequent process starts find nothing to migrate.
+        cleaned = {k: v for k, v in review_gate.items()
+                   if k not in ("rating_server_url", "upload_timeout_seconds", "upload_max_attempts")}
+        if cleaned != review_gate:
+            self._repository.set(
+                "media_auto_actions",
+                "review_gate",
+                cleaned,
+                changed_by="migration:review_gate_cleanup",
+            )
+            self._logger.info(
+                "Stripped legacy review_gate keys (had: %s)",
+                sorted(set(review_gate) - set(cleaned)),
+            )
+            changed = True
+
+        # Defensive: silence unused warnings even when attempts is set
+        _ = legacy_attempts
+
+        return changed
 
     # ============================================================================
     # Generic Operations

@@ -10,6 +10,7 @@ Provides endpoints for:
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 from datetime import datetime
 from typing import Any, List, Optional
@@ -19,50 +20,21 @@ from pydantic import BaseModel, Field
 
 from services.settings import get_settings_service
 
+# Single source of truth for the media-auto-actions default schema lives in
+# python core. Importing it here prevents the router defaults from drifting
+# from what the python core actually consumes.
+from wecom_automation.services.media_actions.settings_loader import (
+    DEFAULT_MEDIA_AUTO_ACTION_SETTINGS,
+)
+
 logger = logging.getLogger("media_actions.router")
 router = APIRouter()
 
 CATEGORY = "media_auto_actions"
 
-DEFAULT_SETTINGS: dict[str, Any] = {
-    "enabled": False,
-    "auto_blacklist": {
-        "enabled": False,
-        "reason": "Customer sent media (auto)",
-        "skip_if_already_blacklisted": True,
-        "require_review_pass": False,
-    },
-    "auto_group_invite": {
-        "enabled": False,
-        "group_members": [],
-        "group_name_template": "{customer_name}-服务群",
-        "skip_if_group_exists": True,
-        "member_source": "manual",
-        "send_test_message_after_create": True,
-        "test_message_text": "测试",
-        "post_confirm_wait_seconds": 1.0,
-        "duplicate_name_policy": "first",
-        "video_invite_policy": "extract_frame",
-        "send_message_before_create": False,
-        "pre_create_message_text": "",
-    },
-    "auto_contact_share": {
-        "enabled": False,
-        "contact_name": "",
-        "skip_if_already_shared": True,
-        "cooldown_seconds": 0,
-        "kefu_overrides": {},
-        "send_message_before_share": False,
-        "pre_share_message_text": "",
-    },
-    "review_gate": {
-        "enabled": False,
-        "rating_server_url": "http://127.0.0.1:8080",
-        "upload_timeout_seconds": 30.0,
-        "upload_max_attempts": 3,
-        "video_review_policy": "extract_frame",
-    },
-}
+# Defensive deep copy: callers may mutate (e.g. _get_settings merges in stored
+# values), but we never want to scribble on the python-core constant.
+DEFAULT_SETTINGS: dict[str, Any] = copy.deepcopy(DEFAULT_MEDIA_AUTO_ACTION_SETTINGS)
 
 
 # ============================================================================
@@ -107,10 +79,16 @@ class AutoContactShareSettings(BaseModel):
 
 
 class ReviewGateSettings(BaseModel):
+    """Image-review gate toggle.
+
+    Server URL and upload timeout are deliberately NOT stored here — they
+    are app-level singletons and live under ``general.image_server_ip`` /
+    ``general.image_review_timeout_seconds`` (the same fields the realtime
+    image-review path consumes). See plan
+    ``media-actions dedup`` (2026-05-12).
+    """
+
     enabled: bool = False
-    rating_server_url: str = "http://127.0.0.1:8080"
-    upload_timeout_seconds: float = 30.0
-    upload_max_attempts: int = 3
     video_review_policy: str = "extract_frame"
 
 
