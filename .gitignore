@@ -150,6 +150,9 @@ followup_test/test_search_only.py
 # Git worktrees (isolated workspaces for parallel development)
 .worktrees/
 
+# Ephemeral files created by backend pytest (image_review_client)
+wecom-desktop/backend/tests/.tmp_image_review_client/
+
 # Temporary local drafts / scratch docs (handoff notes, screenshots, etc.)
 _tmp_docs/
 

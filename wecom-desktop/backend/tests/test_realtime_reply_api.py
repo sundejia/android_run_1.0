@@ -42,6 +42,9 @@ def mock_manager():
     manager.get_state = Mock(return_value=None)
     manager.get_all_states = Mock(return_value={})
     manager.stop_all = AsyncMock()
+    # ``routers.realtime_reply.start_device`` compares this to the configured
+    # concurrency cap from settings — without a real int the comparison raises.
+    manager.get_active_realtime_count = Mock(return_value=0)
 
     return manager
 

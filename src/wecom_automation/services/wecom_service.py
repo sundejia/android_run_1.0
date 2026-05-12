@@ -2733,6 +2733,13 @@ class WeComService:
     # User Navigation
     # =========================================================================
 
+    # Lower bound on click-scroll attempts. Production has occasionally shipped
+    # ``WECOM_MAX_SCROLLS=5``, which is enough for the first-page case but loses
+    # users that scrolled to row 6+ between priority detection and click.
+    # ``click_user_in_list`` floors at this value to avoid that regression. See
+    # docs/04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md.
+    _CLICK_USER_MIN_SCROLLS = 10
+
     async def click_user_in_list(
         self,
         user_name: str,
@@ -2760,7 +2767,10 @@ class WeComService:
             await self.adb.scroll_to_top()
             await self.adb.wait(self.config.timing.ui_stabilization_delay)
 
-            max_attempts = self.config.scroll.max_scrolls
+            # Floor at ``_CLICK_USER_MIN_SCROLLS`` so under-configured production
+            # environments (WECOM_MAX_SCROLLS=5) cannot starve out genuine
+            # priority customers that sit just below the first viewport.
+            max_attempts = max(self.config.scroll.max_scrolls, self._CLICK_USER_MIN_SCROLLS)
 
             for attempt in range(max_attempts):
                 # Check for skip request each iteration
@@ -2799,6 +2809,90 @@ class WeComService:
             self.logger.warning(f"User '{user_name}' not found after {max_attempts} scrolls")
             return False
 
+    # Length threshold for enabling the prefix-match fallback. Short / generic
+    # names like "你好" (a common WeCom default display name) would match too
+    # many unrelated rows in prefix mode (e.g. a chat preview that starts with
+    # "你好…"), so we restrict the fallback to names long enough to be
+    # discriminating. 6 codepoints covers the typical ``B26050801xx`` ids and
+    # ordinary 3-4 char Chinese names with at least one symbol.
+    _CLICK_PREFIX_MIN_LEN = 6
+
+    @staticmethod
+    def _normalize_user_text(text: str | None) -> str:
+        """Normalise a list-cell text so cosmetic differences do not block matching.
+
+        - lowercases
+        - strips outer whitespace
+        - drops trailing ellipsis (``…``, ``...``)
+        - folds full-width parens / brackets to half-width
+        """
+        if not text:
+            return ""
+        s = text.strip().lower()
+        for suffix in ("…", "..."):
+            if s.endswith(suffix):
+                s = s[: -len(suffix)].rstrip()
+                break
+        s = s.translate(
+            str.maketrans(
+                {
+                    "（": "(",
+                    "）": ")",
+                    "［": "[",
+                    "］": "]",
+                    "【": "[",
+                    "】": "]",
+                }
+            )
+        )
+        return s
+
+    @staticmethod
+    def _looks_truncated(text: str | None) -> bool:
+        """Does ``text`` end with an ellipsis marker?"""
+        if not text:
+            return False
+        s = text.rstrip()
+        return s.endswith("…") or s.endswith("...")
+
+    @classmethod
+    def _user_text_match_tier(cls, user_name: str, element_text: str) -> int:
+        """Return a match tier; lower is better. ``0`` = no match.
+
+        Tier 1 (best) – Exact case-insensitive match.
+        Tier 2        – Normalised match (parens, brackets, ellipsis folded).
+        Tier 3 (worst)– Prefix match against a truncated render. Only enabled
+                        when the rendered text actually looks truncated AND the
+                        target name is at least ``_CLICK_PREFIX_MIN_LEN`` codepoints,
+                        to avoid runaway matches against short generic names.
+        """
+        if not user_name or not element_text:
+            return 0
+
+        if element_text.strip().lower() == user_name.strip().lower():
+            return 1
+
+        norm_target = cls._normalize_user_text(user_name)
+        norm_text = cls._normalize_user_text(element_text)
+
+        if not norm_target or not norm_text:
+            return 0
+
+        if norm_target == norm_text:
+            return 2
+
+        # Prefix fallback — only when the visible text is clearly truncated and
+        # the target name is long enough to be discriminating.
+        if (
+            len(norm_target) >= cls._CLICK_PREFIX_MIN_LEN
+            and cls._looks_truncated(element_text)
+            and len(norm_text) >= cls._CLICK_PREFIX_MIN_LEN
+            and norm_target.startswith(norm_text)
+        ):
+            return 3
+
+        return 0
+
     def _find_user_element(
         self,
         elements: list[dict],
@@ -2809,6 +2903,10 @@ class WeComService:
         """
         Find a user element in the clickable elements list.
 
+        Walks the element tree once collecting all matching candidates (and the
+        clickable ancestor when the match is on a non-clickable child), then
+        returns the best-tier match.
+
         Args:
             elements: List of UI elements to search
             user_name: User name to find
@@ -2816,31 +2914,46 @@ class WeComService:
             is_flat_list: If True, skip recursive child search (optimized for
                          flat lists like clickable_elements_cache)
         """
-        user_name_lower = user_name.lower()
+        candidates: list[tuple[int, dict]] = []  # (tier, element-to-tap)
 
-        for element in elements:
-            text = (element.get("text") or "").strip()
+        def visit(node_list: list[dict], clickable_ancestor: dict | None) -> None:
+            for element in node_list:
+                # Track the closest clickable ancestor so we can tap at the row
+                # level even when the matching text node itself is not clickable.
+                next_ancestor = element if element.get("clickable") else clickable_ancestor
 
-            if text.lower() == user_name_lower:
-                # If channel specified, verify it matches
-                if channel:
-                    # Check siblings or nearby elements for channel
-                    # For now, we just match by name
-                    pass
-                return element
+                text = (element.get("text") or "").strip()
+                if text:
+                    tier = self._user_text_match_tier(user_name, text)
+                    if tier > 0:
+                        # If the element itself is clickable, tap that; else
+                        # fall back to the nearest clickable ancestor.
+                        target = element if element.get("clickable") else clickable_ancestor
+                        # If neither the element nor any ancestor is clickable,
+                        # still record the element so callers that only need
+                        # ``index`` can use it. This matches the prior behaviour.
+                        candidates.append((tier, target or element))
 
-            # Only check children recursively if not a flat list
-            if not is_flat_list:
-                children = element.get("children", [])
-                if children:
-                    result = self._find_user_element(children, user_name, channel, is_flat_list=False)
-                    if result:
-                        # Return the parent if the child itself isn't clickable
-                        if not result.get("clickable") and element.get("clickable"):
-                            return element
-                        return result
+                if not is_flat_list:
+                    children = element.get("children", [])
+                    if children:
+                        visit(children, next_ancestor)
 
-        return None
+        visit(elements, None)
+
+        if not candidates:
+            return None
+
+        # Lower tier number wins; stable order across multiple hits in the same
+        # tier preserves the historical behaviour (first match in list order).
+        candidates.sort(key=lambda c: c[0])
+        best_tier, best_element = candidates[0]
+        if best_tier >= 3:
+            self.logger.info(
+                f"_find_user_element matched '{user_name}' via prefix fallback "
+                f"(tier={best_tier}); rendered text was truncated"
+            )
+        return best_element
 
     # =========================================================================
     # Screen State Detection (for Resume Sync)

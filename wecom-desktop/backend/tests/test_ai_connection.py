@@ -6,13 +6,23 @@ These tests verify:
 1. AI server health check
 2. Chat endpoint connectivity
 3. Response parsing
+
+These hit ``http://localhost:8000`` with real ``httpx`` calls. They are skipped
+unless ``WECOM_AI_SERVER_TESTS=1`` so default ``pytest wecom-desktop/backend/tests``
+stays green in dev/CI without a local AI stack.
 """
 
+import os
 import sys
 import pytest
 import asyncio
 from pathlib import Path
 from unittest.mock import MagicMock
+
+pytestmark = pytest.mark.skipif(
+    os.environ.get("WECOM_AI_SERVER_TESTS") != "1",
+    reason="Requires AI server at localhost:8000; export WECOM_AI_SERVER_TESTS=1 to run.",
+)
 
 # Mock droidrun before importing
 mock_droidrun = MagicMock()

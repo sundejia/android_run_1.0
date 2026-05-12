@@ -1,7 +1,7 @@
 # Documentation Index
 
 > **WeCom Automation Framework Documentation**
-> Last Updated: 2026-05-11 (**Pre-group message** for auto_group_invite + **action reorder** (`blacklist → group_invite → contact_share`) + **log-level fix** (debug→info for skip reasons). See `implementation/2026-05-11-media-actions-log-level-fix-and-pre-group-message.md`. Earlier: 2026-05-09 contact share review gate; 2026-05-07 auto-blacklist `require_review_pass`; contact picker `nmf` vs `nma`.)
+> Last Updated: 2026-05-12 (**Photo-rate / click funnel** — new-friend keyword parity + day-level click blocklist + relaxed list matching + `click_health` monitoring API + `monitoring.db` table. See `implementation/2026-05-12-new-friend-click-loop-photo-rate-remediation.md` and `04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md`. Earlier: 2026-05-11 pre-group message + media action reorder + log-level fix.)
 
 ---
 
@@ -175,6 +175,7 @@ See [Current Architecture](03-impl-and-arch/) for high-level design.
 - [Auto group invite multi-device reliability](implementation/2026-04-12-auto-group-invite-multi-device-reliability.md) - Diagnostics, parser/selector/scaling changes, real-device validation, `run_group_invite_*` scripts
 - [Auto contact share + review gate (E2E, dual DB)](implementation/2026-05-09-contact-share-review-gate.md) - `evaluate_gate_pass`, `build_media_event_bus` session vs control DB, image/video review persist path, log keywords, dedupe limitation
 - [Media actions: log-level fix, pre-group message & action reorder](implementation/2026-05-11-media-actions-log-level-fix-and-pre-group-message.md) - `debug→info` for skip reasons, `send_message_before_create` + `pre_create_message_text` fields, `blacklist→group_invite→contact_share` reorder
+- [New-friend click loop + photo-rate remediation](implementation/2026-05-12-new-friend-click-loop-photo-rate-remediation.md) - Keyword parity, `_click_dayblock`, list matching + scroll floor, `click_health` API + DB, regression tests
 - [Media auto-actions: custom post-group message + chat header menu](implementation/2026-04-05-media-auto-actions-custom-message-and-chat-header-menu.md) - `template_resolver`, API/UI alignment, `test-trigger` semantics, device validation notes
 - [Blacklist shim, sync media bus, Windows runbook](implementation/2026-04-05-blacklist-shim-sync-media-bus-runbook.md) - Desktop `blacklist_service` shim, `test_sync_factory`, `_is_chat_screen` for external groups
 - [Multi-Device Sync Storage Isolation](implementation/2026-04-02-multi-device-sync-storage-isolation.md) - Default per-device media output roots for parallel sync
@@ -243,6 +244,7 @@ Resolved issues organized by date.
 - [Contact picker page-state drift (`nle`/`cwa`, `Select Contact(s)`)](04-bugs-and-fixes/resolved/2026-05-07-contact-picker-page-state-drift.md) - `PageStateValidator` + `selectors` append-only IDs; title prefix fallback; E2E `scripts/e2e_verify_contact_picker_state.py`
 - [Picker search tapped close (`nma`) instead of magnifier (`nmf`)](04-bugs-and-fixes/resolved/2026-05-07-picker-search-nmf-vs-close-nma.md) - `PICKER_SEARCH_RESOURCE_PATTERNS` + `_EXCLUDE_RIDS`; confirm dialog `de2`/`de5`; dry-run full pipeline E2E
 - [Auto-blacklist permanently skipped because of missing review data](04-bugs-and-fixes/resolved/2026-05-07-auto-blacklist-review-data-missing.md) - new `auto_blacklist.require_review_pass` flag (default `false`) decouples standalone blacklist from `evaluate_gate_pass`; verifies AI suppression covers both current round (`_media_action_handled_keys`) and later rounds (`BlacklistChecker.is_blacklisted` × 3 sites); registration order in `factory.py` keeps contact share unaffected
+- [New-friend false positive + click loop starving photo-rate funnel](04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md) — removed broad `感谢您` match; `sync_service` / `unread_detector` keyword parity tests; `_click_dayblock` at priority-detect time; `WeComService` list matching + min scroll floor; `GET /api/monitoring/click-health` + `click_health` table; implementation [2026-05-12-new-friend-click-loop-photo-rate-remediation](implementation/2026-05-12-new-friend-click-loop-photo-rate-remediation.md)
 
 #### 2026-04
 

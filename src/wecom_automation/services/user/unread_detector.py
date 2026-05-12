@@ -101,15 +101,30 @@ class UnreadUserExtractor:
     )
 
     # 新好友欢迎语关键词 - 用于识别刚添加的好友
+    #
+    # 必须与 wecom_automation.services.sync_service.UnreadUserExtractor.NEW_FRIEND_WELCOME_KEYWORDS
+    # 保持一致；两份清单的 parity 由 tests/unit/test_new_friend_welcome_keywords.py 锁定。
+    #
+    # 注意：禁止加入泛化前缀（例如裸的 "感谢您"），否则会命中客服自己的业务话术
+    # （"感谢您的考虑"、"感谢您的咨询"等），把已应答的老客户错误标成新好友、
+    # 反复推进 priority 队列触发 click 失败 + cooldown 死循环
+    # （详见 docs/04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md）。
     NEW_FRIEND_WELCOME_KEYWORDS = (
         # 英文关键词 - 添加新好友系统消息
         "You have added",
         "as your WeCom",
-        # 中文关键词 - 欢迎语
+        "I've accepted your",
+        "Now we can chat",
+        # 中文关键词 - WELIKE 欢迎语（业务文案，足够特异）
         "感谢您信任并选择WELIKE",
-        "未来我将会",
         "感谢您信任",
         "选择WELIKE",
+        "未来我将会",
+        # 中文关键词 - WeCom 系统通知（添加/通过好友请求）
+        "我通过了你的",
+        "你已添加了",  # "你已添加了XXX，现在可以开始聊天了"
+        "现在我们可以开始聊天了",
+        "现在可以开始聊天了",  # 不带"我们"的变体
     )
 
     def __init__(self, logger: logging.Logger | None = None):

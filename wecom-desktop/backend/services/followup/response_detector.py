@@ -459,6 +459,81 @@ class ResponseDetector:
             logger=self._logger,
         )
         self._click_fail_cooldown: dict[str, tuple[float, int]] = {}
+        # Day-level blocklist for customers whose click repeatedly fails. Once a
+        # user is added here they are filtered out at the priority-detection
+        # stage (not just at the process stage), preventing a single bad row
+        # from monopolising the first-page scan loop for hours.
+        #
+        # Key format: ``f"{serial}:{user_name}"`` (same as ``_click_fail_cooldown``).
+        # Reset boundary: local calendar day rollover or process restart.
+        #
+        # See docs/04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md
+        self._click_dayblock: set[str] = set()
+        self._click_dayblock_day: str = datetime.now().strftime("%Y-%m-%d")
+        # Threshold (consecutive click failures) before a customer enters
+        # ``_click_dayblock``. Five matches the existing cooldown ramp
+        # (120s → 300s → 600s → 600s → 600s) — by the time we hit five we have
+        # already spent ~35 minutes on this single customer.
+        self._click_dayblock_threshold: int = 5
+        # Per-day rolling counters fed into the click-health monitoring sample.
+        # Reset alongside _click_dayblock on calendar day rollover.
+        self._click_unique_today: set[str] = set()
+        self._priority_repeat_count_today: int = 0
+
+    def record_click_success(self, serial: str, user_name: str) -> None:
+        """Track unique successful clicks per day (called by realtime loop)."""
+        self._click_unique_today.add(f"{serial}:{user_name}")
+
+    def record_priority_queue_repeat(self) -> None:
+        """Increment the "same customer seen again in priority queue" counter."""
+        self._priority_repeat_count_today += 1
+
+    def _maybe_reset_click_dayblock(self) -> None:
+        """Reset ``_click_dayblock`` at local calendar day rollover.
+
+        Called at the start of every scan. Cheap (single string compare) so it
+        is safe to invoke unconditionally.
+        """
+        today = datetime.now().strftime("%Y-%m-%d")
+        if today != self._click_dayblock_day:
+            if self._click_dayblock:
+                self._logger.info(
+                    f"Day rollover {self._click_dayblock_day} → {today}; "
+                    f"clearing click_dayblock ({len(self._click_dayblock)} entr"
+                    f"{'y' if len(self._click_dayblock) == 1 else 'ies'})"
+                )
+            self._click_dayblock.clear()
+            self._click_unique_today.clear()
+            self._priority_repeat_count_today = 0
+            self._click_dayblock_day = today
+
+    def get_click_health_snapshot(self) -> dict[str, Any]:
+        """Lightweight snapshot of click-health state for monitoring.
+
+        Returns a JSON-serialisable dict — safe to expose via API. Counters
+        only; no PII beyond the customer names that the user already sees in
+        their own log/UI.
+        """
+        active_cooldowns: list[dict[str, Any]] = []
+        now = time.time()
+        for key, (until, count) in self._click_fail_cooldown.items():
+            if until > now:
+                active_cooldowns.append(
+                    {
+                        "key": key,
+                        "fail_count": count,
+                        "retry_in_seconds": int(until - now),
+                    }
+                )
+        return {
+            "dayblock_day": self._click_dayblock_day,
+            "dayblock_size": len(self._click_dayblock),
+            "dayblock_keys": sorted(self._click_dayblock),
+            "active_cooldown_count": len(active_cooldowns),
+            "active_cooldowns": active_cooldowns,
+            "unique_customers_clicked": len(self._click_unique_today),
+            "priority_queue_repeats": self._priority_repeat_count_today,
+        }
 
     def set_followup_scan_running(self, running: bool) -> None:
         """设置跟进扫描是否正在运行（用于跳过响应扫描）"""
@@ -473,7 +548,13 @@ class ResponseDetector:
         self._cancel_requested = False
 
     def _clean_expired_click_cooldowns(self) -> None:
-        """Remove expired entries from the click-failure cooldown map."""
+        """Remove expired entries from the click-failure cooldown map.
+
+        Also opportunistically rolls the day-level click blocklist forward when
+        the calendar day changes so a stale block does not survive past
+        midnight in long-lived processes.
+        """
+        self._maybe_reset_click_dayblock()
         now = time.time()
         expired = [k for k, (until, _) in self._click_fail_cooldown.items() if now >= until]
         for k in expired:
@@ -1085,7 +1166,34 @@ class ResponseDetector:
                 )
 
             # 使用 is_priority() 过滤: 包括未读消息和新好友
-            priority_users = [u for u in current_users if u.is_priority()]
+            priority_users_raw = [u for u in current_users if u.is_priority()]
+
+            # Day-level block: drop customers whose click repeatedly failed today.
+            # This is the KEY guardrail that prevents one bad row from owning the
+            # priority queue all day (the 2026-05-09 outage). Filtering at the
+            # priority-detection stage — not just at the process stage — is what
+            # makes this effective: if we only skipped them in `_process_unread_user_with_wait`,
+            # they would still occupy queue slots every scan and starve real users.
+            self._maybe_reset_click_dayblock()
+            priority_users = []
+            blocked = []
+            for u in priority_users_raw:
+                key = f"{serial}:{u.name}"
+                if key in self._click_dayblock:
+                    blocked.append(u.name)
+                    continue
+                priority_users.append(u)
+                # If we've already tried this customer today (cooldown row
+                # exists), it's a repeat sighting — count it for the
+                # click-health monitor. This is the early-warning signal for
+                # "queue running in circles".
+                if key in self._click_fail_cooldown:
+                    self.record_priority_queue_repeat()
+            if blocked:
+                self._logger.info(
+                    f"[{serial}] 🚫 Dropped {len(blocked)} dayblocked customer(s) from priority queue: "
+                    f"{blocked[:5]}{' …' if len(blocked) > 5 else ''}"
+                )
 
             if priority_users:
                 unread_count = sum(1 for u in priority_users if u.unread_count > 0)
@@ -1245,10 +1353,35 @@ class ResponseDetector:
                     customer_name=user_name,
                     context={"serial": serial, "fail_count": new_count, "cooldown_seconds": cooldown_secs},
                 )
+
+                # Escalate to day-level block once repeated failures exceed the
+                # threshold. This guarantees a single bad row cannot dominate
+                # the first-page priority queue all day. See
+                # docs/04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md
+                if new_count >= self._click_dayblock_threshold and cooldown_key not in self._click_dayblock:
+                    self._maybe_reset_click_dayblock()
+                    self._click_dayblock.add(cooldown_key)
+                    self._logger.warning(
+                        f"[{serial}]    🚨 click_runaway: {user_name} reached "
+                        f"{new_count} click failures; added to today's dayblock "
+                        f"(dayblock_size={len(self._click_dayblock)})"
+                    )
+                    metrics.log_error(
+                        error_type="click_runaway",
+                        error_message=f"Customer {user_name} added to day-level click blocklist",
+                        customer_name=user_name,
+                        context={
+                            "serial": serial,
+                            "fail_count": new_count,
+                            "dayblock_size": len(self._click_dayblock),
+                            "threshold": self._click_dayblock_threshold,
+                        },
+                    )
                 return result
 
             # Click succeeded — clear any prior cooldown for this customer
             self._click_fail_cooldown.pop(cooldown_key, None)
+            self.record_click_success(serial, user_name)
 
             await asyncio.sleep(1.0)
 

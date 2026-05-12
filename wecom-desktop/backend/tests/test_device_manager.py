@@ -10,6 +10,7 @@ These tests verify:
 
 import asyncio
 import platform
+import signal
 import sys
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -89,7 +90,14 @@ def device_manager():
 
 @pytest.fixture
 def mock_subprocess():
-    """Mock subprocess creation."""
+    """Mock subprocess creation.
+
+    On Unix, ``DeviceManager.stop_sync`` uses ``os.getpgid`` / ``os.killpg`` on
+    the child PID. A bare ``MockProcess`` has no real OS process, so we stub
+    ``getpgid`` as identity and route ``killpg`` to ``MockProcess.terminate`` /
+    ``kill`` — otherwise ``stop_sync`` raises and returns ``False`` (regression
+    seen on macOS CI / dev laptops).
+    """
     processes = {}
 
     async def create_subprocess_exec(*args, **kwargs):
@@ -101,10 +109,27 @@ def mock_subprocess():
                 break
 
         process = MockProcess(serial or "unknown")
+        process.pid = 10_000 + len(processes)
         processes[serial] = process
         return process
 
-    with patch("asyncio.create_subprocess_exec", side_effect=create_subprocess_exec):
+    def fake_getpgid(pid: int) -> int:
+        return pid
+
+    def fake_killpg(pgid: int, sig: int) -> None:
+        for proc in processes.values():
+            if getattr(proc, "pid", None) == pgid:
+                if sig == signal.SIGKILL:
+                    proc.kill()
+                else:
+                    proc.terminate()
+                return
+
+    with (
+        patch("asyncio.create_subprocess_exec", side_effect=create_subprocess_exec),
+        patch("services.device_manager.os.getpgid", side_effect=fake_getpgid),
+        patch("services.device_manager.os.killpg", side_effect=fake_killpg),
+    ):
         yield processes
 
 
@@ -393,9 +418,20 @@ class TestConcurrentStopOperations:
         """Test that stop cleans up even if process hangs."""
         # Create a hanging process
         hanging_process = MockProcess("DEVICE_A", hang_on_terminate=True)
+        hanging_process.pid = 20_000
 
         async def create_hanging(*args, **kwargs):
             return hanging_process
+
+        def fake_getpgid(pid: int) -> int:
+            return pid
+
+        def fake_killpg(pgid: int, sig: int) -> None:
+            if getattr(hanging_process, "pid", None) == pgid:
+                if sig == signal.SIGKILL:
+                    hanging_process.kill()
+                else:
+                    hanging_process.terminate()
 
         patch_target = (
             "services.device_manager.DeviceManager._create_subprocess_windows"
@@ -403,7 +439,11 @@ class TestConcurrentStopOperations:
             else "asyncio.create_subprocess_exec"
         )
 
-        with patch(patch_target, side_effect=create_hanging):
+        with (
+            patch(patch_target, side_effect=create_hanging),
+            patch("services.device_manager.os.getpgid", side_effect=fake_getpgid),
+            patch("services.device_manager.os.killpg", side_effect=fake_killpg),
+        ):
             await device_manager.start_sync("DEVICE_A")
             await asyncio.sleep(0.1)
 

@@ -162,13 +162,19 @@ async def run(args):
     import time as _time
 
     try:
-        from services.heartbeat_service import ensure_tables, record_heartbeat, record_process_event
+        from services.heartbeat_service import (
+            ensure_tables,
+            record_click_health,
+            record_heartbeat,
+            record_process_event,
+        )
 
         ensure_tables()
         _has_heartbeat = True
     except Exception as _hb_err:
         logger.warning(f"Heartbeat service unavailable: {_hb_err}")
         _has_heartbeat = False
+        record_click_health = None  # type: ignore[assignment]
 
     process_start = _time.monotonic()
     if _has_heartbeat:
@@ -211,6 +217,26 @@ async def run(args):
                     )
                 except Exception as hb_err:
                     logger.warning(f"Failed to write heartbeat: {hb_err}")
+
+            # Record click-health snapshot (dayblock + cooldown surface).
+            # Best-effort: failures here MUST NOT break the scan loop. See
+            # docs/04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md
+            if _has_heartbeat and record_click_health is not None:
+                try:
+                    snap = detector.get_click_health_snapshot()
+                    record_click_health(
+                        device_serial=args.serial,
+                        scan_number=scan_count,
+                        dayblock_day=snap["dayblock_day"],
+                        dayblock_size=snap["dayblock_size"],
+                        dayblock_keys=snap["dayblock_keys"],
+                        active_cooldown_count=snap["active_cooldown_count"],
+                        active_cooldowns=snap["active_cooldowns"],
+                        unique_customers_clicked=snap.get("unique_customers_clicked"),
+                        priority_queue_repeats=snap.get("priority_queue_repeats"),
+                    )
+                except Exception as ch_err:
+                    logger.debug(f"Failed to write click_health sample: {ch_err}")
 
             # 报告结果
             responses = result.get("responses_detected", 0)

@@ -6,9 +6,21 @@ Tests the complete flow of AI reply generation:
 2. Message parsing logic
 3. AI server communication
 4. Error handling and fallbacks
+
+**Skipped (module):** These tests targeted ``POST /ai/chat`` and ``GET /ai/health``
+on ``main:app``. Those routes are not registered in the current FastAPI app
+(AI config lives under ``/api/ai/*`` for admin learning; realtime AI uses
+settings + followup/realtime paths). Keep the file as historical TDD; use
+``test_ai_reply_integration.py`` for behaviour that must stay green.
 """
 
 import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="Obsolete TDD: /ai/chat and /ai/health are not mounted on main:app; "
+    "see test_ai_reply_integration.py for current AI tests.",
+)
+
 from fastapi.testclient import TestClient
 from unittest.mock import patch, AsyncMock, MagicMock
 import sys
