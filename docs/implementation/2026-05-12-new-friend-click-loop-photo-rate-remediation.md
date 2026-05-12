@@ -2,7 +2,7 @@
 
 ## Summary
 
-Production logs (2026-05-05 / 06 / 09 / 10) showed a collapsing “photo rate” funnel: the system spent hours stuck on a single mis-prioritised customer (`NewFriend: True` on agent copy like「感谢您的考虑」), click failures, and cooldown loops. This change set tightens detection, adds a day-level click blocklist, relaxes list matching for truncated or full-width UI text, and persists **click-health** samples for monitoring.
+Production logs (2026-05-05 / 06 / 09 / 10) showed a collapsing “photo rate” funnel: the system spent hours stuck on a single mis-prioritised customer (`NewFriend: True` on agent copy like「感谢您的考虑」), click failures, and cooldown loops. This change set tightens detection, adds a day-level click blocklist, relaxes list matching for truncated or full-width UI text, persists **click-health** samples for monitoring, and now also hardens row parsing so message previews like `你好` cannot become fake click targets.
 
 ## Delivered changes
 
@@ -12,6 +12,7 @@ Production logs (2026-05-05 / 06 / 09 / 10) showed a collapsing “photo rate”
 | **P2 Dayblock** | `ResponseDetector`: `_click_dayblock` keyed by `{serial}:{name}`, filled after N consecutive click failures (default 5); filtered in `_detect_first_page_unread` so blocked users never occupy the priority queue; day rollover clears block + counters; `click_runaway` metric on escalation; replay test caps repeated processing. |
 | **P3 Click match** | `WeComService._find_user_element`: tiered match (exact → normalised full-width/ellipsis → truncated prefix for long names only); `click_user_in_list` uses `max(config.scroll.max_scrolls, _CLICK_USER_MIN_SCROLLS)` with floor 10. Tests: `tests/unit/test_wecom_service_user_match.py`. |
 | **P4 Monitoring** | `monitoring.db` table `click_health`; `record_click_health` + queries in `heartbeat_service.py`; `GET /api/monitoring/click-health` and `GET /api/monitoring/click-health/latest` (filter `?device_serial=`); per-scan write from `realtime_reply_process.py`; snapshot fields include `unique_customers_clicked`, `priority_queue_repeats`. Doc: `docs/03-impl-and-arch/key-modules/click-health-monitoring.md`. |
+| **P5 Row parsing root fix** | `UnreadUserExtractor` now requires strong `title/name` resource IDs or plausible fallback evidence (avatar-side title position + non-message-like text) before emitting a customer name; `ResponseDetector` drops low-confidence priority targets (`name` looks like a message, `preview=None`, unread only) before queueing. Tests: `tests/unit/test_unread_user_extractor_row_parsing.py` and `wecom-desktop/backend/tests/test_response_detector_click_dayblock.py`. |
 
 ## Primary files
 
@@ -26,6 +27,7 @@ Production logs (2026-05-05 / 06 / 09 / 10) showed a collapsing “photo rate”
 ## Regression tests
 
 - `tests/unit/test_new_friend_welcome_keywords.py`
+- `tests/unit/test_unread_user_extractor_row_parsing.py`
 - `tests/unit/test_wecom_service_user_match.py`
 - `wecom-desktop/backend/tests/test_response_detector_click_dayblock.py`
 - `wecom-desktop/backend/tests/test_monitoring_click_health.py`

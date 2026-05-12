@@ -62,6 +62,7 @@ These are starting points, not contractual SLAs — tune per fleet.
 
 - Root-cause document for the 2026-05-09 outage (resolved):
   [`docs/04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md`](../../04-bugs-and-fixes/resolved/2026-05-12-new-friend-false-positive-click-loop.md)
+- **Related 2026-05-10 signal**: fake priority targets such as `User: 你好 | Preview: None` are addressed upstream by stricter `UnreadUserExtractor` row parsing and a low-confidence filter in `_detect_first_page_unread` (same RCA doc, §#5). `click_health` still matters when real customers hit click failures or UI regressions.
 - Implementation:
   - `wecom-desktop/backend/services/followup/response_detector.py` (snapshot + counters)
   - `wecom-desktop/backend/services/heartbeat_service.py` (persistence)
@@ -70,3 +71,4 @@ These are starting points, not contractual SLAs — tune per fleet.
 - Tests:
   - `wecom-desktop/backend/tests/test_response_detector_click_dayblock.py`
   - `wecom-desktop/backend/tests/test_monitoring_click_health.py`
+  - `tests/unit/test_unread_user_extractor_row_parsing.py`

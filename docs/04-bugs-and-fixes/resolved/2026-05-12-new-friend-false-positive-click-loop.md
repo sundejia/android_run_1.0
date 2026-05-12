@@ -99,6 +99,12 @@
 
 列表行常见截断省略号、全角括号与 `[重复(保底正常)]` 等展示差异，精确匹配易失败；环境若将 `max_scrolls` 配成 5，viewport 稍下移即找不到人。修复后：分层匹配 + `click_user_in_list` 对滚动次数做下限（与 `WeComService._CLICK_USER_MIN_SCROLLS` 一致，当前为 10）。
 
+### #5 会话行兜底解析曾可能把消息预览当客户名（05-10）
+
+05-10 晚间的高频样本 `User: 你好 | Preview: None | Unread: 2` 说明另一类根因：列表解析器在没有明确 `title/name` resourceId 时，会把第一个剩余文本兜底当作客户名。遇到 WeCom UI 结构变化时，`你好`、`好`、`日结的有哪些平台啊` 这类消息预览可能被产生成假目标，随后点击阶段当然找不到同名联系人。
+
+修复后：两份 `UnreadUserExtractor` 都引入名称候选可信度校验。只有强 `title/name/nickname/username/contact` resourceId，或同时满足头像右侧/行上半区位置与“不像普通消息”的内容规则时，才允许启发式兜底为客户名；低可信 `name + preview=None + unread>0` 还会在 `response_detector._detect_first_page_unread` 入队前被二次过滤。
+
 ### Impact funnel
 
 ```mermaid
@@ -121,6 +127,7 @@ flowchart LR
 | **P2** | `_click_dayblock` + priority 阶段过滤 + `click_runaway` + 重放单测 | ✅ |
 | **P3** | `_find_user_element` 分层匹配 + 最小滚动次数下限 | ✅ |
 | **P4** | `click_health` 表、`/api/monitoring/click-health*`、进程内每 scan 写入、阈值文档 | ✅ |
+| **P5** | 会话行名称可信度校验，防止消息预览（如 `你好`）被当作客户名；priority 入队前二次过滤 | ✅ |
 
 REST 过滤使用查询参数 **`?device_serial=`**（与 heartbeats 等 monitoring 路由风格一致），而非路径段 `{serial}`。
 

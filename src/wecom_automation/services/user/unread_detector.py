@@ -99,6 +99,26 @@ class UnreadUserExtractor:
         "meeting",
         "会议",
     )
+    GENERIC_MESSAGE_NAMES = {"你好", "您好", "好", "嗯", "嗯呐", "哈喽", "hello", "hi", "？", "?"}
+    MESSAGE_TEXT_HINTS = (
+        "怎么",
+        "什么",
+        "哪些",
+        "平台",
+        "日结",
+        "月结",
+        "回复",
+        "主管",
+        "老师",
+        "吗",
+        "呢",
+        "呀",
+        "啊",
+        "请问",
+        "可以",
+        "是不是",
+        "有没有",
+    )
 
     # 新好友欢迎语关键词 - 用于识别刚添加的好友
     #
@@ -283,6 +303,79 @@ class UnreadUserExtractor:
         return False
 
     @classmethod
+    def _looks_like_message_text(cls, value: str) -> bool:
+        """判断兜底名称候选是否更像聊天预览文本。"""
+        if not value:
+            return True
+
+        text = value.strip()
+        if len(text) <= 1:
+            return True
+
+        lowered = text.lower()
+        if lowered in cls.GENERIC_MESSAGE_NAMES:
+            return True
+
+        if re.match(r"^B\d{8,}", text):
+            return False
+
+        if any(mark in text for mark in ("，", "。", "！", "？", ",", "!", "?")):
+            return True
+
+        if len(text) >= 4 and any(hint in text for hint in cls.MESSAGE_TEXT_HINTS):
+            return True
+
+        # 没有 name/title resourceId 的长文本更可能是消息预览；强 resourceId
+        # 命中已在兜底逻辑前处理。
+        if len(text) > 18:
+            return True
+
+        return False
+
+    @classmethod
+    def _is_name_position_candidate(
+        cls,
+        node: dict[str, Any],
+        avatar_bounds: tuple[int, int, int, int] | None,
+    ) -> bool:
+        """检查文本节点是否位于会话标题常见位置。"""
+        bounds = cls._get_node_bounds(node)
+        if not bounds:
+            return False
+
+        parsed = cls._parse_bounds(bounds)
+        if not parsed:
+            return False
+
+        x1, y1, _x2, y2 = parsed
+        if not avatar_bounds:
+            return x1 >= 90
+
+        av_x1, av_y1, av_x2, av_y2 = avatar_bounds
+        avatar_height = max(av_y2 - av_y1, 1)
+        text_center_y = (y1 + y2) // 2
+
+        return x1 >= av_x2 - 10 and av_x1 < x1 and text_center_y <= av_y1 + int(avatar_height * 0.75)
+
+    @classmethod
+    def _is_plausible_fallback_name(
+        cls,
+        text: str,
+        node: dict[str, Any],
+        avatar_bounds: tuple[int, int, int, int] | None,
+    ) -> bool:
+        """在进入点击队列前校验启发式名称候选。"""
+        if not text:
+            return False
+        if cls._is_badge_text(text) or cls._looks_like_timestamp(text) or cls._looks_like_channel(text):
+            return False
+        if cls._looks_like_dropdown_filter(text):
+            return False
+        if cls._looks_like_message_text(text):
+            return False
+        return cls._is_name_position_candidate(node, avatar_bounds)
+
+    @classmethod
     def _find_avatar_bounds_in_row(cls, all_nodes: list[dict[str, Any]]) -> tuple[int, int, int, int] | None:
         """在行中查找头像边界"""
         avatar_class_hints = ("imageview", "image", "avatar", "icon", "photo")
@@ -407,13 +500,15 @@ class UnreadUserExtractor:
         candidates: list[dict[str, Any]] = []
         stack: list[dict[str, Any]] = list(nodes)
 
-        # 获取屏幕宽度（从根节点）
+        # 获取屏幕宽度和高度（从根节点）
         screen_width = 1080  # 默认值
+        screen_height = 2400  # 默认值
         if nodes:
             root = nodes[0] if isinstance(nodes, (list, tuple)) else nodes
             bounds = root.get("boundsInScreen", {})
             if isinstance(bounds, dict):
                 screen_width = bounds.get("right", 1080) - bounds.get("left", 0)
+                screen_height = bounds.get("bottom", 2400) - bounds.get("top", 0)
 
         while stack:
             node = stack.pop()
@@ -441,21 +536,34 @@ class UnreadUserExtractor:
             计算容器得分，用于排序。
 
             优先级：
-            1. 全宽容器优先（宽度 >= 屏幕宽度的 95%）
-            2. 然后按子节点数排序
+            1. 不是全屏根容器（has_margin）- 排除覆盖整个屏幕的根节点
+            2. 有 resourceId（has_resource_id）- 优先选择有明确标识的容器
+            3. 是具体的列表类型（is_specific_list）- RecyclerView/ListView 优于 ViewGroup
+            4. 全宽容器（is_full_width）
+            5. 子节点数（child_count）
             """
             bounds = node.get("boundsInScreen", {})
             if isinstance(bounds, dict):
-                width = bounds.get("right", 0) - bounds.get("left", 0)
+                left = bounds.get("left", 0)
+                top = bounds.get("top", 0)
+                right = bounds.get("right", 0)
+                bottom = bounds.get("bottom", 0)
+                width = right - left
+                height = bottom - top
             else:
-                width = 0
+                top = width = height = 0
 
-            # 是否为全宽容器
+            is_likely_root = (top <= 50) and (height >= screen_height * 0.95)
+            has_margin = not is_likely_root
+            resource_id = (node.get("resourceId") or "").strip()
+            has_resource_id = bool(resource_id)
+            class_name = (node.get("className") or "").lower()
+            is_specific_list = "recyclerview" in class_name or "listview" in class_name
+
             is_full_width = width >= screen_width * 0.95
             child_count = len(node.get("children") or [])
 
-            # 返回元组，优先按全宽排序，然后按子节点数
-            return (is_full_width, child_count)
+            return (has_margin, has_resource_id, is_specific_list, is_full_width, child_count)
 
         candidates.sort(key=get_container_score, reverse=True)
         return candidates
@@ -524,18 +632,24 @@ class UnreadUserExtractor:
                 continue
 
         # 第三遍：启发式分配
-        remaining_texts = []
+        remaining_nodes = []
         for tn in text_nodes:
             text = tn.get("_resolved_text", "")
             if text and text not in used_texts:
                 if cls._is_badge_text(text) and len(text) <= 3:
                     continue
-                remaining_texts.append(text)
+                remaining_nodes.append(tn)
 
-        if not name and remaining_texts:
-            name = remaining_texts[0]
-            used_texts.add(name)
-            remaining_texts = remaining_texts[1:]
+        if not name and remaining_nodes:
+            for idx, tn in enumerate(remaining_nodes):
+                candidate = tn.get("_resolved_text", "")
+                if cls._is_plausible_fallback_name(candidate, tn, avatar_bounds):
+                    name = candidate
+                    used_texts.add(name)
+                    remaining_nodes = remaining_nodes[:idx] + remaining_nodes[idx + 1 :]
+                    break
+
+        remaining_texts = [tn.get("_resolved_text", "") for tn in remaining_nodes if tn.get("_resolved_text", "")]
 
         if not message_preview and remaining_texts:
             preview_candidates = [

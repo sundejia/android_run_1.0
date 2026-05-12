@@ -50,7 +50,13 @@ def _build_detector():
     return ResponseDetector(repository=MagicMock(), settings_manager=MagicMock())
 
 
-def _make_priority_user(name: str, *, unread: int = 0, new_friend: bool = True):
+def _make_priority_user(
+    name: str,
+    *,
+    unread: int = 0,
+    new_friend: bool = True,
+    message_preview: str | None = "...",
+):
     """Stand-in for ``UnreadUserInfo`` — only the attributes that
     ``_detect_first_page_unread`` reads."""
 
@@ -59,7 +65,7 @@ def _make_priority_user(name: str, *, unread: int = 0, new_friend: bool = True):
 
     return SimpleNamespace(
         name=name,
-        message_preview="...",
+        message_preview=message_preview,
         unread_count=unread,
         is_new_friend=new_friend,
         is_priority=is_priority,
@@ -201,6 +207,20 @@ async def test_detect_first_page_unread_filters_dayblocked_customer(monkeypatch)
         "will get jammed again."
     )
     assert OTHER_USER in names, "Non-blocked customer must still flow through."
+
+
+@pytest.mark.asyncio
+async def test_detect_first_page_unread_drops_message_like_fake_target(monkeypatch):
+    detector = _build_detector()
+    fake_target = _make_priority_user("你好", unread=2, new_friend=False, message_preview=None)
+    real_target = _make_priority_user(OTHER_USER, unread=2, new_friend=False, message_preview="您好")
+    wecom = _stub_ui_tree(monkeypatch, [fake_target, real_target])
+
+    priority_users = await detector._detect_first_page_unread(wecom, SERIAL)
+
+    names = [u.name for u in priority_users]
+    assert "你好" not in names, "Message-like fake target must not enter the click queue."
+    assert OTHER_USER in names, "Real priority customers must still be queued."
 
 
 # ---------------------------------------------------------------------------

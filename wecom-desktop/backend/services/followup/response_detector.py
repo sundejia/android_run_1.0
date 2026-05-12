@@ -1126,6 +1126,66 @@ class ResponseDetector:
 
         return device_result
 
+    _LOW_CONFIDENCE_MESSAGE_NAMES = {"你好", "您好", "好", "嗯", "嗯呐", "哈喽", "hello", "hi", "？", "?"}
+    _LOW_CONFIDENCE_MESSAGE_HINTS = (
+        "怎么",
+        "什么",
+        "哪些",
+        "平台",
+        "日结",
+        "月结",
+        "回复",
+        "主管",
+        "老师",
+        "吗",
+        "呢",
+        "呀",
+        "啊",
+        "请问",
+        "可以",
+        "是不是",
+        "有没有",
+    )
+
+    @classmethod
+    def _looks_like_low_confidence_message_name(cls, name: str) -> bool:
+        """Detect likely chat snippets that leaked into the customer-name field."""
+        if not name:
+            return True
+        text = name.strip()
+        if len(text) <= 1:
+            return True
+        if text.lower() in cls._LOW_CONFIDENCE_MESSAGE_NAMES:
+            return True
+        if text.startswith("B") and len(text) >= 8:
+            return False
+        if any(mark in text for mark in ("，", "。", "！", "？", ",", "!", "?")):
+            return True
+        if len(text) >= 4 and any(hint in text for hint in cls._LOW_CONFIDENCE_MESSAGE_HINTS):
+            return True
+        return len(text) > 18
+
+    @classmethod
+    def _is_low_confidence_priority_user(cls, user: Any) -> bool:
+        """Guard priority ingestion against parser-produced fake targets.
+
+        The row parser should normally prevent this, but priority detection is
+        also a safety boundary: a message-like ``name`` with no preview evidence
+        should not reach the click path.
+        """
+        name = (getattr(user, "name", "") or "").strip()
+        preview = getattr(user, "message_preview", None)
+        is_new_friend = bool(getattr(user, "is_new_friend", False))
+        unread_count = int(getattr(user, "unread_count", 0) or 0)
+
+        if is_new_friend:
+            return False
+        if unread_count <= 0:
+            return False
+        if preview not in (None, "", "None"):
+            return False
+        return cls._looks_like_low_confidence_message_name(name)
+
     async def _detect_first_page_unread(self, wecom, serial: str) -> list[Any]:
         """
         检测首页优先级用户（不滚动）
@@ -1167,6 +1227,20 @@ class ResponseDetector:
 
             # 使用 is_priority() 过滤: 包括未读消息和新好友
             priority_users_raw = [u for u in current_users if u.is_priority()]
+
+            # Last safety boundary before queueing. If a future UI change makes
+            # the parser leak a message preview into ``name`` again (e.g.
+            # "你好" with no preview), skip it here instead of letting it enter
+            # click_user_in_list and spin in cooldown loops.
+            suspicious_users = [u for u in priority_users_raw if self._is_low_confidence_priority_user(u)]
+            if suspicious_users:
+                self._logger.warning(
+                    f"[{serial}] Dropped {len(suspicious_users)} low-confidence priority target(s): "
+                    f"{[u.name for u in suspicious_users[:5]]}"
+                    f"{' …' if len(suspicious_users) > 5 else ''}"
+                )
+                suspicious_names = {u.name for u in suspicious_users}
+                priority_users_raw = [u for u in priority_users_raw if u.name not in suspicious_names]
 
             # Day-level block: drop customers whose click repeatedly failed today.
             # This is the KEY guardrail that prevents one bad row from owning the

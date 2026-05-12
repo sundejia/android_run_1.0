@@ -45,26 +45,33 @@ describe('Media Actions API', () => {
     video_review_policy: 'extract_frame',
   }
 
+  const defaultAutoBlacklist = {
+    enabled: false,
+    reason: 'Customer sent media (auto)',
+    skip_if_already_blacklisted: true,
+    require_review_pass: false,
+  }
+
+  const defaultAutoGroupInvite = {
+    enabled: false,
+    group_members: [] as string[],
+    group_name_template: '{customer_name}-服务群',
+    skip_if_group_exists: true,
+    send_message_before_create: false,
+    pre_create_message_text: '',
+    send_test_message_after_create: true,
+    test_message_text: '测试',
+    post_confirm_wait_seconds: 1,
+    duplicate_name_policy: 'first',
+    video_invite_policy: 'extract_frame',
+  }
+
   describe('getMediaActionSettings', () => {
     it('should fetch settings from the correct endpoint', async () => {
       const expected: MediaAutoActionSettings = {
         enabled: false,
-        auto_blacklist: {
-          enabled: false,
-          reason: 'Customer sent media (auto)',
-          skip_if_already_blacklisted: true,
-        },
-        auto_group_invite: {
-          enabled: false,
-          group_members: [],
-          group_name_template: '{customer_name}-服务群',
-          skip_if_group_exists: true,
-          send_test_message_after_create: true,
-          test_message_text: '测试',
-          post_confirm_wait_seconds: 1,
-          duplicate_name_policy: 'first',
-          video_invite_policy: 'extract_frame',
-        },
+        auto_blacklist: { ...defaultAutoBlacklist },
+        auto_group_invite: { ...defaultAutoGroupInvite },
         auto_contact_share: defaultContactShare,
         review_gate: defaultReviewGate,
       }
@@ -91,22 +98,8 @@ describe('Media Actions API', () => {
       const update = { enabled: true }
       const response: MediaAutoActionSettings = {
         enabled: true,
-        auto_blacklist: {
-          enabled: false,
-          reason: 'Customer sent media (auto)',
-          skip_if_already_blacklisted: true,
-        },
-        auto_group_invite: {
-          enabled: false,
-          group_members: [],
-          group_name_template: '{customer_name}-服务群',
-          skip_if_group_exists: true,
-          send_test_message_after_create: true,
-          test_message_text: '测试',
-          post_confirm_wait_seconds: 1,
-          duplicate_name_policy: 'first',
-          video_invite_policy: 'extract_frame',
-        },
+        auto_blacklist: { ...defaultAutoBlacklist },
+        auto_group_invite: { ...defaultAutoGroupInvite },
         auto_contact_share: defaultContactShare,
         review_gate: defaultReviewGate,
       }
@@ -133,6 +126,8 @@ describe('Media Actions API', () => {
           group_members: ['A'],
           group_name_template: '{customer_name}-群',
           skip_if_group_exists: true,
+          send_message_before_create: false,
+          pre_create_message_text: '',
           send_test_message_after_create: false,
           test_message_text: '您好 {customer_name}',
           post_confirm_wait_seconds: 2,
@@ -143,11 +138,7 @@ describe('Media Actions API', () => {
       mockFetch.mockResolvedValueOnce(
         mockJsonResponse({
           enabled: true,
-          auto_blacklist: {
-            enabled: false,
-            reason: 'Customer sent media (auto)',
-            skip_if_already_blacklisted: true,
-          },
+          auto_blacklist: { ...defaultAutoBlacklist },
           auto_group_invite: update.auto_group_invite,
           auto_contact_share: defaultContactShare,
           review_gate: defaultReviewGate,
@@ -182,21 +173,9 @@ describe('Media Actions API', () => {
       mockFetch.mockResolvedValueOnce(
         mockJsonResponse({
           enabled: true,
-          auto_blacklist: {
-            enabled: false,
-            reason: 'Customer sent media (auto)',
-            skip_if_already_blacklisted: true,
-          },
+          auto_blacklist: { ...defaultAutoBlacklist },
           auto_group_invite: {
-            enabled: false,
-            group_members: [],
-            group_name_template: '{customer_name}-服务群',
-            skip_if_group_exists: true,
-            send_test_message_after_create: true,
-            test_message_text: '测试',
-            post_confirm_wait_seconds: 1,
-            duplicate_name_policy: 'first',
-            video_invite_policy: 'extract_frame',
+            ...defaultAutoGroupInvite,
           },
           auto_contact_share: update.auto_contact_share,
           review_gate: defaultReviewGate,
@@ -267,12 +246,15 @@ describe('MediaAutoActionSettings type', () => {
         enabled: true,
         reason: 'test',
         skip_if_already_blacklisted: false,
+        require_review_pass: false,
       },
       auto_group_invite: {
         enabled: true,
         group_members: ['A', 'B'],
         group_name_template: '{customer_name}-群',
         skip_if_group_exists: true,
+        send_message_before_create: false,
+        pre_create_message_text: '',
         send_test_message_after_create: true,
         test_message_text: '您好 {customer_name}',
         post_confirm_wait_seconds: 1,

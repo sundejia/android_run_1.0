@@ -175,6 +175,26 @@ class UnreadUserExtractor:
         "meeting",
         "会议",
     )
+    GENERIC_MESSAGE_NAMES = {"你好", "您好", "好", "嗯", "嗯呐", "哈喽", "hello", "hi", "？", "?"}
+    MESSAGE_TEXT_HINTS = (
+        "怎么",
+        "什么",
+        "哪些",
+        "平台",
+        "日结",
+        "月结",
+        "回复",
+        "主管",
+        "老师",
+        "吗",
+        "呢",
+        "呀",
+        "啊",
+        "请问",
+        "可以",
+        "是不是",
+        "有没有",
+    )
 
     # 新好友欢迎语关键词 - 用于识别刚添加的好友
     #
@@ -348,6 +368,80 @@ class UnreadUserExtractor:
             if keyword in message_preview:
                 return True
         return False
+
+    @classmethod
+    def _looks_like_message_text(cls, value: str) -> bool:
+        """Return True when a fallback name candidate looks like chat preview text."""
+        if not value:
+            return True
+
+        text = value.strip()
+        if len(text) <= 1:
+            return True
+
+        lowered = text.lower()
+        if lowered in cls.GENERIC_MESSAGE_NAMES:
+            return True
+
+        if re.match(r"^B\d{8,}", text):
+            return False
+
+        if any(mark in text for mark in ("，", "。", "！", "？", ",", "!", "?")):
+            return True
+
+        if len(text) >= 4 and any(hint in text for hint in cls.MESSAGE_TEXT_HINTS):
+            return True
+
+        # Long fallback strings without a name resource are much more likely to
+        # be snippets than contact names. Strong resource-ID matches are handled
+        # before this fallback check.
+        if len(text) > 18:
+            return True
+
+        return False
+
+    @classmethod
+    def _is_name_position_candidate(
+        cls,
+        node: dict[str, Any],
+        avatar_bounds: tuple[int, int, int, int] | None,
+    ) -> bool:
+        """Check whether a text node sits where a conversation title normally appears."""
+        bounds = cls._get_node_bounds(node)
+        if not bounds:
+            return False
+
+        parsed = cls._parse_bounds(bounds)
+        if not parsed:
+            return False
+
+        x1, y1, _x2, y2 = parsed
+        if not avatar_bounds:
+            return x1 >= 90
+
+        av_x1, av_y1, av_x2, av_y2 = avatar_bounds
+        avatar_height = max(av_y2 - av_y1, 1)
+        text_center_y = (y1 + y2) // 2
+
+        return x1 >= av_x2 - 10 and av_x1 < x1 and text_center_y <= av_y1 + int(avatar_height * 0.75)
+
+    @classmethod
+    def _is_plausible_fallback_name(
+        cls,
+        text: str,
+        node: dict[str, Any],
+        avatar_bounds: tuple[int, int, int, int] | None,
+    ) -> bool:
+        """Validate heuristic name candidates before they enter the click queue."""
+        if not text:
+            return False
+        if cls._is_badge_text(text) or cls._looks_like_timestamp(text) or cls._looks_like_channel(text):
+            return False
+        if cls._looks_like_dropdown_filter(text):
+            return False
+        if cls._looks_like_message_text(text):
+            return False
+        return cls._is_name_position_candidate(node, avatar_bounds)
 
     @classmethod
     def _find_avatar_bounds_in_row(cls, all_nodes: list[dict[str, Any]]) -> tuple[int, int, int, int] | None:
@@ -616,18 +710,24 @@ class UnreadUserExtractor:
                 continue
 
         # Third pass: heuristic assignment
-        remaining_texts = []
+        remaining_nodes = []
         for tn in text_nodes:
             text = tn.get("_resolved_text", "")
             if text and text not in used_texts:
                 if cls._is_badge_text(text) and len(text) <= 3:
                     continue
-                remaining_texts.append(text)
+                remaining_nodes.append(tn)
 
-        if not name and remaining_texts:
-            name = remaining_texts[0]
-            used_texts.add(name)
-            remaining_texts = remaining_texts[1:]
+        if not name and remaining_nodes:
+            for idx, tn in enumerate(remaining_nodes):
+                candidate = tn.get("_resolved_text", "")
+                if cls._is_plausible_fallback_name(candidate, tn, avatar_bounds):
+                    name = candidate
+                    used_texts.add(name)
+                    remaining_nodes = remaining_nodes[:idx] + remaining_nodes[idx + 1 :]
+                    break
+
+        remaining_texts = [tn.get("_resolved_text", "") for tn in remaining_nodes if tn.get("_resolved_text", "")]
 
         if not message_preview and remaining_texts:
             preview_candidates = [

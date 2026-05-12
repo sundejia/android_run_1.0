@@ -19,6 +19,7 @@ const defaultSettings: MediaAutoActionSettings = {
     enabled: false,
     reason: 'Customer sent media (auto)',
     skip_if_already_blacklisted: true,
+    require_review_pass: false,
   },
   auto_group_invite: {
     enabled: false,
