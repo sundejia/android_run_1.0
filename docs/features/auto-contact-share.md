@@ -1,7 +1,7 @@
 # Auto Contact Share (自动推送主管名片)
 
 > **状态**: 已实现（持续按机型 / WeCom 版本演进）
-> **日期**: 2026-04-30（初版）；**关键可靠性修订**: 2026-05-06 ~ 2026-05-07；**审核门集成**: 2026-05-09
+> **日期**: 2026-04-30（初版）；**关键可靠性修订**: 2026-05-06 ~ 2026-05-07；**审核门集成**: 2026-05-09；**Per-kefu 迁移**: 2026-05-13
 > **关联**: [Media Auto-Actions](media-auto-actions.md) — 第三个注册到 MediaEventBus 的 `IMediaAction`
 > **实现备忘**: [Contact share reliability (2026-05)](../implementation/2026-05-07-contact-share-reliability.md)
 
@@ -9,7 +9,7 @@
 
 当客户在会话中发送图片或视频后，系统可按配置自动向该客户推送主管（或指定联系人）的企业微信名片（Work Card）。
 
-- 支持按客服(kefu)配置不同主管（`kefu_overrides` 映射），未配置则 fallback 到全局 `contact_name`
+- 支持按客服(kefu)配置不同主管：优先使用 `kefu_action_profiles` 表中的 per-kefu 覆盖；未配置则 fallback 到全局 `contact_name`。旧的 `kefu_overrides` 映射已弃用（保留为向后兼容 fallback），详见 [Per-Kefu Action Profiles](../implementation/2026-05-13-per-kefu-action-profiles.md)。
 - 与 review-gate 审核门控无缝集成：开启审核时需审核通过才推送；关闭时直接推送（通过 `evaluate_gate_pass()` 读取 DB 中的审核结果判定）
 - 幂等表保证每个客户只推一次（配置允许时）
 - 同步 + 实时监控两条链路均可触发
@@ -101,7 +101,7 @@ AutoContactShareAction.should_execute()
   │     ├── has_data=False → 跳过（审核数据缺失）
   │     ├── gate_pass=False → 跳过（审核未通过 / 非人像）
   │     └── gate_pass=True  → 继续
-  ├── _resolve_contact_name(event, settings)  ← kefu_overrides 优先
+  ├── _resolve_contact_name(event, settings)  ← per-kefu profile（kefu_resolver 已合并）> kefu_overrides（deprecated）> 全局
   └── 幂等检查: contact_already_shared()
     ↓
 AutoContactShareAction.execute()
@@ -150,7 +150,7 @@ AutoContactShareAction.execute()
 | `contact_name` | string | 全局默认主管名（须能在企业通讯录中搜到；详见页面提示与测试接口） |
 | `skip_if_already_shared` | boolean | 幂等：已推过则跳过 |
 | `cooldown_seconds` | int | 冷却时间（预留） |
-| `kefu_overrides` | object | 按客服配置不同主管，key 为 kefu_name |
+| `kefu_overrides` | object | **已弃用**。按客服配置不同主管，key 为 kefu_name。现有数据会在 schema v15 迁移时自动导入 `kefu_action_profiles` 表。运行时作为 fallback 保留，新配置请使用「按客服覆盖配置」UI 或 `/api/kefu-profiles` API。 |
 
 更细的 UI 字段（如发送前话术、失败兜底话术）以 `ContactShareRequest` / 设置加载为准。
 

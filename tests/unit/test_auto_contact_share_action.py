@@ -158,21 +158,29 @@ class TestAutoContactShareShouldExecute:
 
 
 class TestAutoContactShareResolveContactName:
-    """Test per-kefu override and global fallback logic."""
+    """Test per-kefu profile resolution and legacy fallback logic.
 
-    def test_kefu_override_takes_priority(self):
+    With the kefu_action_profiles system, per-kefu overrides are merged
+    upstream by kefu_resolver into the section dict's contact_name field.
+    The kefu_overrides dict is a legacy fallback for callers not yet
+    migrated to kefu_action_profiles.
+    """
+
+    def test_per_kefu_contact_name_from_profile(self):
+        """When kefu_resolver has merged per-kefu config, contact_name is the override."""
         event = _make_event(kefu_name="客服A")
         cs = {
-            "contact_name": "全局主管",
-            "kefu_overrides": {"客服A": "主管X", "客服B": "主管Y"},
+            "contact_name": "主管X",  # Already merged from kefu_action_profiles
+            "kefu_overrides": {},
         }
         assert AutoContactShareAction._resolve_contact_name(event, cs) == "主管X"
 
-    def test_global_fallback_when_no_override(self):
+    def test_global_fallback_when_no_per_kefu_profile(self):
+        """When no per-kefu profile exists, contact_name is the global default."""
         event = _make_event(kefu_name="客服C")
         cs = {
             "contact_name": "全局主管",
-            "kefu_overrides": {"客服A": "主管X"},
+            "kefu_overrides": {},
         }
         assert AutoContactShareAction._resolve_contact_name(event, cs) == "全局主管"
 
@@ -181,21 +189,31 @@ class TestAutoContactShareResolveContactName:
         cs = {"contact_name": "", "kefu_overrides": {}}
         assert AutoContactShareAction._resolve_contact_name(event, cs) == ""
 
-    def test_override_with_whitespace_stripped(self):
+    def test_legacy_kefu_overrides_fallback(self):
+        """Legacy kefu_overrides dict used when contact_name is empty (no profile)."""
         event = _make_event(kefu_name="客服A")
         cs = {
-            "contact_name": "全局主管",
-            "kefu_overrides": {"客服A": "  主管X  "},
+            "contact_name": "",  # No per-kefu profile merged
+            "kefu_overrides": {"客服A": "  主管X  ", "客服B": "主管Y"},
         }
         assert AutoContactShareAction._resolve_contact_name(event, cs) == "主管X"
 
     def test_kefu_overrides_not_dict_falls_back(self):
         event = _make_event(kefu_name="客服A")
         cs = {
-            "contact_name": "全局主管",
+            "contact_name": "",
             "kefu_overrides": "invalid",
         }
-        assert AutoContactShareAction._resolve_contact_name(event, cs) == "全局主管"
+        assert AutoContactShareAction._resolve_contact_name(event, cs) == ""
+
+    def test_profile_takes_priority_over_legacy_overrides(self):
+        """Per-kefu profile (merged into contact_name) wins over legacy kefu_overrides."""
+        event = _make_event(kefu_name="客服A")
+        cs = {
+            "contact_name": "Profile主管",  # From kefu_action_profiles
+            "kefu_overrides": {"客服A": "Legacy主管"},
+        }
+        assert AutoContactShareAction._resolve_contact_name(event, cs) == "Profile主管"
 
 
 class TestAutoContactShareExecute:
@@ -218,15 +236,18 @@ class TestAutoContactShareExecute:
         service.share_contact_card.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_execute_uses_kefu_override(self):
+    async def test_execute_uses_per_kefu_contact_name(self):
+        """When kefu_resolver merges per-kefu profile, contact_name is already the override."""
         service = AsyncMock()
         service.share_contact_card = AsyncMock(return_value=True)
         action = AutoContactShareAction(contact_share_service=service)
 
         event = _make_event(customer_name="张三", kefu_name="客服A")
+        # Simulate settings after kefu_resolver has merged the per-kefu profile:
+        # contact_name is already "专属主管" (not the global "全局主管")
         settings = _default_settings(
-            contact_name="全局主管",
-            kefu_overrides={"客服A": "专属主管"},
+            contact_name="专属主管",
+            kefu_overrides={},  # Legacy overrides empty — profiles handle it now
         )
 
         result = await action.execute(event, settings)

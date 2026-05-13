@@ -15,6 +15,7 @@ from typing import Any
 from wecom_automation.services.blacklist_service import BlacklistWriter
 from wecom_automation.services.media_actions.actions.auto_blacklist import AutoBlacklistAction
 from wecom_automation.services.media_actions.event_bus import MediaEventBus
+from wecom_automation.services.media_actions.kefu_resolver import resolve_media_settings
 from wecom_automation.services.media_actions.settings_loader import load_media_auto_action_settings
 
 logger = logging.getLogger(__name__)
@@ -26,6 +27,7 @@ def build_media_event_bus(
     effects_db_path: str | None = None,
     wecom_service=None,
     on_action_results: Callable | None = None,
+    kefu_name: str | None = None,
 ) -> tuple[MediaEventBus | None, dict[str, Any]]:
     """
     Build a MediaEventBus pre-loaded with auto-actions if the feature is enabled.
@@ -64,6 +66,13 @@ def build_media_event_bus(
     except Exception as exc:
         logger.warning("Failed to load media auto-action settings: %s", exc)
         return None, {"enabled": False}
+
+    # Apply per-kefu overrides when kefu_name is provided.
+    if kefu_name:
+        try:
+            settings = resolve_media_settings(settings, kefu_name, settings_db_path)
+        except Exception as exc:
+            logger.warning("Failed to resolve per-kefu settings for kefu=%s: %s", kefu_name, exc)
 
     if not settings.get("enabled"):
         return None, settings

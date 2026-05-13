@@ -480,6 +480,32 @@ class ResponseDetector:
         self._click_unique_today: set[str] = set()
         self._priority_repeat_count_today: int = 0
 
+    def _resolve_kefu_name(self, serial: str) -> str:
+        """Resolve kefu_name from device_serial via the conversation database.
+
+        Queries the kefus + kefu_devices tables to find the most recently
+        associated kefu for the given device serial. Returns empty string
+        on failure (safe default that preserves existing behaviour).
+        """
+        try:
+            device = self._repository.get_device_by_serial(serial)
+            if device and device.id:
+                kefus = self._repository.list_kefus_for_device(device.id)
+                if kefus:
+                    return kefus[0].name
+        except Exception as exc:
+            self._logger.debug(f"[{serial}] Could not resolve kefu_name from DB: {exc}")
+        return ""
+
+    # Cache the resolved kefu_name per serial within a process lifetime.
+    _kefu_name_cache: dict[str, str] = {}
+
+    def _get_kefu_name(self, serial: str) -> str:
+        """Get kefu_name with in-process caching to avoid repeated DB queries."""
+        if serial not in self._kefu_name_cache:
+            self._kefu_name_cache[serial] = self._resolve_kefu_name(serial)
+        return self._kefu_name_cache[serial]
+
     def record_click_success(self, serial: str, user_name: str) -> None:
         """Track unique successful clicks per day (called by realtime loop)."""
         self._click_unique_today.add(f"{serial}:{user_name}")
@@ -650,12 +676,14 @@ class ResponseDetector:
                     self._logger.debug("Media action WS broadcast failed (non-blocking): %s", ws_exc)
 
             db_path = self._repository._db_path
+            kefu_name = self._get_kefu_name(serial)
             bus, settings = build_media_event_bus(
                 db_path,
                 settings_db_path=str(get_control_db_path()),
                 effects_db_path=str(get_control_db_path()),
                 wecom_service=wecom,
                 on_action_results=_on_media_results,
+                kefu_name=kefu_name or None,
             )
             self._media_event_bus = bus
             self._media_action_settings = settings
@@ -2282,9 +2310,9 @@ class ResponseDetector:
                     context = MessageContext(
                         customer_id=customer_id,
                         customer_name=user_name,
-                        channel=user_channel,  # 修复：添加缺失的 channel 参数
+                        channel=user_channel,
                         device_serial=serial,
-                        kefu_name="",  # 修复：kefu_name 是必需参数，使用空字符串
+                        kefu_name=self._get_kefu_name(serial),
                     )
 
                     # Process message through MessageProcessor

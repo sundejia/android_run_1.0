@@ -20,7 +20,7 @@ from wecom_automation.core.config import (
 from wecom_automation.core.performance import InstrumentedConnection
 
 # Database version for migrations
-DATABASE_VERSION = 14
+DATABASE_VERSION = 15
 
 # Re-export for backward compatibility
 # Note: DEFAULT_DB_PATH is now a Path object, not string
@@ -285,6 +285,25 @@ CREATE INDEX IF NOT EXISTS idx_analytics_events_type_ts
   ON analytics_events(event_type, ts);
 CREATE INDEX IF NOT EXISTS idx_analytics_events_trace_id
   ON analytics_events(trace_id);
+
+-- Per-kefu action configuration profiles (v15+).
+-- Each row stores a kefu-specific override for one action type (e.g. auto_group_invite,
+-- auto_contact_share).  Fields absent from config_json fall through to the global
+-- media_auto_actions settings in the settings table.
+CREATE TABLE IF NOT EXISTS kefu_action_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kefu_id INTEGER NOT NULL REFERENCES kefus(id) ON DELETE CASCADE,
+    action_type TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    config_json TEXT NOT NULL DEFAULT '{{}}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(kefu_id, action_type)
+);
+CREATE INDEX IF NOT EXISTS idx_kefu_action_profiles_kefu_id
+    ON kefu_action_profiles(kefu_id);
+CREATE INDEX IF NOT EXISTS idx_kefu_action_profiles_kefu_action
+    ON kefu_action_profiles(kefu_id, action_type);
 {BLACKLIST_INDEXES_SQL}
 """
 
@@ -320,6 +339,13 @@ END;
 
 -- Trigger for blacklist updated_at
 {BLACKLIST_TRIGGER_SQL}
+
+-- Trigger for kefu_action_profiles updated_at
+CREATE TRIGGER IF NOT EXISTS update_kefu_action_profiles_timestamp
+AFTER UPDATE ON kefu_action_profiles
+BEGIN
+    UPDATE kefu_action_profiles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
 """
 
 # Migration from v1 to v2: consolidate kefus by name+department
@@ -1058,6 +1084,9 @@ def run_migrations(db_path: str | None = None) -> None:
     if current_version < 14:
         migrate_v13_to_v14(db_path)
 
+    if current_version < 15:
+        migrate_v14_to_v15(db_path)
+
     repairs = repair_blacklist_schema(db_path)
     if repairs:
         print(f"[schema] Repaired blacklist schema drift: {', '.join(repairs)}")
@@ -1654,6 +1683,91 @@ def migrate_v12_to_v13(db_path: str | None = None) -> None:
     try:
         cursor.executescript(MIGRATION_V12_TO_V13)
         cursor.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (13,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+
+MIGRATION_V14_TO_V15 = """
+CREATE TABLE IF NOT EXISTS kefu_action_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    kefu_id INTEGER NOT NULL REFERENCES kefus(id) ON DELETE CASCADE,
+    action_type TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(kefu_id, action_type)
+);
+CREATE INDEX IF NOT EXISTS idx_kefu_action_profiles_kefu_id
+    ON kefu_action_profiles(kefu_id);
+CREATE INDEX IF NOT EXISTS idx_kefu_action_profiles_kefu_action
+    ON kefu_action_profiles(kefu_id, action_type);
+
+CREATE TRIGGER IF NOT EXISTS update_kefu_action_profiles_timestamp
+AFTER UPDATE ON kefu_action_profiles
+BEGIN
+    UPDATE kefu_action_profiles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+"""
+
+
+def migrate_v14_to_v15(db_path: str | None = None) -> None:
+    """
+    Migrate database from v14 to v15.
+
+    Adds kefu_action_profiles table for per-kefu media action configuration.
+    Migrates existing kefu_overrides from the settings table into the new
+    per-kefu profile rows.
+    """
+    path = get_db_path(db_path)
+    conn = sqlite3.connect(str(path), factory=InstrumentedConnection)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        cursor.executescript(MIGRATION_V14_TO_V15)
+
+        # Migrate existing kefu_overrides from settings table
+        try:
+            cursor.execute(
+                "SELECT value_json FROM settings WHERE category = ? AND key = ?",
+                ("media_auto_actions", "auto_contact_share"),
+            )
+            row = cursor.fetchone()
+            if row and row["value_json"]:
+                import json
+
+                contact_share_settings = json.loads(row["value_json"])
+                overrides = contact_share_settings.get("kefu_overrides", {})
+                if isinstance(overrides, dict):
+                    for kefu_name, contact_name in overrides.items():
+                        if not kefu_name or not contact_name:
+                            continue
+                        # Look up kefu_id by name
+                        cursor.execute(
+                            "SELECT id FROM kefus WHERE name = ? LIMIT 1",
+                            (kefu_name,),
+                        )
+                        kefu_row = cursor.fetchone()
+                        if kefu_row:
+                            import json as _json
+
+                            cursor.execute(
+                                """
+                                INSERT OR IGNORE INTO kefu_action_profiles
+                                    (kefu_id, action_type, enabled, config_json)
+                                VALUES (?, 'auto_contact_share', 1, ?)
+                                """,
+                                (kefu_row["id"], _json.dumps({"contact_name": contact_name})),
+                            )
+        except Exception as mig_exc:
+            print(f"[schema] Warning: kefu_overrides migration skipped: {mig_exc}")
+
+        cursor.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (15,))
         conn.commit()
     except Exception as e:
         conn.rollback()

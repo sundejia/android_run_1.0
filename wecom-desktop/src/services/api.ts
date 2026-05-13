@@ -903,6 +903,34 @@ export interface MediaAutoActionSettings {
   review_gate: ReviewGateSettings
 }
 
+// Kefu Action Profile types
+export interface KefuActionProfileSummary {
+  kefu_id: number
+  kefu_name: string
+  department?: string | null
+  has_group_invite_override: boolean
+  has_contact_share_override: boolean
+  group_invite_enabled?: boolean | null
+  contact_share_enabled?: boolean | null
+}
+
+export interface KefuActionProfile {
+  id: number
+  kefu_id: number
+  kefu_name: string
+  action_type: string
+  enabled: boolean
+  config: Record<string, unknown>
+  created_at?: string | null
+  updated_at?: string | null
+}
+
+export interface EffectiveSettings {
+  kefu_id: number
+  kefu_name: string
+  settings: Record<string, unknown>
+}
+
 export interface MediaActionLogEntry {
   id: number
   device_serial: string
@@ -1929,6 +1957,39 @@ class ApiClient {
       method: 'POST',
       body: JSON.stringify(params),
     })
+  }
+
+  // ==========================================================================
+  // Kefu Action Profiles
+  // ==========================================================================
+
+  async getKefuProfiles(): Promise<KefuActionProfileSummary[]> {
+    return this.request<KefuActionProfileSummary[]>('/api/kefu-profiles')
+  }
+
+  async getKefuActions(kefuId: number): Promise<KefuActionProfile[]> {
+    return this.request<KefuActionProfile[]>(`/api/kefu-profiles/${kefuId}/actions`)
+  }
+
+  async upsertKefuAction(
+    kefuId: number,
+    actionType: string,
+    data: { enabled: boolean; config: Record<string, unknown> }
+  ): Promise<KefuActionProfile> {
+    return this.request<KefuActionProfile>(`/api/kefu-profiles/${kefuId}/actions/${actionType}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteKefuAction(kefuId: number, actionType: string): Promise<void> {
+    await this.request(`/api/kefu-profiles/${kefuId}/actions/${actionType}`, {
+      method: 'DELETE',
+    })
+  }
+
+  async getKefuEffectiveSettings(kefuId: number): Promise<EffectiveSettings> {
+    return this.request<EffectiveSettings>(`/api/kefu-profiles/${kefuId}/effective`)
   }
 }
 

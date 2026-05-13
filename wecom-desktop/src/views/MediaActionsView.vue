@@ -4,6 +4,7 @@ import { api } from '../services/api'
 import type { MediaAutoActionSettings } from '../services/api'
 import { useI18n } from '../composables/useI18n'
 import { renderMediaActionTemplate } from '../utils/mediaActionTemplates'
+import { useKefuProfilesStore } from '../stores/kefuProfiles'
 
 const { t } = useI18n()
 const loading = ref(true)
@@ -12,6 +13,14 @@ const testing = ref(false)
 const reachabilityTesting = ref(false)
 const reachabilityResult = ref<{ reachable: boolean; message: string } | null>(null)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
+
+const kefuProfilesStore = useKefuProfilesStore()
+
+// Per-kefu profile editing state
+const editingKefuId = ref<number | null>(null)
+const editingGroupInvite = ref({ enabled: true, group_members: [] as string[], group_name_template: '{customer_name}-{kefu_name}服务群' })
+const editingContactShare = ref({ enabled: true, contact_name: '' })
+const newProfileMember = ref('')
 
 // Tiny "all-off" placeholder shape used purely as a typed initialiser before
 // the API responds. We deliberately avoid maintaining a frontend-side copy of
@@ -116,6 +125,8 @@ async function loadSettings() {
       auto_contact_share: { ...placeholder.auto_contact_share, ...loaded.auto_contact_share },
       review_gate: { ...placeholder.review_gate, ...loaded.review_gate },
     }
+    // Also load kefu profiles
+    await kefuProfilesStore.fetchProfiles()
   } catch (err: any) {
     showToast(err.message || t('media_actions.load_failed'), 'error')
   } finally {
@@ -137,6 +148,75 @@ async function saveSettings() {
 
 function addMember() {
   const name = newMember.value.trim()
+
+// --- Per-Kefu Profile Management ---
+
+function startEditKefu(kefuId: number) {
+  editingKefuId.value = kefuId
+  const groupAction = kefuProfilesStore.selectedKefuActions.find(a => a.action_type === 'auto_group_invite')
+  const contactAction = kefuProfilesStore.selectedKefuActions.find(a => a.action_type === 'auto_contact_share')
+
+  editingGroupInvite.value = {
+    enabled: groupAction?.enabled ?? true,
+    group_members: (groupAction?.config?.group_members as string[]) || [],
+    group_name_template: (groupAction?.config?.group_name_template as string) || '{customer_name}-{kefu_name}服务群',
+  }
+  editingContactShare.value = {
+    enabled: contactAction?.enabled ?? true,
+    contact_name: (contactAction?.config?.contact_name as string) || '',
+  }
+  newProfileMember.value = ''
+}
+
+function addProfileMember() {
+  const name = newProfileMember.value.trim()
+  if (name && !editingGroupInvite.value.group_members.includes(name)) {
+    editingGroupInvite.value.group_members.push(name)
+    newProfileMember.value = ''
+  }
+}
+
+function removeProfileMember(index: number) {
+  editingGroupInvite.value.group_members.splice(index, 1)
+}
+
+async function saveKefuProfile() {
+  if (!editingKefuId.value) return
+  try {
+    if (editingGroupInvite.value.group_members.length > 0) {
+      await kefuProfilesStore.saveKefuAction(editingKefuId.value, 'auto_group_invite', {
+        enabled: editingGroupInvite.value.enabled,
+        config: {
+          group_members: editingGroupInvite.value.group_members,
+          group_name_template: editingGroupInvite.value.group_name_template,
+        },
+      })
+    }
+    if (editingContactShare.value.contact_name) {
+      await kefuProfilesStore.saveKefuAction(editingKefuId.value, 'auto_contact_share', {
+        enabled: editingContactShare.value.enabled,
+        config: { contact_name: editingContactShare.value.contact_name },
+      })
+    }
+    showToast('客服专属配置已保存')
+  } catch (e: any) {
+    showToast(e.message || '保存失败', 'error')
+  }
+}
+
+async function deleteKefuProfile(actionType: string) {
+  if (!editingKefuId.value) return
+  try {
+    await kefuProfilesStore.deleteKefuAction(editingKefuId.value, actionType)
+    showToast('已重置为全局默认')
+  } catch (e: any) {
+    showToast(e.message || '删除失败', 'error')
+  }
+}
+
+function cancelEditKefu() {
+  editingKefuId.value = null
+}
   if (name && !settings.value.auto_group_invite.group_members.includes(name)) {
     settings.value.auto_group_invite.group_members.push(name)
     newMember.value = ''
@@ -756,6 +836,160 @@ onMounted(loadSettings)
               {{ t('media_actions.skip_already_shared') }}
             </label>
           </div>
+        </div>
+      </div>
+
+      <!-- Per-Kefu Override Section -->
+      <div
+        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
+        :class="{ 'opacity-50': !settings.enabled }"
+      >
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <h2 class="text-lg font-semibold text-gray-100">
+              按客服覆盖配置
+            </h2>
+            <p class="text-sm text-gray-400 mt-1">
+              配置了专属设置的客服将使用专属配置，未配置的客服继续使用上方全局默认。
+            </p>
+          </div>
+        </div>
+
+        <!-- Kefu selector -->
+        <div v-if="kefuProfilesStore.profiles.length > 0" class="space-y-4">
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="kefu in kefuProfilesStore.profiles"
+              :key="kefu.kefu_id"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border"
+              :class="[
+                editingKefuId === kefu.kefu_id
+                  ? 'bg-blue-600 text-white border-blue-500'
+                  : kefu.has_group_invite_override || kefu.has_contact_share_override
+                    ? 'bg-green-600/20 text-green-300 border-green-600/40 hover:bg-green-600/30'
+                    : 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600'
+              ]"
+              @click="kefuProfilesStore.selectKefu(kefu.kefu_id); startEditKefu(kefu.kefu_id)"
+            >
+              {{ kefu.kefu_name }}
+              <span v-if="kefu.has_group_invite_override || kefu.has_contact_share_override" class="ml-1 text-xs">(已配置)</span>
+            </button>
+          </div>
+
+          <!-- Edit panel -->
+          <div v-if="editingKefuId" class="bg-gray-800/50 rounded-lg p-4 space-y-4 border border-gray-700">
+            <div class="flex items-center justify-between">
+              <h3 class="text-md font-semibold text-gray-200">
+                {{ kefuProfilesStore.profiles.find(k => k.kefu_id === editingKefuId)?.kefu_name }} 的专属配置
+              </h3>
+              <button
+                class="text-gray-400 hover:text-gray-200 text-sm"
+                @click="cancelEditKefu"
+              >
+                关闭
+              </button>
+            </div>
+
+            <!-- Auto Group Invite -->
+            <div class="space-y-3 border-l-2 border-blue-500/30 pl-4">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="editingGroupInvite.enabled"
+                  type="checkbox"
+                  class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                />
+                <span class="text-sm font-medium text-gray-200">自动拉群</span>
+              </div>
+
+              <div v-if="editingGroupInvite.enabled" class="space-y-3">
+                <div>
+                  <label class="block text-sm text-gray-400 mb-1">群成员</label>
+                  <div class="flex flex-wrap gap-1.5 mb-2">
+                    <span
+                      v-for="(member, idx) in editingGroupInvite.group_members"
+                      :key="idx"
+                      class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 text-blue-300 rounded text-xs"
+                    >
+                      {{ member }}
+                      <button
+                        class="text-blue-400 hover:text-blue-200"
+                        @click="removeProfileMember(idx)"
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  </div>
+                  <div class="flex gap-2">
+                    <input
+                      v-model="newProfileMember"
+                      class="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="添加群成员名"
+                      @keydown.enter.prevent="addProfileMember"
+                    />
+                    <button
+                      class="px-2 py-1 text-xs bg-gray-600 text-gray-200 rounded hover:bg-gray-500"
+                      @click="addProfileMember"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label class="block text-sm text-gray-400 mb-1">群名模板</label>
+                  <input
+                    v-model="editingGroupInvite.group_name_template"
+                    class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  />
+                  <p class="text-xs text-gray-500 mt-1">可用变量: {customer_name}, {kefu_name}</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- Auto Contact Share -->
+            <div class="space-y-3 border-l-2 border-green-500/30 pl-4">
+              <div class="flex items-center gap-2">
+                <input
+                  v-model="editingContactShare.enabled"
+                  type="checkbox"
+                  class="rounded border-gray-600 bg-gray-700 text-green-600 focus:ring-green-500"
+                />
+                <span class="text-sm font-medium text-gray-200">自动发名片</span>
+              </div>
+
+              <div v-if="editingContactShare.enabled" class="space-y-3">
+                <div>
+                  <label class="block text-sm text-gray-400 mb-1">名片联系人名称</label>
+                  <input
+                    v-model="editingContactShare.contact_name"
+                    class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500"
+                    placeholder="输入要发送的名片联系人名称"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <!-- Save / Reset buttons -->
+            <div class="flex items-center gap-3 pt-2">
+              <button
+                class="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
+                @click="saveKefuProfile"
+              >
+                保存专属配置
+              </button>
+              <button
+                v-if="kefuProfilesStore.selectedKefuActions.length > 0"
+                class="px-4 py-1.5 bg-gray-600 text-gray-200 text-sm rounded hover:bg-gray-500 transition-colors"
+                @click="deleteKefuProfile('auto_group_invite'); deleteKefuProfile('auto_contact_share')"
+              >
+                重置为全局默认
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div v-else class="text-sm text-gray-500 py-4 text-center">
+          暂无客服数据。请先在设备管理页面初始化设备并检测客服信息。
         </div>
       </div>
 

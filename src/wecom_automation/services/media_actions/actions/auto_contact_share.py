@@ -299,10 +299,27 @@ class AutoContactShareAction(IMediaAction):
 
     @staticmethod
     def _resolve_contact_name(event: MediaEvent, cs: dict) -> str:
-        """Resolve the contact name: per-kefu override first, then global default."""
+        """Resolve the contact name.
+
+        Resolution order:
+        1. ``contact_name`` from per-kefu profile (resolved upstream by
+           ``kefu_resolver`` and merged into the settings dict).
+        2. ``kefu_overrides[event.kefu_name]`` (legacy, deprecated).
+        3. Global ``contact_name``.
+        """
+        # Per-kefu profile overrides are already merged into the section dict
+        # by kefu_resolver before this method is called, so a simple lookup
+        # is sufficient.  The kefu_overrides dict is kept as a backward-compatible
+        # fallback for callers that have not yet migrated to kefu_action_profiles.
+        contact = cs.get("contact_name", "").strip()
+        if contact:
+            return contact
+
+        # Legacy kefu_overrides fallback (deprecated, will be removed in a future release)
         overrides = cs.get("kefu_overrides", {})
         if isinstance(overrides, dict):
             name = overrides.get(event.kefu_name, "").strip()
             if name:
                 return name
-        return cs.get("contact_name", "").strip()
+
+        return ""
