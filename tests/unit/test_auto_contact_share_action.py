@@ -180,40 +180,21 @@ class TestAutoContactShareResolveContactName:
         event = _make_event(kefu_name="客服C")
         cs = {
             "contact_name": "全局主管",
-            "kefu_overrides": {},
         }
         assert AutoContactShareAction._resolve_contact_name(event, cs) == "全局主管"
 
     def test_empty_string_when_no_config(self):
         event = _make_event(kefu_name="客服A")
-        cs = {"contact_name": "", "kefu_overrides": {}}
+        cs = {"contact_name": ""}
         assert AutoContactShareAction._resolve_contact_name(event, cs) == ""
 
-    def test_legacy_kefu_overrides_fallback(self):
-        """Legacy kefu_overrides dict used when contact_name is empty (no profile)."""
+    def test_merged_device_profile_wins(self):
+        """Per-device profile (merged into contact_name by device_resolver) is used directly."""
         event = _make_event(kefu_name="客服A")
         cs = {
-            "contact_name": "",  # No per-kefu profile merged
-            "kefu_overrides": {"客服A": "  主管X  ", "客服B": "主管Y"},
+            "contact_name": "Device主管",  # From device_action_profiles via device_resolver
         }
-        assert AutoContactShareAction._resolve_contact_name(event, cs) == "主管X"
-
-    def test_kefu_overrides_not_dict_falls_back(self):
-        event = _make_event(kefu_name="客服A")
-        cs = {
-            "contact_name": "",
-            "kefu_overrides": "invalid",
-        }
-        assert AutoContactShareAction._resolve_contact_name(event, cs) == ""
-
-    def test_profile_takes_priority_over_legacy_overrides(self):
-        """Per-kefu profile (merged into contact_name) wins over legacy kefu_overrides."""
-        event = _make_event(kefu_name="客服A")
-        cs = {
-            "contact_name": "Profile主管",  # From kefu_action_profiles
-            "kefu_overrides": {"客服A": "Legacy主管"},
-        }
-        assert AutoContactShareAction._resolve_contact_name(event, cs) == "Profile主管"
+        assert AutoContactShareAction._resolve_contact_name(event, cs) == "Device主管"
 
 
 class TestAutoContactShareExecute:

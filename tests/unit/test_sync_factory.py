@@ -31,11 +31,13 @@ def test_create_sync_orchestrator_uses_per_device_db_for_media_action_effects(mo
         effects_db_path=None,
         wecom_service=None,
         on_action_results=None,
+        device_serial=None,
     ):
         captured["db_path"] = db_path
         captured["settings_db_path"] = settings_db_path
         captured["effects_db_path"] = effects_db_path
         captured["wecom_service"] = wecom_service
+        captured["device_serial"] = device_serial
         return "media-bus", {"enabled": True}
 
     monkeypatch.setattr(factory, "Config", DummyConfig)
@@ -98,11 +100,13 @@ def test_create_customer_syncer_uses_per_device_db_for_media_action_effects(monk
         effects_db_path=None,
         wecom_service=None,
         on_action_results=None,
+        device_serial=None,
     ):
         captured["db_path"] = db_path
         captured["settings_db_path"] = settings_db_path
         captured["effects_db_path"] = effects_db_path
         captured["wecom_service"] = wecom_service
+        captured["device_serial"] = device_serial
         return "media-bus", {"enabled": True}
 
     monkeypatch.setattr(factory, "Config", DummyConfig)

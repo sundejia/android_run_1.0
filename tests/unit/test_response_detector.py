@@ -71,6 +71,7 @@ async def test_init_media_event_bus_reads_settings_from_control_db(monkeypatch):
         wecom_service=None,
         on_action_results=None,
         kefu_name=None,
+        device_serial=None,
     ):
         captured["db_path"] = db_path
         captured["settings_db_path"] = settings_db_path
@@ -78,6 +79,7 @@ async def test_init_media_event_bus_reads_settings_from_control_db(monkeypatch):
         captured["wecom_service"] = wecom_service
         captured["on_action_results"] = on_action_results
         captured["kefu_name"] = kefu_name
+        captured["device_serial"] = device_serial
         return None, {"enabled": False}
 
     monkeypatch.setattr(media_factory, "build_media_event_bus", fake_build_media_event_bus)
@@ -90,5 +92,4 @@ async def test_init_media_event_bus_reads_settings_from_control_db(monkeypatch):
     assert captured["settings_db_path"] == str(control_db)
     assert captured["effects_db_path"] == str(control_db)
     assert captured["wecom_service"] is wecom
-    # kefu_name is resolved from DB; with a DummyRepository it will be empty
-    assert "kefu_name" in captured
+    assert captured["device_serial"] == "serial123"

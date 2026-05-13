@@ -349,7 +349,6 @@ class TestContactSharePreShareMessageSettings:
                             "contact_name": "主管王",
                             "skip_if_already_shared": True,
                             "cooldown_seconds": 0,
-                            "kefu_overrides": {},
                             "send_message_before_share": True,
                             "pre_share_message_text": "你好{customer_name}，推荐主管给你",
                         }
@@ -371,7 +370,6 @@ class TestContactSharePreShareMessageSettings:
                 "contact_name": "主管",
                 "skip_if_already_shared": True,
                 "cooldown_seconds": 0,
-                "kefu_overrides": {},
                 "send_message_before_share": True,
                 "pre_share_message_text": "这是主管名片",
             },

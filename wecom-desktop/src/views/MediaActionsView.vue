@@ -4,7 +4,7 @@ import { api } from '../services/api'
 import type { MediaAutoActionSettings } from '../services/api'
 import { useI18n } from '../composables/useI18n'
 import { renderMediaActionTemplate } from '../utils/mediaActionTemplates'
-import { useKefuProfilesStore } from '../stores/kefuProfiles'
+import { useDeviceProfilesStore } from '../stores/deviceProfiles'
 
 const { t } = useI18n()
 const loading = ref(true)
@@ -14,10 +14,10 @@ const reachabilityTesting = ref(false)
 const reachabilityResult = ref<{ reachable: boolean; message: string } | null>(null)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
-const kefuProfilesStore = useKefuProfilesStore()
+const deviceProfilesStore = useDeviceProfilesStore()
 
-// Per-kefu profile editing state
-const editingKefuId = ref<number | null>(null)
+// Per-device profile editing state
+const editingDeviceSerial = ref<string | null>(null)
 const editingGroupInvite = ref({ enabled: true, group_members: [] as string[], group_name_template: '{customer_name}-{kefu_name}服务群' })
 const editingContactShare = ref({ enabled: true, contact_name: '' })
 const newProfileMember = ref('')
@@ -54,7 +54,6 @@ function createPlaceholderSettings(): MediaAutoActionSettings {
       contact_name: '',
       skip_if_already_shared: true,
       cooldown_seconds: 0,
-      kefu_overrides: {},
       send_message_before_share: false,
       pre_share_message_text: '',
     },
@@ -68,8 +67,6 @@ function createPlaceholderSettings(): MediaAutoActionSettings {
 const settings = ref<MediaAutoActionSettings>(createPlaceholderSettings())
 
 const newMember = ref('')
-const newKefuName = ref('')
-const newKefuContact = ref('')
 const testCustomerName = ref('测试客户')
 const testDeviceSerial = ref('test_device')
 const testMessageType = ref<'image' | 'video'>('image')
@@ -125,8 +122,8 @@ async function loadSettings() {
       auto_contact_share: { ...placeholder.auto_contact_share, ...loaded.auto_contact_share },
       review_gate: { ...placeholder.review_gate, ...loaded.review_gate },
     }
-    // Also load kefu profiles
-    await kefuProfilesStore.fetchProfiles()
+    // Also load device profiles
+    await deviceProfilesStore.fetchProfiles()
   } catch (err: any) {
     showToast(err.message || t('media_actions.load_failed'), 'error')
   } finally {
@@ -148,13 +145,18 @@ async function saveSettings() {
 
 function addMember() {
   const name = newMember.value.trim()
+  if (name && !settings.value.auto_group_invite.group_members.includes(name)) {
+    settings.value.auto_group_invite.group_members.push(name)
+    newMember.value = ''
+  }
+}
 
-// --- Per-Kefu Profile Management ---
+// --- Per-Device Profile Management ---
 
-function startEditKefu(kefuId: number) {
-  editingKefuId.value = kefuId
-  const groupAction = kefuProfilesStore.selectedKefuActions.find(a => a.action_type === 'auto_group_invite')
-  const contactAction = kefuProfilesStore.selectedKefuActions.find(a => a.action_type === 'auto_contact_share')
+function startEditDevice(deviceSerial: string) {
+  editingDeviceSerial.value = deviceSerial
+  const groupAction = deviceProfilesStore.selectedDeviceActions.find(a => a.action_type === 'auto_group_invite')
+  const contactAction = deviceProfilesStore.selectedDeviceActions.find(a => a.action_type === 'auto_contact_share')
 
   editingGroupInvite.value = {
     enabled: groupAction?.enabled ?? true,
@@ -180,11 +182,11 @@ function removeProfileMember(index: number) {
   editingGroupInvite.value.group_members.splice(index, 1)
 }
 
-async function saveKefuProfile() {
-  if (!editingKefuId.value) return
+async function saveDeviceProfile() {
+  if (!editingDeviceSerial.value) return
   try {
     if (editingGroupInvite.value.group_members.length > 0) {
-      await kefuProfilesStore.saveKefuAction(editingKefuId.value, 'auto_group_invite', {
+      await deviceProfilesStore.saveDeviceAction(editingDeviceSerial.value, 'auto_group_invite', {
         enabled: editingGroupInvite.value.enabled,
         config: {
           group_members: editingGroupInvite.value.group_members,
@@ -193,52 +195,33 @@ async function saveKefuProfile() {
       })
     }
     if (editingContactShare.value.contact_name) {
-      await kefuProfilesStore.saveKefuAction(editingKefuId.value, 'auto_contact_share', {
+      await deviceProfilesStore.saveDeviceAction(editingDeviceSerial.value, 'auto_contact_share', {
         enabled: editingContactShare.value.enabled,
         config: { contact_name: editingContactShare.value.contact_name },
       })
     }
-    showToast('客服专属配置已保存')
+    showToast('设备专属配置已保存')
   } catch (e: any) {
     showToast(e.message || '保存失败', 'error')
   }
 }
 
-async function deleteKefuProfile(actionType: string) {
-  if (!editingKefuId.value) return
+async function deleteDeviceProfile(actionType: string) {
+  if (!editingDeviceSerial.value) return
   try {
-    await kefuProfilesStore.deleteKefuAction(editingKefuId.value, actionType)
+    await deviceProfilesStore.deleteDeviceAction(editingDeviceSerial.value, actionType)
     showToast('已重置为全局默认')
   } catch (e: any) {
     showToast(e.message || '删除失败', 'error')
   }
 }
 
-function cancelEditKefu() {
-  editingKefuId.value = null
-}
-  if (name && !settings.value.auto_group_invite.group_members.includes(name)) {
-    settings.value.auto_group_invite.group_members.push(name)
-    newMember.value = ''
-  }
+function cancelEditDevice() {
+  editingDeviceSerial.value = null
 }
 
 function removeMember(index: number) {
   settings.value.auto_group_invite.group_members.splice(index, 1)
-}
-
-function addKefuOverride() {
-  const kefu = newKefuName.value.trim()
-  const contact = newKefuContact.value.trim()
-  if (kefu && contact) {
-    settings.value.auto_contact_share.kefu_overrides[kefu] = contact
-    newKefuName.value = ''
-    newKefuContact.value = ''
-  }
-}
-
-function removeKefuOverride(kefuName: string) {
-  delete settings.value.auto_contact_share.kefu_overrides[kefuName]
 }
 
 async function testContactReachability() {
@@ -772,59 +755,6 @@ onMounted(loadSettings)
             </div>
           </div>
 
-          <!-- Per-Kefu Overrides -->
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{
-              t('media_actions.kefu_overrides_label')
-            }}</label>
-            <div class="flex flex-wrap gap-2 mb-2">
-              <span
-                v-for="(contact, kefu) in settings.auto_contact_share.kefu_overrides"
-                :key="kefu"
-                class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-purple-600/20 text-purple-300 text-sm border border-purple-600/30"
-              >
-                {{ kefu }} → {{ contact }}
-                <button
-                  class="ml-1 text-purple-400 hover:text-red-400 transition-colors"
-                  @click="removeKefuOverride(String(kefu))"
-                >
-                  &times;
-                </button>
-              </span>
-              <span
-                v-if="Object.keys(settings.auto_contact_share.kefu_overrides).length === 0"
-                class="text-sm text-gray-500 italic"
-              >
-                {{ t('media_actions.no_members') }}
-              </span>
-            </div>
-            <div class="flex gap-2">
-              <input
-                v-model="newKefuName"
-                type="text"
-                class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="t('media_actions.kefu_name_placeholder')"
-                @keyup.enter="addKefuOverride"
-              />
-              <input
-                v-model="newKefuContact"
-                type="text"
-                class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="t('media_actions.contact_for_kefu_placeholder')"
-                @keyup.enter="addKefuOverride"
-              />
-              <button
-                class="px-4 py-2 bg-purple-600 text-white text-sm rounded-md hover:bg-purple-700 transition-colors"
-                @click="addKefuOverride"
-              >
-                {{ t('media_actions.add') }}
-              </button>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">
-              {{ t('media_actions.kefu_overrides_desc') }}
-            </p>
-          </div>
-
           <div class="flex items-center gap-2">
             <input
               id="skip-already-shared"
@@ -839,7 +769,7 @@ onMounted(loadSettings)
         </div>
       </div>
 
-      <!-- Per-Kefu Override Section -->
+      <!-- Per-Device Override Section -->
       <div
         class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
         :class="{ 'opacity-50': !settings.enabled }"
@@ -847,44 +777,45 @@ onMounted(loadSettings)
         <div class="flex items-center justify-between mb-4">
           <div>
             <h2 class="text-lg font-semibold text-gray-100">
-              按客服覆盖配置
+              按设备覆盖配置
             </h2>
             <p class="text-sm text-gray-400 mt-1">
-              配置了专属设置的客服将使用专属配置，未配置的客服继续使用上方全局默认。
+              每个设备(手机)可以有独立的拉群和发名片配置。未配置的设备使用上方全局默认。
             </p>
           </div>
         </div>
 
-        <!-- Kefu selector -->
-        <div v-if="kefuProfilesStore.profiles.length > 0" class="space-y-4">
+        <!-- Device selector -->
+        <div v-if="deviceProfilesStore.profiles.length > 0" class="space-y-4">
           <div class="flex flex-wrap gap-2">
             <button
-              v-for="kefu in kefuProfilesStore.profiles"
-              :key="kefu.kefu_id"
+              v-for="device in deviceProfilesStore.profiles"
+              :key="device.device_serial"
               class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border"
               :class="[
-                editingKefuId === kefu.kefu_id
+                editingDeviceSerial === device.device_serial
                   ? 'bg-blue-600 text-white border-blue-500'
-                  : kefu.has_group_invite_override || kefu.has_contact_share_override
+                  : device.has_group_invite_override || device.has_contact_share_override
                     ? 'bg-green-600/20 text-green-300 border-green-600/40 hover:bg-green-600/30'
                     : 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600'
               ]"
-              @click="kefuProfilesStore.selectKefu(kefu.kefu_id); startEditKefu(kefu.kefu_id)"
+              @click="deviceProfilesStore.selectDevice(device.device_serial); startEditDevice(device.device_serial)"
             >
-              {{ kefu.kefu_name }}
-              <span v-if="kefu.has_group_invite_override || kefu.has_contact_share_override" class="ml-1 text-xs">(已配置)</span>
+              {{ device.model || device.device_serial }}
+              <span class="ml-1 text-xs text-gray-400">({{ device.device_serial }})</span>
+              <span v-if="device.has_group_invite_override || device.has_contact_share_override" class="ml-1 text-xs">(已配置)</span>
             </button>
           </div>
 
           <!-- Edit panel -->
-          <div v-if="editingKefuId" class="bg-gray-800/50 rounded-lg p-4 space-y-4 border border-gray-700">
+          <div v-if="editingDeviceSerial" class="bg-gray-800/50 rounded-lg p-4 space-y-4 border border-gray-700">
             <div class="flex items-center justify-between">
               <h3 class="text-md font-semibold text-gray-200">
-                {{ kefuProfilesStore.profiles.find(k => k.kefu_id === editingKefuId)?.kefu_name }} 的专属配置
+                {{ deviceProfilesStore.profiles.find(d => d.device_serial === editingDeviceSerial)?.model || editingDeviceSerial }} 的专属配置
               </h3>
               <button
                 class="text-gray-400 hover:text-gray-200 text-sm"
-                @click="cancelEditKefu"
+                @click="cancelEditDevice"
               >
                 关闭
               </button>
@@ -973,14 +904,14 @@ onMounted(loadSettings)
             <div class="flex items-center gap-3 pt-2">
               <button
                 class="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                @click="saveKefuProfile"
+                @click="saveDeviceProfile"
               >
-                保存专属配置
+                保存设备配置
               </button>
               <button
-                v-if="kefuProfilesStore.selectedKefuActions.length > 0"
+                v-if="deviceProfilesStore.selectedDeviceActions.length > 0"
                 class="px-4 py-1.5 bg-gray-600 text-gray-200 text-sm rounded hover:bg-gray-500 transition-colors"
-                @click="deleteKefuProfile('auto_group_invite'); deleteKefuProfile('auto_contact_share')"
+                @click="deleteDeviceProfile('auto_group_invite'); deleteDeviceProfile('auto_contact_share')"
               >
                 重置为全局默认
               </button>
@@ -989,7 +920,7 @@ onMounted(loadSettings)
         </div>
 
         <div v-else class="text-sm text-gray-500 py-4 text-center">
-          暂无客服数据。请先在设备管理页面初始化设备并检测客服信息。
+          暂无设备数据。请先连接设备并进行同步操作以录入设备信息。
         </div>
       </div>
 

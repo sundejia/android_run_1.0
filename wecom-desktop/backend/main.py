@@ -74,6 +74,7 @@ from routers import (
     global_websocket,
     i18n,
     image_sender,
+    device_profiles,
     kefu_profiles,
     kefus,
     log_upload,
@@ -317,6 +318,7 @@ app.include_router(dashboard.router, prefix="/dashboard", tags=["dashboard"])
 app.include_router(customers.router, prefix="/customers", tags=["customers"])
 app.include_router(kefus.router, prefix="/kefus", tags=["kefus"])
 app.include_router(kefu_profiles.router, prefix="/api/kefu-profiles", tags=["kefu-profiles"])
+app.include_router(device_profiles.router, prefix="/api/device-profiles", tags=["device-profiles"])
 app.include_router(sidecar.router, prefix="/sidecar", tags=["sidecar"])
 app.include_router(settings.router, prefix="/settings", tags=["settings"])
 app.include_router(streamers.router, prefix="/streamers", tags=["streamers"])

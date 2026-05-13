@@ -2,8 +2,8 @@
 AutoContactShareAction - automatically share a supervisor's contact card on media detection.
 
 When a customer sends an image or video, this action shares a configured
-contact card (名片) with the customer. The contact can be configured per-kefu
-via ``kefu_overrides`` or globally via ``contact_name``.
+contact card (名片) with the customer. The contact can be configured per-device
+via ``device_action_profiles`` or globally via ``contact_name``.
 
 When ``review_gate.enabled`` is true the action consults the persisted
 image-rating-server review verdict (``portrait`` + ``decision``) via
@@ -301,25 +301,12 @@ class AutoContactShareAction(IMediaAction):
     def _resolve_contact_name(event: MediaEvent, cs: dict) -> str:
         """Resolve the contact name.
 
-        Resolution order:
-        1. ``contact_name`` from per-kefu profile (resolved upstream by
-           ``kefu_resolver`` and merged into the settings dict).
-        2. ``kefu_overrides[event.kefu_name]`` (legacy, deprecated).
-        3. Global ``contact_name``.
+        Per-device profile overrides are already merged into the section dict
+        by ``device_resolver`` before this method is called, so a simple lookup
+        is sufficient.
         """
-        # Per-kefu profile overrides are already merged into the section dict
-        # by kefu_resolver before this method is called, so a simple lookup
-        # is sufficient.  The kefu_overrides dict is kept as a backward-compatible
-        # fallback for callers that have not yet migrated to kefu_action_profiles.
         contact = cs.get("contact_name", "").strip()
         if contact:
             return contact
-
-        # Legacy kefu_overrides fallback (deprecated, will be removed in a future release)
-        overrides = cs.get("kefu_overrides", {})
-        if isinstance(overrides, dict):
-            name = overrides.get(event.kefu_name, "").strip()
-            if name:
-                return name
 
         return ""

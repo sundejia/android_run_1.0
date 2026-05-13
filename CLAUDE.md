@@ -215,7 +215,8 @@ Each device's droidrun app must use a unique port (8080, 8081, 8082...) to preve
 - `images` - Image message files with bounds and metadata
 - `videos` - Video message files with duration and thumbnails
 - `blacklist` - Users to skip during sync/followup operations
-- `kefu_action_profiles` - Per-kefu overrides for media auto-action settings (auto_group_invite, auto_contact_share); schema v15+
+- `kefu_action_profiles` - Per-kefu overrides for media auto-action settings (auto_group_invite, auto_contact_share); schema v15+ (legacy, superseded by `device_action_profiles`)
+- `device_action_profiles` - Per-device overrides for media auto-action settings; schema v16+
 - `schema_version` - Database migration version tracking
 
 **Key Relationships:**
@@ -481,67 +482,65 @@ success = await sender.send_via_favorites(favorite_index=0)
 
 **Documentation**: `docs/03-impl-and-arch/key-modules/image-sender.md`
 
-### 12. Per-Kefu Action Profiles (NEW - 2026-05-13)
+### 12. Per-Device Action Profiles (2026-05-13)
 
 **Purpose**:
 
-- Allow each kefu (customer service agent) to have independent `auto_group_invite` and `auto_contact_share` configurations
-- Replace the deprecated `kefu_overrides` map in settings with a proper database table
-- Merge global settings with per-kefu overrides transparently so downstream actions require no code changes
+- Allow each device (phone) to have independent `auto_group_invite` and `auto_contact_share` configurations
+- Replace the per-kefu model with a device-centric approach (each phone = independent config)
+- Merge global settings with per-device overrides transparently so downstream actions require no code changes
 
-**Database Schema** (`kefu_action_profiles` table, schema v15):
+**Database Schema** (`device_action_profiles` table, schema v16):
 
 ```sql
-CREATE TABLE kefu_action_profiles (
+CREATE TABLE device_action_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    kefu_id INTEGER NOT NULL REFERENCES kefus(id) ON DELETE CASCADE,
+    device_serial TEXT NOT NULL,
     action_type TEXT NOT NULL,        -- 'auto_group_invite' | 'auto_contact_share'
     enabled BOOLEAN NOT NULL DEFAULT 1,
     config_json TEXT NOT NULL DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(kefu_id, action_type)
+    UNIQUE(device_serial, action_type)
 );
 ```
 
-**Settings Resolution Flow** (`kefu_resolver.py`):
+**Settings Resolution Flow** (`device_resolver.py`):
 
 1. Load global settings from `settings` table via `settings_loader.py`
-2. Look up `kefu_id` from `kefus` table by `kefu_name`
-3. Load all `kefu_action_profiles` rows for that `kefu_id`
-4. Deep-merge: start from a copy of global settings, then overlay per-kefu fields
-5. Return merged dict with identical structure to global settings
+2. Load all `device_action_profiles` rows for that `device_serial`
+3. Deep-merge: start from a copy of global settings, then overlay per-device fields
+4. Return merged dict with identical structure to global settings
 
 Resolution order (later wins):
 1. `DEFAULT_MEDIA_AUTO_ACTION_SETTINGS` (code defaults)
 2. `settings` table global overrides
-3. `kefu_action_profiles` rows for the given kefu
+3. `device_action_profiles` rows for the given device
 
-**API Routes** (`wecom-desktop/backend/routers/kefu_profiles.py`):
+**API Routes** (`wecom-desktop/backend/routers/device_profiles.py`):
 
-- `GET /api/kefu-profiles/` - List all kefus with override status
-- `GET /api/kefu-profiles/{kefu_id}/actions` - Get overrides for a kefu
-- `PUT /api/kefu-profiles/{kefu_id}/actions/{action_type}` - Create/update override
-- `DELETE /api/kefu-profiles/{kefu_id}/actions/{action_type}` - Delete override
-- `GET /api/kefu-profiles/{kefu_id}/effective` - Get fully resolved settings
+- `GET /api/device-profiles/` - List all devices with override status
+- `GET /api/device-profiles/{device_serial}/actions` - Get overrides for a device
+- `PUT /api/device-profiles/{device_serial}/actions/{action_type}` - Create/update override
+- `DELETE /api/device-profiles/{device_serial}/actions/{action_type}` - Delete override
+- `GET /api/device-profiles/{device_serial}/effective` - Get fully resolved settings
 
 **Integration Points**:
 
-- `build_media_event_bus()` accepts `kefu_name` parameter; when provided, `kefu_resolver` merges per-kefu overrides before returning settings
-- `response_detector` passes the current kefu name to `build_media_event_bus()` (previously was always empty string, now resolved from DB)
-- `AutoContactShareAction._resolve_contact_name()` uses merged settings directly; legacy `kefu_overrides` dict is kept as fallback
+- `build_media_event_bus()` accepts `device_serial` parameter; when provided, `device_resolver` merges per-device overrides before returning settings
+- `response_detector` passes `device_serial=serial` directly to `build_media_event_bus()`
+- `AutoContactShareAction._resolve_contact_name()` uses merged settings directly
 
 **Migration**:
 
-- Schema v14 -> v15: creates `kefu_action_profiles` table
-- Existing `kefu_overrides` from `auto_contact_share` settings are migrated into profile rows during upgrade
-- `kefu_overrides` in settings is deprecated but remains functional as a backward-compatible fallback
+- Schema v15 -> v16: creates `device_action_profiles` table, migrates `kefu_action_profiles` data via `kefu_devices` junction table
+- Legacy `/api/kefu-profiles` router remains registered for backward compatibility
 
 **Frontend**:
 
-- `MediaActionsView.vue` has a "按客服覆盖配置" section at the bottom
-- `kefuProfiles` Pinia store manages kefu profile state
-- API types: `KefuActionProfileSummary`, `KefuActionProfile`, `EffectiveSettings`
+- `MediaActionsView.vue` has a "按设备覆盖配置" section showing connected devices
+- `deviceProfiles` Pinia store manages device profile state
+- API types: `DeviceActionProfileSummary`, `DeviceActionProfile`, `DeviceEffectiveSettings`
 
 **Documentation**: `docs/implementation/2026-05-13-per-kefu-action-profiles.md`
 

@@ -32,7 +32,6 @@ describe('Media Actions API', () => {
     contact_name: '',
     skip_if_already_shared: true,
     cooldown_seconds: 0,
-    kefu_overrides: {},
     send_message_before_share: false,
     pre_share_message_text: '',
   }

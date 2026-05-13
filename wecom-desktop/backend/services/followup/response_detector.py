@@ -676,14 +676,13 @@ class ResponseDetector:
                     self._logger.debug("Media action WS broadcast failed (non-blocking): %s", ws_exc)
 
             db_path = self._repository._db_path
-            kefu_name = self._get_kefu_name(serial)
             bus, settings = build_media_event_bus(
                 db_path,
                 settings_db_path=str(get_control_db_path()),
                 effects_db_path=str(get_control_db_path()),
                 wecom_service=wecom,
                 on_action_results=_on_media_results,
-                kefu_name=kefu_name or None,
+                device_serial=serial,
             )
             self._media_event_bus = bus
             self._media_action_settings = settings

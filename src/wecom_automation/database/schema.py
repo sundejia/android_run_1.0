@@ -20,7 +20,7 @@ from wecom_automation.core.config import (
 from wecom_automation.core.performance import InstrumentedConnection
 
 # Database version for migrations
-DATABASE_VERSION = 15
+DATABASE_VERSION = 16
 
 # Re-export for backward compatibility
 # Note: DEFAULT_DB_PATH is now a Path object, not string
@@ -304,6 +304,24 @@ CREATE INDEX IF NOT EXISTS idx_kefu_action_profiles_kefu_id
     ON kefu_action_profiles(kefu_id);
 CREATE INDEX IF NOT EXISTS idx_kefu_action_profiles_kefu_action
     ON kefu_action_profiles(kefu_id, action_type);
+
+-- Per-device action configuration profiles (v16+).
+-- Replaces kefu_action_profiles for device-centric config.
+-- Each row stores a device-specific override for one action type.
+CREATE TABLE IF NOT EXISTS device_action_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_serial TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    config_json TEXT NOT NULL DEFAULT '{{}}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(device_serial, action_type)
+);
+CREATE INDEX IF NOT EXISTS idx_device_action_profiles_serial
+    ON device_action_profiles(device_serial);
+CREATE INDEX IF NOT EXISTS idx_device_action_serial_action
+    ON device_action_profiles(device_serial, action_type);
 {BLACKLIST_INDEXES_SQL}
 """
 
@@ -345,6 +363,13 @@ CREATE TRIGGER IF NOT EXISTS update_kefu_action_profiles_timestamp
 AFTER UPDATE ON kefu_action_profiles
 BEGIN
     UPDATE kefu_action_profiles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+
+-- Trigger for device_action_profiles updated_at
+CREATE TRIGGER IF NOT EXISTS update_device_action_profiles_timestamp
+AFTER UPDATE ON device_action_profiles
+BEGIN
+    UPDATE device_action_profiles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
 END;
 """
 
@@ -1087,6 +1112,9 @@ def run_migrations(db_path: str | None = None) -> None:
     if current_version < 15:
         migrate_v14_to_v15(db_path)
 
+    if current_version < 16:
+        migrate_v15_to_v16(db_path)
+
     repairs = repair_blacklist_schema(db_path)
     if repairs:
         print(f"[schema] Repaired blacklist schema drift: {', '.join(repairs)}")
@@ -1768,6 +1796,76 @@ def migrate_v14_to_v15(db_path: str | None = None) -> None:
             print(f"[schema] Warning: kefu_overrides migration skipped: {mig_exc}")
 
         cursor.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (15,))
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+
+MIGRATION_V15_TO_V16 = """
+CREATE TABLE IF NOT EXISTS device_action_profiles (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    device_serial TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT 1,
+    config_json TEXT NOT NULL DEFAULT '{}',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(device_serial, action_type)
+);
+CREATE INDEX IF NOT EXISTS idx_device_action_profiles_serial
+    ON device_action_profiles(device_serial);
+CREATE INDEX IF NOT EXISTS idx_device_action_serial_action
+    ON device_action_profiles(device_serial, action_type);
+
+CREATE TRIGGER IF NOT EXISTS update_device_action_profiles_timestamp
+AFTER UPDATE ON device_action_profiles
+BEGIN
+    UPDATE device_action_profiles SET updated_at = CURRENT_TIMESTAMP WHERE id = NEW.id;
+END;
+"""
+
+
+def migrate_v15_to_v16(db_path: str | None = None) -> None:
+    """Migrate database from v15 to v16.
+
+    Adds device_action_profiles table for per-device media action configuration.
+    Migrates existing kefu_action_profiles data by resolving kefu_id → device_serial
+    via the kefu_devices junction table.
+    """
+    path = get_db_path(db_path)
+    conn = sqlite3.connect(str(path), factory=InstrumentedConnection)
+    conn.row_factory = sqlite3.Row
+    cursor = conn.cursor()
+
+    try:
+        cursor.executescript(MIGRATION_V15_TO_V16)
+
+        # Migrate existing kefu_action_profiles → device_action_profiles
+        try:
+            cursor.execute(
+                """
+                SELECT kap.action_type, kap.enabled, kap.config_json, d.serial
+                FROM kefu_action_profiles kap
+                JOIN kefu_devices kd ON kd.kefu_id = kap.kefu_id
+                JOIN devices d ON d.id = kd.device_id
+                """
+            )
+            for row in cursor.fetchall():
+                cursor.execute(
+                    """
+                    INSERT OR IGNORE INTO device_action_profiles
+                        (device_serial, action_type, enabled, config_json)
+                    VALUES (?, ?, ?, ?)
+                    """,
+                    (row["serial"], row["action_type"], row["enabled"], row["config_json"]),
+                )
+        except Exception as mig_exc:
+            print(f"[schema] Warning: kefu_action_profiles → device_action_profiles migration skipped: {mig_exc}")
+
+        cursor.execute("INSERT OR REPLACE INTO schema_version (version) VALUES (?)", (16,))
         conn.commit()
     except Exception as e:
         conn.rollback()

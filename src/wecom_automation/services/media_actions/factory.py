@@ -15,7 +15,7 @@ from typing import Any
 from wecom_automation.services.blacklist_service import BlacklistWriter
 from wecom_automation.services.media_actions.actions.auto_blacklist import AutoBlacklistAction
 from wecom_automation.services.media_actions.event_bus import MediaEventBus
-from wecom_automation.services.media_actions.kefu_resolver import resolve_media_settings
+from wecom_automation.services.media_actions.device_resolver import resolve_media_settings_by_device
 from wecom_automation.services.media_actions.settings_loader import load_media_auto_action_settings
 
 logger = logging.getLogger(__name__)
@@ -27,36 +27,25 @@ def build_media_event_bus(
     effects_db_path: str | None = None,
     wecom_service=None,
     on_action_results: Callable | None = None,
+    device_serial: str | None = None,
     kefu_name: str | None = None,
 ) -> tuple[MediaEventBus | None, dict[str, Any]]:
     """
     Build a MediaEventBus pre-loaded with auto-actions if the feature is enabled.
 
     Args:
-        db_path: Path to the **per-device conversation** SQLite database (the
-            one that owns ``messages`` / ``images`` / ``videos`` rows). Passed to
-            ``AutoContactShareAction`` / ``AutoGroupInviteAction`` /
-            ``AutoBlacklistAction`` so ``evaluate_gate_pass`` reads
-            ``ai_review_*`` from the correct file. Callers that split control DB
-            vs device DB **must** pass the device conversation path here.
-        settings_db_path: Optional path to the SQLite database that stores the
-            ``settings`` table. Defaults to ``db_path`` for backward
-            compatibility.
-        effects_db_path: Optional **control** database for blacklist rows, group
-            tracking, and ``media_action_contact_shares`` idempotency.
-            ``ContactShareService`` / ``GroupChatService`` use this path;
-            gate evaluation still uses ``db_path``. Defaults to
-            ``settings_db_path`` when provided, otherwise ``db_path``.
-        wecom_service: Optional WeComService instance.  When provided,
-            ``AutoGroupInviteAction`` is registered (it needs WeComService for
-            group-chat creation).  When ``None``, only ``AutoBlacklistAction``
-            is registered.
-        on_action_results: Optional async callback ``(event, results) -> None``
-            invoked after ``emit()`` when at least one action succeeds.
+        db_path: Path to the **per-device conversation** SQLite database.
+        settings_db_path: Optional path to the ``settings`` table DB.
+        effects_db_path: Optional control database for blacklist/group tracking.
+        wecom_service: Optional WeComService instance.
+        on_action_results: Optional async callback ``(event, results) -> None``.
+        device_serial: Device serial for per-device overrides.
+        kefu_name: **Deprecated** — kept for backward compatibility; ignored when
+            *device_serial* is provided.
 
     Returns:
         ``(bus, settings)`` where *bus* is ``None`` when media auto-actions are
-        disabled, and *settings* is the merged settings dict.
+        disabled.
     """
     settings_db_path = settings_db_path or db_path
     effects_db_path = effects_db_path or settings_db_path or db_path
@@ -67,12 +56,12 @@ def build_media_event_bus(
         logger.warning("Failed to load media auto-action settings: %s", exc)
         return None, {"enabled": False}
 
-    # Apply per-kefu overrides when kefu_name is provided.
-    if kefu_name:
+    # Apply per-device overrides when device_serial is provided.
+    if device_serial:
         try:
-            settings = resolve_media_settings(settings, kefu_name, settings_db_path)
+            settings = resolve_media_settings_by_device(settings, device_serial, settings_db_path)
         except Exception as exc:
-            logger.warning("Failed to resolve per-kefu settings for kefu=%s: %s", kefu_name, exc)
+            logger.warning("Failed to resolve per-device settings for device=%s: %s", device_serial, exc)
 
     if not settings.get("enabled"):
         return None, settings

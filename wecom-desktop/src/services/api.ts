@@ -881,7 +881,6 @@ export interface AutoContactShareSettings {
   contact_name: string
   skip_if_already_shared: boolean
   cooldown_seconds: number
-  kefu_overrides: Record<string, string>
   send_message_before_share: boolean
   pre_share_message_text: string
 }
@@ -903,21 +902,20 @@ export interface MediaAutoActionSettings {
   review_gate: ReviewGateSettings
 }
 
-// Kefu Action Profile types
-export interface KefuActionProfileSummary {
-  kefu_id: number
-  kefu_name: string
-  department?: string | null
+// Device Action Profile types
+export interface DeviceActionProfileSummary {
+  device_serial: string
+  model?: string | null
+  manufacturer?: string | null
   has_group_invite_override: boolean
   has_contact_share_override: boolean
   group_invite_enabled?: boolean | null
   contact_share_enabled?: boolean | null
 }
 
-export interface KefuActionProfile {
+export interface DeviceActionProfile {
   id: number
-  kefu_id: number
-  kefu_name: string
+  device_serial: string
   action_type: string
   enabled: boolean
   config: Record<string, unknown>
@@ -925,9 +923,8 @@ export interface KefuActionProfile {
   updated_at?: string | null
 }
 
-export interface EffectiveSettings {
-  kefu_id: number
-  kefu_name: string
+export interface DeviceEffectiveSettings {
+  device_serial: string
   settings: Record<string, unknown>
 }
 
@@ -1960,36 +1957,36 @@ class ApiClient {
   }
 
   // ==========================================================================
-  // Kefu Action Profiles
+  // Device Action Profiles
   // ==========================================================================
 
-  async getKefuProfiles(): Promise<KefuActionProfileSummary[]> {
-    return this.request<KefuActionProfileSummary[]>('/api/kefu-profiles')
+  async getDeviceProfiles(): Promise<DeviceActionProfileSummary[]> {
+    return this.request<DeviceActionProfileSummary[]>('/api/device-profiles')
   }
 
-  async getKefuActions(kefuId: number): Promise<KefuActionProfile[]> {
-    return this.request<KefuActionProfile[]>(`/api/kefu-profiles/${kefuId}/actions`)
+  async getDeviceActions(deviceSerial: string): Promise<DeviceActionProfile[]> {
+    return this.request<DeviceActionProfile[]>(`/api/device-profiles/${deviceSerial}/actions`)
   }
 
-  async upsertKefuAction(
-    kefuId: number,
+  async upsertDeviceAction(
+    deviceSerial: string,
     actionType: string,
     data: { enabled: boolean; config: Record<string, unknown> }
-  ): Promise<KefuActionProfile> {
-    return this.request<KefuActionProfile>(`/api/kefu-profiles/${kefuId}/actions/${actionType}`, {
+  ): Promise<DeviceActionProfile> {
+    return this.request<DeviceActionProfile>(`/api/device-profiles/${deviceSerial}/actions/${actionType}`, {
       method: 'PUT',
       body: JSON.stringify(data),
     })
   }
 
-  async deleteKefuAction(kefuId: number, actionType: string): Promise<void> {
-    await this.request(`/api/kefu-profiles/${kefuId}/actions/${actionType}`, {
+  async deleteDeviceAction(deviceSerial: string, actionType: string): Promise<void> {
+    await this.request(`/api/device-profiles/${deviceSerial}/actions/${actionType}`, {
       method: 'DELETE',
     })
   }
 
-  async getKefuEffectiveSettings(kefuId: number): Promise<EffectiveSettings> {
-    return this.request<EffectiveSettings>(`/api/kefu-profiles/${kefuId}/effective`)
+  async getDeviceEffectiveSettings(deviceSerial: string): Promise<DeviceEffectiveSettings> {
+    return this.request<DeviceEffectiveSettings>(`/api/device-profiles/${deviceSerial}/effective`)
   }
 }
 

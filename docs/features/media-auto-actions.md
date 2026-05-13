@@ -22,9 +22,9 @@
   - `AutoGroupInviteAction` → `GroupChatService`（`actions/auto_group_invite.py` + `group_chat_service.py`）
   - `AutoContactShareAction` → `ContactShareService`（`actions/auto_contact_share.py` + `contact_share/service.py`）— 详见 [Auto Contact Share](auto-contact-share.md)
 - **独立拉群工作流**：`src/wecom_automation/services/group_invite/` 定义可复用的 `GroupInviteRequest` / `GroupInviteWorkflowService`，由 `GroupChatService` 作为兼容层委托执行，供手动触发和媒体自动触发共用。
-- **Per-Kefu 覆盖**：`kefu_resolver.py` 在全局设置之上叠加 `kefu_action_profiles` 表中的按客服覆盖，产生结构一致的合并设置。下游动作无需修改即可使用合并后的设置。`build_media_event_bus()` 接受 `kefu_name` 参数以触发此解析。详见 [Per-Kefu Action Profiles](../implementation/2026-05-13-per-kefu-action-profiles.md)。
+- **Per-Device 覆盖**：`device_resolver.py` 在全局设置之上叠加 `device_action_profiles` 表中的按设备覆盖，产生结构一致的合并设置。下游动作无需修改即可使用合并后的设置。`build_media_event_bus()` 接受 `device_serial` 参数以触发此解析。详见 [Per-Device Action Profiles](../implementation/2026-05-13-per-kefu-action-profiles.md)。
 - **同步集成**：`create_sync_orchestrator` / `create_customer_syncer`（`services/sync/factory.py`）在创建 `MessageProcessor` 时，若 DB 中 `media_auto_actions.enabled` 为真，则挂载总线与上述动作，并从同一 DB 加载子配置（`settings_loader.py`）。
-- **实时回复集成**：`response_detector` 调用 `build_media_event_bus(db_path=<设备会话库>, settings_db_path=<控制库>, effects_db_path=<控制库>, kefu_name=<当前客服名>, ...)`。`db_path` **必须**是会话库，以便审核结果与 `evaluate_gate_pass` 一致；`effects_db_path` 供黑名单、拉群跟踪、名片幂等表使用；`kefu_name` 用于 per-kefu 设置覆盖。详见 [Auto Contact Share 双库语义](auto-contact-share.md#双库语义控制库-vs-设备会话库) 与 [实现备忘](../implementation/2026-05-09-contact-share-review-gate.md)。
+- **实时回复集成**：`response_detector` 调用 `build_media_event_bus(db_path=<设备会话库>, settings_db_path=<控制库>, effects_db_path=<控制库>, device_serial=<当前设备序列号>, ...)`。`db_path` **必须**是会话库，以便审核结果与 `evaluate_gate_pass` 一致；`effects_db_path` 供黑名单、拉群跟踪、名片幂等表使用；`device_serial` 用于 per-device 设置覆盖。详见 [Auto Contact Share 双库语义](auto-contact-share.md#双库语义控制库-vs-设备会话库) 与 [实现备忘](../implementation/2026-05-09-contact-share-review-gate.md)。
 - **消息入口**：`MessageProcessor.process` 在责任链处理完成后，若结果为 `image`/`video` 且消息来自客户，则 `emit` 事件（`services/message/processor.py`）。
 
 ## 设置结构（`settings` 表）
@@ -36,7 +36,7 @@
 | `enabled`           | boolean | 总开关                                                                                                                                                                                                  |
 | `auto_blacklist`    | json    | `enabled`, `reason`, `skip_if_already_blacklisted`, `require_review_pass`（默认 `false`，`true` 时与 `auto_group_invite` 共用 review 关卡）                                                                                                                                                      |
 | `auto_group_invite` | json    | `enabled`, `group_members`, `group_name_template`, `skip_if_group_exists`, `member_source`, `send_test_message_after_create`, `test_message_text`, `post_confirm_wait_seconds`, `duplicate_name_policy` |
-| `auto_contact_share` | json  | `enabled`, `contact_name`, `skip_if_already_shared`, `cooldown_seconds`, `kefu_overrides`（**已弃用**，已迁移到 `kefu_action_profiles` 表；详见 [Auto Contact Share](auto-contact-share.md) 与 [Per-Kefu Action Profiles](../implementation/2026-05-13-per-kefu-action-profiles.md)）                                                                                                                      |
+| `auto_contact_share` | json  | `enabled`, `contact_name`, `skip_if_already_shared`, `cooldown_seconds`（按设备覆盖见 `device_action_profiles` 表；详见 [Auto Contact Share](auto-contact-share.md) 与 [Per-Device Action Profiles](../implementation/2026-05-13-per-kefu-action-profiles.md)）                                                                                                                      |
 | `review_gate`       | json    | **`enabled`**, **`video_review_policy`**（`extract_frame` / `skip` / `always`）。**不包含**审核服务器 URL 或上传超时 — 与实时回复共用 **`general` 类别**：`image_server_ip`、`image_review_timeout_seconds`、`image_upload_enabled`（系统设置「图片审核」）。旧库中遗留的 `rating_server_url` 等会在后端启动时幂等迁移并剥离。 |
 
 默认值 schema 的 **单一来源** 为 `src/wecom_automation/services/media_actions/settings_loader.py` 中的 `DEFAULT_MEDIA_AUTO_ACTION_SETTINGS`；`defaults.py` 与 `routers/media_actions.py` 通过 import 引用，避免多处硬编码分叉。
@@ -52,30 +52,32 @@
 - `GET /logs` — 预留/查询动作日志表（若表不存在则返回空列表）
 - `POST /test-trigger` — 手动构造 `MediaEvent` 并走**独立**的 `MediaEventBus`（见 `routers/media_actions.py`）。**自动拉黑**在开启时可能真实写库。**自动拉群**在该入口使用无 `WeComService` 的 `GroupChatService()`，**不会在真机上执行 UI 拉群**；日志中可能出现 `No WeComService available; recording group creation intent only`。验证真机拉群与消息内容请走同步/实时消息链路或带 `WeComService` 的集成路径，勿仅依赖此接口。
 
-### Per-Kefu 动作配置
+### Per-Device 动作配置
 
-前缀：`/api/kefu-profiles`（`wecom-desktop/backend/routers/kefu_profiles.py`）
+前缀：`/api/device-profiles`（`wecom-desktop/backend/routers/device_profiles.py`）
 
-- `GET /` — 列出所有客服及其覆盖状态（`KefuActionProfileSummary[]`）
-- `GET /{kefu_id}/actions` — 读取指定客服的全部动作覆盖
-- `PUT /{kefu_id}/actions/{action_type}` — 创建或更新一条覆盖（`action_type` 为 `auto_group_invite` 或 `auto_contact_share`），成功后广播 `kefu_action_profile_updated` WebSocket 事件
-- `DELETE /{kefu_id}/actions/{action_type}` — 删除覆盖（回退到全局默认），成功后广播 `kefu_action_profile_deleted`
-- `GET /{kefu_id}/effective` — 返回该客服的最终合并配置（全局 + per-kefu），供调试与预览
+- `GET /` — 列出所有设备及其覆盖状态（`DeviceActionProfileSummary[]`）
+- `GET /{device_serial}/actions` — 读取指定设备的全部动作覆盖
+- `PUT /{device_serial}/actions/{action_type}` — 创建或更新一条覆盖（`action_type` 为 `auto_group_invite` 或 `auto_contact_share`），成功后广播 `device_action_profile_updated` WebSocket 事件
+- `DELETE /{device_serial}/actions/{action_type}` — 删除覆盖（回退到全局默认），成功后广播 `device_action_profile_deleted`
+- `GET /{device_serial}/effective` — 返回该设备的最终合并配置（全局 + per-device），供调试与预览
 
-详见 [Per-Kefu Action Profiles 实现](../implementation/2026-05-13-per-kefu-action-profiles.md)。
+详见 [Per-Device Action Profiles 实现](../implementation/2026-05-13-per-kefu-action-profiles.md)。
+
+**Legacy**: `/api/kefu-profiles` 路由仍保留注册，供外部消费者过渡。
 
 ## 前端
 
 - 页面：`wecom-desktop/src/views/MediaActionsView.vue`
 - API：`api.getMediaActionSettings` / `updateMediaActionSettings` / `testTriggerMediaAction`（`services/api.ts`）
-- 全局 WS 事件类型扩展：`media_action_triggered`、`blacklist_updated`、`media_action_settings_updated`、`kefu_action_profile_updated`、`kefu_action_profile_deleted`（`stores/globalWebSocket.ts`）
+- 全局 WS 事件类型扩展：`media_action_triggered`、`blacklist_updated`、`media_action_settings_updated`、`device_action_profile_updated`、`device_action_profile_deleted`（`stores/globalWebSocket.ts`）
 
-### Per-Kefu 覆盖配置（前端）
+### Per-Device 覆盖配置（前端）
 
-页面底部「按客服覆盖配置」区域（`MediaActionsView.vue`）展示所有客服列表，点击后可编辑该客服的专属 `auto_group_invite` 与 `auto_contact_share` 配置。覆盖存储在 `kefu_action_profiles` 表而非 `settings` 表，未覆盖的字段自动 fallback 到全局配置。
+页面底部「按设备覆盖配置」区域（`MediaActionsView.vue`）展示所有设备列表，点击后可编辑该设备的专属 `auto_group_invite` 与 `auto_contact_share` 配置。覆盖存储在 `device_action_profiles` 表而非 `settings` 表，未覆盖的字段自动 fallback 到全局配置。
 
-- Store：`wecom-desktop/src/stores/kefuProfiles.ts`（`useKefuProfilesStore`）
-- API 类型：`KefuActionProfileSummary` / `KefuActionProfile` / `EffectiveSettings`（`services/api.ts`）
+- Store：`wecom-desktop/src/stores/deviceProfiles.ts`（`useDeviceProfilesStore`）
+- API 类型：`DeviceActionProfileSummary` / `DeviceActionProfile` / `DeviceEffectiveSettings`（`services/api.ts`）
 
 ### 国际化（i18n）
 

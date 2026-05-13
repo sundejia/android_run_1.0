@@ -98,6 +98,7 @@ def create_sync_orchestrator(
         settings_db_path=str(get_default_db_path()),
         effects_db_path=db_path,
         wecom_service=wecom,
+        device_serial=config.device_serial,
     )
 
     review_storage, review_submitter, review_gate_on = build_review_components(
@@ -196,6 +197,7 @@ def create_customer_syncer(
         settings_db_path=str(get_default_db_path()),
         effects_db_path=str(resolved_db),
         wecom_service=wecom,
+        device_serial=config.device_serial,
     )
 
     review_storage, review_submitter, review_gate_on = build_review_components(

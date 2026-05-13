@@ -73,7 +73,6 @@ class AutoContactShareSettings(BaseModel):
     contact_name: str = ""
     skip_if_already_shared: bool = True
     cooldown_seconds: int = 0
-    kefu_overrides: dict[str, str] = Field(default_factory=dict)
     send_message_before_share: bool = False
     pre_share_message_text: str = ""
 
