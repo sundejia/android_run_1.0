@@ -78,37 +78,51 @@ def _get_db() -> sqlite3.Connection:
 
 @router.get("", response_model=List[DeviceActionProfileSummary])
 async def list_device_profiles():
-    """List all devices with their action profile override status."""
-    def _sync():
+    """List all connected devices with their action profile override status.
+
+    Uses ADB real-time discovery (same source as the Devices page) so
+    devices appear immediately when plugged in, without requiring a sync.
+    """
+    from routers.devices import get_discovery_service
+
+    try:
+        service = get_discovery_service()
+        adb_devices = await service.list_devices(include_properties=True)
+    except Exception:
+        adb_devices = []
+
+    # Build override lookup from DB in one query
+    def _load_overrides() -> dict:
         conn = _get_db()
         try:
-            cur = conn.execute("""
-                SELECT d.serial, d.model, d.manufacturer,
-                       gi.enabled AS gi_enabled,
-                       cs.enabled AS cs_enabled
-                FROM devices d
-                LEFT JOIN device_action_profiles gi
-                    ON gi.device_serial = d.serial AND gi.action_type = 'auto_group_invite'
-                LEFT JOIN device_action_profiles cs
-                    ON cs.device_serial = d.serial AND cs.action_type = 'auto_contact_share'
-                ORDER BY d.serial
-            """)
-            results = []
+            cur = conn.execute(
+                "SELECT device_serial, action_type, enabled FROM device_action_profiles"
+            )
+            overrides: dict[str, dict[str, bool | None]] = {}
             for row in cur.fetchall():
-                results.append(DeviceActionProfileSummary(
-                    device_serial=row["serial"],
-                    model=row["model"],
-                    manufacturer=row["manufacturer"],
-                    has_group_invite_override=row["gi_enabled"] is not None,
-                    has_contact_share_override=row["cs_enabled"] is not None,
-                    group_invite_enabled=row["gi_enabled"] if row["gi_enabled"] is not None else None,
-                    contact_share_enabled=row["cs_enabled"] if row["cs_enabled"] is not None else None,
-                ))
-            return results
+                serial = row["device_serial"]
+                overrides.setdefault(serial, {})[row["action_type"]] = bool(row["enabled"])
+            return overrides
         finally:
             conn.close()
 
-    return await asyncio.to_thread(_sync)
+    overrides = await asyncio.to_thread(_load_overrides)
+
+    results = []
+    for d in adb_devices:
+        dev_overrides = overrides.get(d.serial, {})
+        gi_enabled = dev_overrides.get("auto_group_invite")
+        cs_enabled = dev_overrides.get("auto_contact_share")
+        results.append(DeviceActionProfileSummary(
+            device_serial=d.serial,
+            model=d.model,
+            manufacturer=d.manufacturer,
+            has_group_invite_override=gi_enabled is not None,
+            has_contact_share_override=cs_enabled is not None,
+            group_invite_enabled=gi_enabled,
+            contact_share_enabled=cs_enabled,
+        ))
+    return results
 
 
 @router.get("/{device_serial}/actions", response_model=List[DeviceActionProfileResponse])

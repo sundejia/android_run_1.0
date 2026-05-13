@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../services/api'
 import type { MediaAutoActionSettings } from '../services/api'
 import { useI18n } from '../composables/useI18n'
@@ -276,6 +276,19 @@ async function runTest() {
 }
 
 onMounted(loadSettings)
+
+// Periodically refresh device profiles so newly connected phones appear
+let _profileRefreshTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  _profileRefreshTimer = setInterval(() => {
+    if (!loading.value) {
+      deviceProfilesStore.fetchProfiles()
+    }
+  }, 10000)
+})
+onUnmounted(() => {
+  if (_profileRefreshTimer) clearInterval(_profileRefreshTimer)
+})
 </script>
 
 <template>
