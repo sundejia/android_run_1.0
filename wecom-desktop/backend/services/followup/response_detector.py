@@ -990,6 +990,38 @@ class ResponseDetector:
                         f"[{serial}] Step 3: Skipping scroll-to-top (realtime.scroll_to_top_enabled=False)"
                     )
 
+                # Step 3.5: Verify screen state after navigation steps.
+                # Catches cases where launch/switch/scroll failed to land on
+                # the messages list (e.g., a notification auto-opened a chat).
+                _verify_started = time.perf_counter()
+                self._logger.info(f"[SCAN_STEP] serial={serial} step=verify_screen_state event=start")
+                try:
+                    screen = await wecom.get_current_screen()
+                    if screen != "private_chats":
+                        self._logger.warning(
+                            f"[{serial}] After pre-scan steps, screen is '{screen}' "
+                            f"(expected 'private_chats'). Recovering..."
+                        )
+                        recovered = await wecom.ensure_on_private_chats()
+                        if not recovered:
+                            self._logger.error(
+                                f"[{serial}] Failed to reach private_chats after pre-scan. "
+                                f"Aborting scan to prevent false detections."
+                            )
+                            return device_result
+                        self._logger.info(f"[{serial}] Step 3.5: Screen recovered to private_chats")
+                    else:
+                        self._logger.info(f"[{serial}] Step 3.5: Screen confirmed as private_chats")
+                except Exception as verify_err:
+                    self._logger.warning(
+                        f"[{serial}] Screen verification failed: {verify_err}. "
+                        f"Proceeding (detection has its own guard)."
+                    )
+                self._logger.info(
+                    f"[SCAN_STEP] serial={serial} step=verify_screen_state event=end "
+                    f"duration_ms={(time.perf_counter() - _verify_started) * 1000:.1f}"
+                )
+
                 # Step 4: Initial red dot detection
                 _step_started = time.perf_counter()
                 self._logger.info(f"[SCAN_STEP] serial={serial} step=detect_first_page_unread event=start")
@@ -1235,6 +1267,31 @@ class ResponseDetector:
         from wecom_automation.services.sync_service import UnreadUserExtractor
 
         try:
+            # Screen-state guard: refuse to parse unless on private_chats list.
+            # Prevents extracting chat message bubbles as fake user entries
+            # when the device is stuck on a conversation screen.
+            try:
+                screen = await wecom.get_current_screen()
+                if screen != "private_chats":
+                    self._logger.warning(
+                        f"[{serial}] Wrong screen for unread detection: '{screen}'. "
+                        f"Attempting recovery to private_chats..."
+                    )
+                    recovered = await wecom.ensure_on_private_chats()
+                    if not recovered:
+                        self._logger.error(
+                            f"[{serial}] Failed to recover to private_chats; "
+                            f"skipping unread detection to prevent false positives"
+                        )
+                        return []
+                    self._logger.info(f"[{serial}] Screen recovery successful, proceeding with detection")
+            except Exception as screen_err:
+                self._logger.warning(
+                    f"[{serial}] Screen detection failed: {screen_err}. "
+                    f"Skipping unread detection to prevent false positives"
+                )
+                return []
+
             # 获取当前 UI 树
             tree, _ = await wecom.adb.get_ui_state()
 
@@ -1252,6 +1309,22 @@ class ResponseDetector:
                     f"[{serial}]   - User: {u.name} | Preview: '{u.message_preview}' | "
                     f"Unread: {u.unread_count} | NewFriend: {u.is_new_friend} | Priority: {u.is_priority()}"
                 )
+
+            # Batch sanity check: if ALL extracted names look like chat message
+            # content rather than contact names, we are almost certainly parsing
+            # the wrong screen (e.g., chat bubbles treated as user entries).
+            if current_users and len(current_users) >= 2:
+                all_suspicious = all(
+                    self._looks_like_low_confidence_message_name(u.name)
+                    for u in current_users
+                )
+                if all_suspicious:
+                    self._logger.warning(
+                        f"[{serial}] ALL {len(current_users)} extracted users have "
+                        f"suspicious (message-like) names. Likely wrong screen. "
+                        f"Discarding batch to prevent false queue entries."
+                    )
+                    return []
 
             # 使用 is_priority() 过滤: 包括未读消息和新好友
             priority_users_raw = [u for u in current_users if u.is_priority()]
@@ -1371,6 +1444,41 @@ class ResponseDetector:
                 self._logger.info(f"[{serial}] ⛔ Skipping blacklisted user: {user_name}")
                 result["skipped"] = True
                 return result
+
+            # Screen-state pre-check: ensure device is on the messages list
+            # before attempting to click on a user. Prevents click failures
+            # caused by the device drifting to a chat or unknown screen
+            # between detection and processing (e.g., notification auto-open).
+            try:
+                screen = await wecom.get_current_screen()
+                if screen != "private_chats":
+                    self._logger.warning(
+                        f"[{serial}] Wrong screen before processing {user_name}: '{screen}'. "
+                        f"Attempting recovery..."
+                    )
+                    recovered = await wecom.ensure_on_private_chats()
+                    if not recovered:
+                        self._logger.error(
+                            f"[{serial}] Could not recover to private_chats before "
+                            f"processing {user_name}; skipping to prevent errors"
+                        )
+                        result["skipped"] = True
+                        return result
+                    await asyncio.sleep(0.3)
+            except Exception as screen_err:
+                self._logger.warning(
+                    f"[{serial}] Screen check failed before processing {user_name}: "
+                    f"{screen_err}. Attempting defensive recovery..."
+                )
+                try:
+                    recovered = await wecom.ensure_on_private_chats()
+                    if not recovered:
+                        result["skipped"] = True
+                        return result
+                    await asyncio.sleep(0.3)
+                except Exception:
+                    result["skipped"] = True
+                    return result
 
             # Step 0: Capture avatar BEFORE entering chat (while on list page)
             self._logger.info(f"[{serial}]    Step 0: Capturing avatar before entering chat...")
