@@ -22,6 +22,8 @@ from wecom_automation.services.media_actions.settings_loader import (
 logger = logging.getLogger(__name__)
 
 _SUPPORTED_ACTION_TYPES: dict[str, str] = {
+    "auto_blacklist": "auto_blacklist",
+    "review_gate": "review_gate",
     "auto_group_invite": "auto_group_invite",
     "auto_contact_share": "auto_contact_share",
 }

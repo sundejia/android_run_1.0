@@ -1,8 +1,9 @@
 """
 Device Action Profiles Router - API endpoints for per-device action configuration.
 
-Provides CRUD for per-device overrides of media auto-action settings (auto_group_invite,
-auto_contact_share). Settings not overridden per-device fall through to the global defaults.
+Provides CRUD for per-device overrides of media auto-action settings (auto_blacklist,
+review_gate, auto_group_invite, auto_contact_share). Settings not overridden per-device
+fall through to the global defaults.
 """
 
 from __future__ import annotations
@@ -40,10 +41,17 @@ class DeviceActionProfileResponse(BaseModel):
     updated_at: Optional[str] = None
 
 
+class ActionOverrideStatus(BaseModel):
+    enabled: Optional[bool] = None
+
+
 class DeviceActionProfileSummary(BaseModel):
     device_serial: str
     model: Optional[str] = None
     manufacturer: Optional[str] = None
+    overrides: dict[str, ActionOverrideStatus] = Field(default_factory=dict)
+    has_any_override: bool = False
+    # Backward-compat convenience fields
     has_group_invite_override: bool = False
     has_contact_share_override: bool = False
     group_invite_enabled: Optional[bool] = None
@@ -55,7 +63,12 @@ class DeviceEffectiveSettingsResponse(BaseModel):
     settings: dict[str, Any]
 
 
-VALID_ACTION_TYPES = {"auto_group_invite", "auto_contact_share"}
+VALID_ACTION_TYPES = {
+    "auto_blacklist",
+    "review_gate",
+    "auto_group_invite",
+    "auto_contact_share",
+}
 
 
 # ============================================================================
@@ -111,12 +124,17 @@ async def list_device_profiles():
     results = []
     for d in adb_devices:
         dev_overrides = overrides.get(d.serial, {})
+        override_map = {
+            k: ActionOverrideStatus(enabled=v) for k, v in dev_overrides.items()
+        }
         gi_enabled = dev_overrides.get("auto_group_invite")
         cs_enabled = dev_overrides.get("auto_contact_share")
         results.append(DeviceActionProfileSummary(
             device_serial=d.serial,
             model=d.model,
             manufacturer=d.manufacturer,
+            overrides=override_map,
+            has_any_override=len(dev_overrides) > 0,
             has_group_invite_override=gi_enabled is not None,
             has_contact_share_override=cs_enabled is not None,
             group_invite_enabled=gi_enabled,

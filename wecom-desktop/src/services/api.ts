@@ -903,10 +903,17 @@ export interface MediaAutoActionSettings {
 }
 
 // Device Action Profile types
+export interface ActionOverrideStatus {
+  enabled?: boolean | null
+}
+
 export interface DeviceActionProfileSummary {
   device_serial: string
   model?: string | null
   manufacturer?: string | null
+  overrides: Record<string, ActionOverrideStatus>
+  has_any_override: boolean
+  // Backward-compat convenience fields
   has_group_invite_override: boolean
   has_contact_share_override: boolean
   group_invite_enabled?: boolean | null

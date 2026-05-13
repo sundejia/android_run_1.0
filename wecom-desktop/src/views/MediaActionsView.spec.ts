@@ -74,6 +74,14 @@ const baseSettings = {
   },
 }
 
+/** Switch the active tab in the two-column layout by clicking the tab button. */
+async function switchTab(wrapper: ReturnType<typeof mount>, tabKey: string) {
+  const labelKey = `media_actions.${tabKey === 'review_gate' ? 'review_gate_title' : tabKey}`
+  const tabs = wrapper.findAll('button')
+  const tab = tabs.find(b => b.text().includes(labelKey) || b.text().includes(tabKey))
+  if (tab) await tab.trigger('click')
+}
+
 describe('MediaActionsView', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -86,6 +94,7 @@ describe('MediaActionsView', () => {
     const wrapper = mount(MediaActionsView)
     await flushPromises()
 
+    // Default tab is auto_group_invite — elements should be visible
     expect(wrapper.find('#send-group-message-after-create').exists()).toBe(true)
     expect(wrapper.find('#group-test-message-template').exists()).toBe(true)
     expect(wrapper.get('#group-test-message-preview').text()).toContain('测试客户')
@@ -124,6 +133,10 @@ describe('MediaActionsView', () => {
     const wrapper = mount(MediaActionsView)
     await flushPromises()
 
+    // Switch to contact share tab
+    await switchTab(wrapper, 'auto_contact_share')
+    await flushPromises()
+
     expect(wrapper.find('#send-message-before-contact-share').exists()).toBe(true)
     expect(wrapper.find('#contact-share-message-template').exists()).toBe(true)
     expect(wrapper.get('#contact-share-message-preview').text()).toContain('测试客户')
@@ -140,6 +153,10 @@ describe('MediaActionsView', () => {
     })
 
     const wrapper = mount(MediaActionsView)
+    await flushPromises()
+
+    // Switch to contact share tab
+    await switchTab(wrapper, 'auto_contact_share')
     await flushPromises()
 
     await wrapper.get('#send-message-before-contact-share').setValue(true)
@@ -159,6 +176,10 @@ describe('MediaActionsView', () => {
 
   it('saves review gate settings (URL/timeout removed in 2026-05-12 dedup)', async () => {
     const wrapper = mount(MediaActionsView)
+    await flushPromises()
+
+    // Switch to review gate tab
+    await switchTab(wrapper, 'review_gate')
     await flushPromises()
 
     await wrapper.get('#media-video-review-policy').setValue('skip')

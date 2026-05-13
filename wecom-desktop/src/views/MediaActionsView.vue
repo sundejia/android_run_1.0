@@ -3,8 +3,12 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { api } from '../services/api'
 import type { MediaAutoActionSettings } from '../services/api'
 import { useI18n } from '../composables/useI18n'
-import { renderMediaActionTemplate } from '../utils/mediaActionTemplates'
 import { useDeviceProfilesStore } from '../stores/deviceProfiles'
+
+import ReviewGateForm from '../components/mediaActions/ReviewGateForm.vue'
+import AutoBlacklistForm from '../components/mediaActions/AutoBlacklistForm.vue'
+import AutoGroupInviteForm from '../components/mediaActions/AutoGroupInviteForm.vue'
+import AutoContactShareForm from '../components/mediaActions/AutoContactShareForm.vue'
 
 const { t } = useI18n()
 const loading = ref(true)
@@ -16,17 +20,12 @@ const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
 const deviceProfilesStore = useDeviceProfilesStore()
 
-// Per-device profile editing state
-const editingDeviceSerial = ref<string | null>(null)
-const editingGroupInvite = ref({ enabled: true, group_members: [] as string[], group_name_template: '{customer_name}-{kefu_name}服务群' })
-const editingContactShare = ref({ enabled: true, contact_name: '' })
-const newProfileMember = ref('')
+// --- Selection state ---
+// 'global' or a device serial
+const selectedTarget = ref<string>('global')
+const activeTab = ref<'review_gate' | 'auto_blacklist' | 'auto_group_invite' | 'auto_contact_share'>('auto_group_invite')
 
-// Tiny "all-off" placeholder shape used purely as a typed initialiser before
-// the API responds. We deliberately avoid maintaining a frontend-side copy of
-// real default values — those live in the backend (single source of truth at
-// `settings_loader.DEFAULT_MEDIA_AUTO_ACTION_SETTINGS`). Duplicating them here
-// was the entry point for the 2026-05-12 dedup bug.
+// Global settings
 function createPlaceholderSettings(): MediaAutoActionSettings {
   return {
     enabled: false,
@@ -66,52 +65,45 @@ function createPlaceholderSettings(): MediaAutoActionSettings {
 
 const settings = ref<MediaAutoActionSettings>(createPlaceholderSettings())
 
-const newMember = ref('')
+// Per-device editing state — holds a local copy of each section's config
+// for the currently selected device. Populated when user selects a device.
+const deviceOverrides = ref<Record<string, { enabled: boolean; config: Record<string, unknown> }>>({})
+
+const isGlobal = computed(() => selectedTarget.value === 'global')
+const selectedDevice = computed(() =>
+  isGlobal.value ? null : deviceProfilesStore.profiles.find(d => d.device_serial === selectedTarget.value)
+)
+
 const testCustomerName = ref('测试客户')
 const testDeviceSerial = ref('test_device')
 const testMessageType = ref<'image' | 'video'>('image')
 const testResults = ref<Array<{ action_name: string; status: string; message: string }>>([])
-const previewKefuName = '客服A'
 
-const groupMessagePreview = computed(() =>
-  renderMediaActionTemplate(settings.value.auto_group_invite.test_message_text, {
-    customer_name: testCustomerName.value.trim() || '测试客户',
-    kefu_name: previewKefuName,
-    device_serial: testDeviceSerial.value.trim() || 'test_device',
-  })
-)
+const previewCtx = computed(() => ({
+  customer_name: testCustomerName.value.trim() || '测试客户',
+  kefu_name: '客服A',
+  device_serial: isGlobal.value ? testDeviceSerial.value.trim() || 'test_device' : selectedTarget.value,
+}))
 
-const contactShareMessagePreview = computed(() =>
-  renderMediaActionTemplate(settings.value.auto_contact_share.pre_share_message_text, {
-    customer_name: testCustomerName.value.trim() || '测试客户',
-    kefu_name: previewKefuName,
-    device_serial: testDeviceSerial.value.trim() || 'test_device',
-  })
-)
+const TAB_META: Record<string, { labelKey: string; color: string }> = {
+  review_gate: { labelKey: 'media_actions.review_gate_title', color: 'purple' },
+  auto_blacklist: { labelKey: 'media_actions.auto_blacklist', color: 'red' },
+  auto_group_invite: { labelKey: 'media_actions.auto_group_invite', color: 'blue' },
+  auto_contact_share: { labelKey: 'media_actions.auto_contact_share', color: 'green' },
+}
 
-const groupPreCreateMessagePreview = computed(() =>
-  renderMediaActionTemplate(settings.value.auto_group_invite.pre_create_message_text, {
-    customer_name: testCustomerName.value.trim() || '测试客户',
-    kefu_name: previewKefuName,
-    device_serial: testDeviceSerial.value.trim() || 'test_device',
-  })
-)
+const SECTION_KEYS = ['review_gate', 'auto_blacklist', 'auto_group_invite', 'auto_contact_share'] as const
 
 function showToast(message: string, type: 'success' | 'error' = 'success') {
   toast.value = { message, type }
-  setTimeout(() => {
-    toast.value = null
-  }, 3000)
+  setTimeout(() => { toast.value = null }, 3000)
 }
+
+// --- Global settings ---
 
 async function loadSettings() {
   loading.value = true
   try {
-    // Backend already merges DB rows over DEFAULT_MEDIA_AUTO_ACTION_SETTINGS
-    // (single source of truth in python core), so the response should be
-    // a complete shape. We still defensively merge over the placeholder
-    // skeleton so a partial mock or in-flight schema migration never
-    // leaves the template with undefined values to .replace() on.
     const loaded = await api.getMediaActionSettings()
     const placeholder = createPlaceholderSettings()
     settings.value = {
@@ -122,7 +114,6 @@ async function loadSettings() {
       auto_contact_share: { ...placeholder.auto_contact_share, ...loaded.auto_contact_share },
       review_gate: { ...placeholder.review_gate, ...loaded.review_gate },
     }
-    // Also load device profiles
     await deviceProfilesStore.fetchProfiles()
   } catch (err: any) {
     showToast(err.message || t('media_actions.load_failed'), 'error')
@@ -143,86 +134,114 @@ async function saveSettings() {
   }
 }
 
-function addMember() {
-  const name = newMember.value.trim()
-  if (name && !settings.value.auto_group_invite.group_members.includes(name)) {
-    settings.value.auto_group_invite.group_members.push(name)
-    newMember.value = ''
+// --- Per-device ---
+
+function selectTarget(target: string) {
+  selectedTarget.value = target
+  if (target !== 'global') {
+    loadDeviceOverrides(target)
   }
 }
 
-// --- Per-Device Profile Management ---
-
-function startEditDevice(deviceSerial: string) {
-  editingDeviceSerial.value = deviceSerial
-  const groupAction = deviceProfilesStore.selectedDeviceActions.find(a => a.action_type === 'auto_group_invite')
-  const contactAction = deviceProfilesStore.selectedDeviceActions.find(a => a.action_type === 'auto_contact_share')
-
-  editingGroupInvite.value = {
-    enabled: groupAction?.enabled ?? true,
-    group_members: (groupAction?.config?.group_members as string[]) || [],
-    group_name_template: (groupAction?.config?.group_name_template as string) || '{customer_name}-{kefu_name}服务群',
-  }
-  editingContactShare.value = {
-    enabled: contactAction?.enabled ?? true,
-    contact_name: (contactAction?.config?.contact_name as string) || '',
-  }
-  newProfileMember.value = ''
-}
-
-function addProfileMember() {
-  const name = newProfileMember.value.trim()
-  if (name && !editingGroupInvite.value.group_members.includes(name)) {
-    editingGroupInvite.value.group_members.push(name)
-    newProfileMember.value = ''
-  }
-}
-
-function removeProfileMember(index: number) {
-  editingGroupInvite.value.group_members.splice(index, 1)
-}
-
-async function saveDeviceProfile() {
-  if (!editingDeviceSerial.value) return
+async function loadDeviceOverrides(serial: string) {
   try {
-    if (editingGroupInvite.value.group_members.length > 0) {
-      await deviceProfilesStore.saveDeviceAction(editingDeviceSerial.value, 'auto_group_invite', {
-        enabled: editingGroupInvite.value.enabled,
-        config: {
-          group_members: editingGroupInvite.value.group_members,
-          group_name_template: editingGroupInvite.value.group_name_template,
-        },
+    await deviceProfilesStore.selectDevice(serial)
+    // Build local editing state from the store's loaded actions
+    const overrides: Record<string, { enabled: boolean; config: Record<string, unknown> }> = {}
+    for (const action of deviceProfilesStore.selectedDeviceActions) {
+      overrides[action.action_type] = {
+        enabled: action.enabled,
+        config: { ...action.config },
+      }
+    }
+    deviceOverrides.value = overrides
+  } catch {
+    deviceOverrides.value = {}
+  }
+}
+
+function getDeviceOverride(actionType: string): { enabled: boolean; config: Record<string, unknown> } {
+  return deviceOverrides.value[actionType] || { enabled: true, config: {} }
+}
+
+function isDeviceOverridden(actionType: string): boolean {
+  return !!deviceOverrides.value[actionType]
+}
+
+function toggleDeviceOverride(actionType: string) {
+  if (isDeviceOverridden(actionType)) {
+    // Turn off: delete from local state (will delete on save)
+    const newOverrides = { ...deviceOverrides.value }
+    delete newOverrides[actionType]
+    deviceOverrides.value = newOverrides
+  } else {
+    // Turn on: create an enabled override seeded from global defaults
+    const globalSection = (settings.value as any)[actionType] || {}
+    const seed: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(globalSection)) {
+      if (k !== 'enabled') seed[k] = v
+    }
+    deviceOverrides.value = {
+      ...deviceOverrides.value,
+      [actionType]: { enabled: true, config: seed },
+    }
+  }
+}
+
+function patchDeviceSection(actionType: string, fields: Record<string, unknown>) {
+  const existing = deviceOverrides.value[actionType]
+  if (!existing) return
+  deviceOverrides.value = {
+    ...deviceOverrides.value,
+    [actionType]: {
+      ...existing,
+      config: { ...existing.config, ...fields },
+    },
+  }
+}
+
+function patchDeviceEnabled(actionType: string, enabled: boolean) {
+  const existing = deviceOverrides.value[actionType]
+  if (!existing) return
+  deviceOverrides.value = {
+    ...deviceOverrides.value,
+    [actionType]: { ...existing, enabled },
+  }
+}
+
+async function saveDeviceOverrides() {
+  if (isGlobal.value) return
+  const serial = selectedTarget.value
+  try {
+    // Save all overrides that exist locally
+    for (const [actionType, data] of Object.entries(deviceOverrides.value)) {
+      await deviceProfilesStore.saveDeviceAction(serial, actionType, {
+        enabled: data.enabled,
+        config: data.config,
       })
     }
-    if (editingContactShare.value.contact_name) {
-      await deviceProfilesStore.saveDeviceAction(editingDeviceSerial.value, 'auto_contact_share', {
-        enabled: editingContactShare.value.enabled,
-        config: { contact_name: editingContactShare.value.contact_name },
-      })
-    }
-    showToast('设备专属配置已保存')
+    showToast('设备配置已保存')
+    await deviceProfilesStore.fetchProfiles()
   } catch (e: any) {
     showToast(e.message || '保存失败', 'error')
   }
 }
 
-async function deleteDeviceProfile(actionType: string) {
-  if (!editingDeviceSerial.value) return
+async function resetDeviceOverride(actionType: string) {
+  if (isGlobal.value) return
   try {
-    await deviceProfilesStore.deleteDeviceAction(editingDeviceSerial.value, actionType)
+    await deviceProfilesStore.deleteDeviceAction(selectedTarget.value, actionType)
+    const newOverrides = { ...deviceOverrides.value }
+    delete newOverrides[actionType]
+    deviceOverrides.value = newOverrides
     showToast('已重置为全局默认')
+    await deviceProfilesStore.fetchProfiles()
   } catch (e: any) {
     showToast(e.message || '删除失败', 'error')
   }
 }
 
-function cancelEditDevice() {
-  editingDeviceSerial.value = null
-}
-
-function removeMember(index: number) {
-  settings.value.auto_group_invite.group_members.splice(index, 1)
-}
+// --- Reachability test (global only) ---
 
 async function testContactReachability() {
   const contactName = settings.value.auto_contact_share.contact_name.trim()
@@ -237,10 +256,7 @@ async function testContactReachability() {
   reachabilityTesting.value = true
   reachabilityResult.value = null
   try {
-    const res = await api.testContactReachability({
-      device_serial: serial,
-      contact_name: contactName,
-    })
+    const res = await api.testContactReachability({ device_serial: serial, contact_name: contactName })
     reachabilityResult.value = {
       reachable: res.reachable,
       message: res.reachable
@@ -256,6 +272,8 @@ async function testContactReachability() {
     reachabilityTesting.value = false
   }
 }
+
+// --- Test trigger ---
 
 async function runTest() {
   testing.value = true
@@ -275,15 +293,14 @@ async function runTest() {
   }
 }
 
+// --- Lifecycle ---
+
 onMounted(loadSettings)
 
-// Periodically refresh device profiles so newly connected phones appear
 let _profileRefreshTimer: ReturnType<typeof setInterval> | null = null
 onMounted(() => {
   _profileRefreshTimer = setInterval(() => {
-    if (!loading.value) {
-      deviceProfilesStore.fetchProfiles()
-    }
+    if (!loading.value) deviceProfilesStore.fetchProfiles()
   }, 10000)
 })
 onUnmounted(() => {
@@ -292,7 +309,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="p-6 max-w-4xl mx-auto">
+  <div class="p-6 max-w-6xl mx-auto">
     <!-- Toast -->
     <Transition name="fade">
       <div
@@ -309,727 +326,365 @@ onUnmounted(() => {
     <!-- Header -->
     <div class="mb-6">
       <h1 class="text-2xl font-bold text-gray-100">{{ t('media_actions.title') }}</h1>
-      <p class="text-sm text-gray-400 mt-1">
-        {{ t('media_actions.subtitle') }}
-      </p>
+      <p class="text-sm text-gray-400 mt-1">{{ t('media_actions.subtitle') }}</p>
     </div>
 
     <div v-if="loading" class="flex items-center justify-center py-20">
       <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
     </div>
 
-    <div v-else class="space-y-6">
-      <!-- Global Toggle -->
-      <div class="bg-wecom-darker rounded-lg p-5 border border-wecom-border">
+    <div v-else class="flex gap-6">
+      <!-- ====== LEFT SIDEBAR ====== -->
+      <div class="w-56 shrink-0 space-y-3">
+        <!-- Global toggle -->
+        <div class="bg-wecom-darker rounded-lg p-4 border border-wecom-border">
+          <div class="flex items-center justify-between">
+            <span class="text-sm font-medium text-gray-200">总开关</span>
+            <label class="relative inline-flex items-center cursor-pointer">
+              <input v-model="settings.enabled" type="checkbox" class="sr-only peer" />
+              <div
+                class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
+              ></div>
+            </label>
+          </div>
+        </div>
+
+        <!-- Global defaults -->
+        <button
+          class="w-full text-left px-4 py-3 rounded-lg border transition-colors"
+          :class="[
+            isGlobal
+              ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+              : 'bg-wecom-darker border-wecom-border text-gray-300 hover:bg-gray-700/50',
+          ]"
+          @click="selectTarget('global')"
+        >
+          <div class="font-medium text-sm">全局默认</div>
+          <div class="text-xs text-gray-500 mt-0.5">所有设备的基础配置</div>
+        </button>
+
+        <!-- Device list -->
+        <div class="text-xs font-medium uppercase tracking-wide text-gray-500 px-1 pt-2">设备</div>
+
+        <template v-if="deviceProfilesStore.profiles.length > 0">
+          <button
+            v-for="device in deviceProfilesStore.profiles"
+            :key="device.device_serial"
+            class="w-full text-left px-4 py-3 rounded-lg border transition-colors"
+            :class="[
+              selectedTarget === device.device_serial
+                ? 'bg-blue-600/20 border-blue-500/50 text-blue-300'
+                : device.has_any_override
+                  ? 'bg-green-600/10 border-green-600/30 text-green-300 hover:bg-green-600/20'
+                  : 'bg-wecom-darker border-wecom-border text-gray-300 hover:bg-gray-700/50',
+            ]"
+            @click="selectTarget(device.device_serial)"
+          >
+            <div class="font-medium text-sm truncate">{{ device.model || device.device_serial }}</div>
+            <div class="flex items-center gap-1.5 mt-1">
+              <!-- Override dots: one per section -->
+              <span
+                v-for="key in SECTION_KEYS"
+                :key="key"
+                class="inline-block w-2 h-2 rounded-full"
+                :class="device.overrides?.[key]?.enabled != null ? 'bg-green-500' : 'bg-gray-600'"
+                :title="key"
+              ></span>
+              <span class="text-xs text-gray-500 ml-1">{{ device.device_serial }}</span>
+            </div>
+          </button>
+        </template>
+        <div v-else class="text-xs text-gray-500 py-2 px-1">暂无连接设备</div>
+      </div>
+
+      <!-- ====== MAIN CONTENT ====== -->
+      <div class="flex-1 min-w-0 space-y-5">
+        <!-- Context header -->
         <div class="flex items-center justify-between">
           <div>
             <h2 class="text-lg font-semibold text-gray-100">
-              {{ t('media_actions.enable_title') }}
+              {{ isGlobal ? '全局默认配置' : `${selectedDevice?.model || selectedTarget} 的专属配置` }}
             </h2>
-            <p class="text-sm text-gray-400 mt-1">
-              {{ t('media_actions.enable_desc') }}
+            <p v-if="!isGlobal" class="text-xs text-gray-500 mt-0.5">
+              未覆盖的选项自动继承全局默认
             </p>
           </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input v-model="settings.enabled" type="checkbox" class="sr-only peer" />
-            <div
-              class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
-            ></div>
-          </label>
-        </div>
-      </div>
-
-      <!-- Review Gate Section -->
-      <div
-        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
-        :class="{ 'opacity-50': !settings.enabled }"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-100">
-              {{ t('media_actions.review_gate_title') }}
-            </h2>
-            <p class="text-sm text-gray-400 mt-1">
-              {{ t('media_actions.review_gate_desc') }}
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input
-              id="media-review-gate-enabled"
-              v-model="settings.review_gate.enabled"
-              type="checkbox"
-              :disabled="!settings.enabled"
-              class="sr-only peer"
-            />
-            <div
-              class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"
-            ></div>
-          </label>
         </div>
 
-        <div v-if="settings.review_gate.enabled && settings.enabled" class="space-y-4">
-          <div
-            id="media-review-server-config-hint"
-            class="rounded-md border border-blue-500/40 bg-blue-500/10 px-3 py-2 text-xs text-blue-200"
+        <!-- Tabs -->
+        <div class="flex border-b border-gray-700 gap-1">
+          <button
+            v-for="key in SECTION_KEYS"
+            :key="key"
+            class="px-4 py-2 text-sm font-medium rounded-t-lg transition-colors"
+            :class="[
+              activeTab === key
+                ? 'bg-wecom-darker text-white border border-gray-700 border-b-transparent -mb-px'
+                : 'text-gray-400 hover:text-gray-200',
+            ]"
+            @click="activeTab = key"
           >
-            {{ t('media_actions.review_server_config_hint') }}
-          </div>
-
-          <div>
-            <label for="media-video-review-policy" class="block text-sm font-medium text-gray-300 mb-1">
-              {{ t('media_actions.video_review_policy_label') }}
-            </label>
-            <select
-              id="media-video-review-policy"
-              v-model="settings.review_gate.video_review_policy"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="extract_frame">{{ t('media_actions.video_review_extract_frame') }}</option>
-              <option value="skip">{{ t('media_actions.video_review_skip') }}</option>
-              <option value="always">{{ t('media_actions.video_review_always') }}</option>
-            </select>
-            <p class="text-xs text-gray-500 mt-1">
-              {{ t('media_actions.review_gate_hint') }}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <!-- Auto Blacklist Section -->
-      <div
-        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
-        :class="{ 'opacity-50': !settings.enabled }"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-100">
-              {{ t('media_actions.auto_blacklist') }}
-            </h2>
-            <p class="text-sm text-gray-400 mt-1">
-              {{ t('media_actions.auto_blacklist_desc') }}
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input
-              v-model="settings.auto_blacklist.enabled"
-              type="checkbox"
-              :disabled="!settings.enabled"
-              class="sr-only peer"
-            />
-            <div
-              class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"
-            ></div>
-          </label>
+            {{ t(TAB_META[key].labelKey) }}
+          </button>
         </div>
 
-        <div v-if="settings.auto_blacklist.enabled && settings.enabled" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">{{
-              t('media_actions.blacklist_reason_label')
-            }}</label>
-            <input
-              v-model="settings.auto_blacklist.reason"
-              type="text"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              :placeholder="t('media_actions.blacklist_reason_placeholder')"
-            />
-          </div>
-
-          <div class="flex items-center gap-2">
-            <input
-              id="skip-blacklisted"
-              v-model="settings.auto_blacklist.skip_if_already_blacklisted"
-              type="checkbox"
-              class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-            />
-            <label for="skip-blacklisted" class="text-sm text-gray-300">
-              {{ t('media_actions.skip_already_blacklisted') }}
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Auto Group Invite Section -->
-      <div
-        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
-        :class="{ 'opacity-50': !settings.enabled }"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-100">
-              {{ t('media_actions.auto_group_invite') }}
-            </h2>
-            <p class="text-sm text-gray-400 mt-1">
-              {{ t('media_actions.auto_group_invite_desc') }}
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input
-              v-model="settings.auto_group_invite.enabled"
-              type="checkbox"
-              :disabled="!settings.enabled"
-              class="sr-only peer"
-            />
-            <div
-              class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"
-            ></div>
-          </label>
-        </div>
-
-        <div v-if="settings.auto_group_invite.enabled && settings.enabled" class="space-y-4">
-          <!-- Group Members -->
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-2">{{
-              t('media_actions.group_members_label')
-            }}</label>
-            <div class="flex flex-wrap gap-2 mb-2">
-              <span
-                v-for="(member, idx) in settings.auto_group_invite.group_members"
-                :key="idx"
-                class="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-600/20 text-blue-300 text-sm border border-blue-600/30"
-              >
-                {{ member }}
-                <button
-                  class="ml-1 text-blue-400 hover:text-red-400 transition-colors"
-                  @click="removeMember(idx)"
-                >
-                  &times;
-                </button>
-              </span>
-              <span
-                v-if="settings.auto_group_invite.group_members.length === 0"
-                class="text-sm text-gray-500 italic"
-              >
-                {{ t('media_actions.no_members') }}
-              </span>
-            </div>
-            <div class="flex gap-2">
-              <input
-                v-model="newMember"
-                type="text"
-                class="flex-1 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="t('media_actions.member_placeholder')"
-                @keyup.enter="addMember"
-              />
-              <button
-                class="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors"
-                @click="addMember"
-              >
-                {{ t('media_actions.add') }}
-              </button>
-            </div>
-          </div>
-
-          <!-- Group Name Template -->
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">{{
-              t('media_actions.group_name_template_label')
-            }}</label>
-            <input
-              v-model="settings.auto_group_invite.group_name_template"
-              type="text"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              :placeholder="t('media_actions.group_name_template_placeholder')"
-            />
-            <p class="text-xs text-gray-500 mt-1">
-              {{ t('media_actions.group_name_template_hint') }}
-            </p>
-          </div>
-
-          <div class="space-y-3 rounded-lg border border-gray-700/80 bg-gray-800/40 p-4">
-            <div class="flex items-center gap-2">
-              <input
-                id="send-message-before-group-create"
-                v-model="settings.auto_group_invite.send_message_before_create"
-                type="checkbox"
-                class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-              />
-              <label for="send-message-before-group-create" class="text-sm text-gray-300">
-                {{ t('media_actions.send_message_before_group_create') }}
-              </label>
-            </div>
-
+        <!-- Section card -->
+        <div class="bg-wecom-darker rounded-lg border border-wecom-border p-5" :class="{ 'opacity-50': !settings.enabled }">
+          <!-- Section enable toggle -->
+          <div class="flex items-center justify-between mb-4">
             <div>
-              <label
-                for="group-pre-create-message-template"
-                class="block text-sm font-medium text-gray-300 mb-1"
-              >
-                {{ t('media_actions.group_pre_create_message_text_label') }}
-              </label>
-              <textarea
-                id="group-pre-create-message-template"
-                v-model="settings.auto_group_invite.pre_create_message_text"
-                rows="4"
-                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="t('media_actions.group_pre_create_message_text_placeholder')"
-              ></textarea>
-              <p class="text-xs text-gray-500 mt-1">
-                {{ t('media_actions.group_pre_create_message_text_hint') }}
-              </p>
+              <h3 class="text-base font-semibold text-gray-100">{{ t(TAB_META[activeTab].labelKey) }}</h3>
             </div>
 
-            <div>
-              <div class="text-xs font-medium uppercase tracking-wide text-gray-400">
-                {{ t('media_actions.test_message_preview_label') }}
+            <!-- Per-device: show override toggle -->
+            <template v-if="!isGlobal">
+              <div class="flex items-center gap-3">
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input
+                    :checked="isDeviceOverridden(activeTab)"
+                    type="checkbox"
+                    class="sr-only peer"
+                    @change="toggleDeviceOverride(activeTab)"
+                  />
+                  <div
+                    class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"
+                  ></div>
+                </label>
+                <span class="text-xs text-gray-400">
+                  {{ isDeviceOverridden(activeTab) ? '使用设备专属' : '跟随全局默认' }}
+                </span>
               </div>
-              <div
-                id="group-pre-create-message-preview"
-                class="mt-2 whitespace-pre-wrap rounded-md border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-gray-200"
-              >
-                {{ groupPreCreateMessagePreview }}
-              </div>
-              <p class="text-xs text-gray-500 mt-1">
-                {{ t('media_actions.test_message_preview_hint') }}
-              </p>
-            </div>
-          </div>
+            </template>
 
-          <div class="space-y-3 rounded-lg border border-gray-700/80 bg-gray-800/40 p-4">
-            <div class="flex items-center gap-2">
-              <input
-                id="send-group-message-after-create"
-                v-model="settings.auto_group_invite.send_test_message_after_create"
-                type="checkbox"
-                class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-              />
-              <label for="send-group-message-after-create" class="text-sm text-gray-300">
-                {{ t('media_actions.send_group_message_after_create') }}
-              </label>
-            </div>
-
-            <div>
-              <label
-                for="group-test-message-template"
-                class="block text-sm font-medium text-gray-300 mb-1"
-              >
-                {{ t('media_actions.test_message_text_label') }}
-              </label>
-              <textarea
-                id="group-test-message-template"
-                v-model="settings.auto_group_invite.test_message_text"
-                rows="4"
-                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="t('media_actions.test_message_text_placeholder')"
-              ></textarea>
-              <p class="text-xs text-gray-500 mt-1">
-                {{ t('media_actions.test_message_text_hint') }}
-              </p>
-            </div>
-
-            <div>
-              <div class="text-xs font-medium uppercase tracking-wide text-gray-400">
-                {{ t('media_actions.test_message_preview_label') }}
-              </div>
-              <div
-                id="group-test-message-preview"
-                class="mt-2 whitespace-pre-wrap rounded-md border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-gray-200"
-              >
-                {{ groupMessagePreview }}
-              </div>
-              <p class="text-xs text-gray-500 mt-1">
-                {{ t('media_actions.test_message_preview_hint') }}
-              </p>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <input
-              id="skip-group-exists"
-              v-model="settings.auto_group_invite.skip_if_group_exists"
-              type="checkbox"
-              class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-            />
-            <label for="skip-group-exists" class="text-sm text-gray-300">
-              {{ t('media_actions.skip_group_exists') }}
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Auto Contact Share Section -->
-      <div
-        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
-        :class="{ 'opacity-50': !settings.enabled }"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-100">
-              {{ t('media_actions.auto_contact_share') }}
-            </h2>
-            <p class="text-sm text-gray-400 mt-1">
-              {{ t('media_actions.auto_contact_share_desc') }}
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input
-              v-model="settings.auto_contact_share.enabled"
-              type="checkbox"
-              :disabled="!settings.enabled"
-              class="sr-only peer"
-            />
-            <div
-              class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"
-            ></div>
-          </label>
-        </div>
-
-        <div v-if="settings.auto_contact_share.enabled && settings.enabled" class="space-y-4">
-          <!-- Contact Name -->
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">{{
-              t('media_actions.contact_name_label')
-            }}</label>
-            <input
-              v-model="settings.auto_contact_share.contact_name"
-              type="text"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              :placeholder="t('media_actions.contact_name_placeholder')"
-            />
-            <p class="text-xs text-amber-400 mt-1">
-              {{ t('media_actions.contact_name_hint') }}
-            </p>
-            <div class="flex items-center gap-3 mt-2">
-              <button
-                id="test-contact-reachability"
-                :disabled="
-                  reachabilityTesting ||
-                  !settings.auto_contact_share.contact_name.trim() ||
-                  !testDeviceSerial.trim()
-                "
-                class="px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-md hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                @click="testContactReachability"
-              >
-                {{
-                  reachabilityTesting
-                    ? t('media_actions.testing_contact_reachability')
-                    : t('media_actions.test_contact_reachability')
-                }}
-              </button>
-              <span
-                v-if="reachabilityResult"
-                :class="[
-                  'text-xs',
-                  reachabilityResult.reachable ? 'text-green-400' : 'text-red-400',
-                ]"
-              >
-                {{ reachabilityResult.message }}
-              </span>
-            </div>
-            <p class="text-xs text-gray-500 mt-1">
-              {{ t('media_actions.test_contact_reachability_hint') }}
-            </p>
-          </div>
-
-          <div class="space-y-3 rounded-lg border border-gray-700/80 bg-gray-800/40 p-4">
-            <div class="flex items-center gap-2">
-              <input
-                id="send-message-before-contact-share"
-                v-model="settings.auto_contact_share.send_message_before_share"
-                type="checkbox"
-                class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-              />
-              <label for="send-message-before-contact-share" class="text-sm text-gray-300">
-                {{ t('media_actions.send_message_before_contact_share') }}
-              </label>
-            </div>
-
-            <div>
-              <label
-                for="contact-share-message-template"
-                class="block text-sm font-medium text-gray-300 mb-1"
-              >
-                {{ t('media_actions.contact_share_message_text_label') }}
-              </label>
-              <textarea
-                id="contact-share-message-template"
-                v-model="settings.auto_contact_share.pre_share_message_text"
-                rows="4"
-                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="t('media_actions.contact_share_message_text_placeholder')"
-              ></textarea>
-              <p class="text-xs text-gray-500 mt-1">
-                {{ t('media_actions.contact_share_message_text_hint') }}
-              </p>
-            </div>
-
-            <div>
-              <div class="text-xs font-medium uppercase tracking-wide text-gray-400">
-                {{ t('media_actions.test_message_preview_label') }}
-              </div>
-              <div
-                id="contact-share-message-preview"
-                class="mt-2 whitespace-pre-wrap rounded-md border border-gray-700 bg-gray-900/60 px-3 py-2 text-sm text-gray-200"
-              >
-                {{ contactShareMessagePreview }}
-              </div>
-              <p class="text-xs text-gray-500 mt-1">
-                {{ t('media_actions.contact_share_message_preview_hint') }}
-              </p>
-            </div>
-          </div>
-
-          <div class="flex items-center gap-2">
-            <input
-              id="skip-already-shared"
-              v-model="settings.auto_contact_share.skip_if_already_shared"
-              type="checkbox"
-              class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
-            />
-            <label for="skip-already-shared" class="text-sm text-gray-300">
-              {{ t('media_actions.skip_already_shared') }}
-            </label>
-          </div>
-        </div>
-      </div>
-
-      <!-- Per-Device Override Section -->
-      <div
-        class="bg-wecom-darker rounded-lg p-5 border border-wecom-border"
-        :class="{ 'opacity-50': !settings.enabled }"
-      >
-        <div class="flex items-center justify-between mb-4">
-          <div>
-            <h2 class="text-lg font-semibold text-gray-100">
-              按设备覆盖配置
-            </h2>
-            <p class="text-sm text-gray-400 mt-1">
-              每个设备(手机)可以有独立的拉群和发名片配置。未配置的设备使用上方全局默认。
-            </p>
-          </div>
-        </div>
-
-        <!-- Device selector -->
-        <div v-if="deviceProfilesStore.profiles.length > 0" class="space-y-4">
-          <div class="flex flex-wrap gap-2">
-            <button
-              v-for="device in deviceProfilesStore.profiles"
-              :key="device.device_serial"
-              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors border"
-              :class="[
-                editingDeviceSerial === device.device_serial
-                  ? 'bg-blue-600 text-white border-blue-500'
-                  : device.has_group_invite_override || device.has_contact_share_override
-                    ? 'bg-green-600/20 text-green-300 border-green-600/40 hover:bg-green-600/30'
-                    : 'bg-gray-700 text-gray-300 border-gray-600 hover:bg-gray-600'
-              ]"
-              @click="deviceProfilesStore.selectDevice(device.device_serial); startEditDevice(device.device_serial)"
-            >
-              {{ device.model || device.device_serial }}
-              <span class="ml-1 text-xs text-gray-400">({{ device.device_serial }})</span>
-              <span v-if="device.has_group_invite_override || device.has_contact_share_override" class="ml-1 text-xs">(已配置)</span>
-            </button>
-          </div>
-
-          <!-- Edit panel -->
-          <div v-if="editingDeviceSerial" class="bg-gray-800/50 rounded-lg p-4 space-y-4 border border-gray-700">
-            <div class="flex items-center justify-between">
-              <h3 class="text-md font-semibold text-gray-200">
-                {{ deviceProfilesStore.profiles.find(d => d.device_serial === editingDeviceSerial)?.model || editingDeviceSerial }} 的专属配置
-              </h3>
-              <button
-                class="text-gray-400 hover:text-gray-200 text-sm"
-                @click="cancelEditDevice"
-              >
-                关闭
-              </button>
-            </div>
-
-            <!-- Auto Group Invite -->
-            <div class="space-y-3 border-l-2 border-blue-500/30 pl-4">
-              <div class="flex items-center gap-2">
+            <!-- Global: show section enabled toggle -->
+            <template v-else>
+              <label class="relative inline-flex items-center cursor-pointer">
                 <input
-                  v-model="editingGroupInvite.enabled"
+                  v-model="(settings as any)[activeTab].enabled"
+                  type="checkbox"
+                  :disabled="!settings.enabled"
+                  class="sr-only peer"
+                />
+                <div
+                  class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600 peer-disabled:opacity-50"
+                ></div>
+              </label>
+            </template>
+          </div>
+
+          <!-- Form content — GLOBAL mode -->
+          <template v-if="isGlobal">
+            <div v-show="(settings as any)[activeTab].enabled && settings.enabled">
+              <!-- Review Gate -->
+              <ReviewGateForm
+                v-if="activeTab === 'review_gate'"
+                v-model="settings.review_gate"
+                :disabled="!settings.enabled"
+              />
+              <!-- Auto Blacklist -->
+              <AutoBlacklistForm
+                v-if="activeTab === 'auto_blacklist'"
+                v-model="settings.auto_blacklist"
+                :disabled="!settings.enabled"
+              />
+              <!-- Auto Group Invite -->
+              <AutoGroupInviteForm
+                v-if="activeTab === 'auto_group_invite'"
+                v-model="settings.auto_group_invite"
+                :disabled="!settings.enabled"
+                :preview-context="previewCtx"
+              />
+              <!-- Auto Contact Share -->
+              <AutoContactShareForm
+                v-if="activeTab === 'auto_contact_share'"
+                v-model="settings.auto_contact_share"
+                :disabled="!settings.enabled"
+                :preview-context="previewCtx"
+              />
+
+              <!-- Reachability test only for contact share -->
+              <div v-if="activeTab === 'auto_contact_share'" class="mt-4 flex items-center gap-3">
+                <button
+                  id="test-contact-reachability"
+                  :disabled="
+                    reachabilityTesting ||
+                    !settings.auto_contact_share.contact_name.trim() ||
+                    !testDeviceSerial.trim()
+                  "
+                  class="px-3 py-1.5 bg-amber-600 text-white text-xs font-medium rounded-md hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  @click="testContactReachability"
+                >
+                  {{ reachabilityTesting ? t('media_actions.testing_contact_reachability') : t('media_actions.test_contact_reachability') }}
+                </button>
+                <span
+                  v-if="reachabilityResult"
+                  :class="['text-xs', reachabilityResult.reachable ? 'text-green-400' : 'text-red-400']"
+                >
+                  {{ reachabilityResult.message }}
+                </span>
+              </div>
+            </div>
+          </template>
+
+          <!-- Form content — DEVICE mode -->
+          <template v-else>
+            <template v-if="isDeviceOverridden(activeTab)">
+              <!-- Device section enabled toggle -->
+              <div class="flex items-center gap-2 mb-4">
+                <input
+                  :checked="getDeviceOverride(activeTab).enabled"
                   type="checkbox"
                   class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+                  @change="patchDeviceEnabled(activeTab, ($event.target as HTMLInputElement).checked)"
                 />
-                <span class="text-sm font-medium text-gray-200">自动拉群</span>
+                <span class="text-sm text-gray-300">启用此设备的{{ t(TAB_META[activeTab].labelKey) }}</span>
               </div>
 
-              <div v-if="editingGroupInvite.enabled" class="space-y-3">
-                <div>
-                  <label class="block text-sm text-gray-400 mb-1">群成员</label>
-                  <div class="flex flex-wrap gap-1.5 mb-2">
-                    <span
-                      v-for="(member, idx) in editingGroupInvite.group_members"
-                      :key="idx"
-                      class="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-600/20 text-blue-300 rounded text-xs"
-                    >
-                      {{ member }}
-                      <button
-                        class="text-blue-400 hover:text-blue-200"
-                        @click="removeProfileMember(idx)"
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  </div>
-                  <div class="flex gap-2">
-                    <input
-                      v-model="newProfileMember"
-                      class="flex-1 bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                      placeholder="添加群成员名"
-                      @keydown.enter.prevent="addProfileMember"
-                    />
-                    <button
-                      class="px-2 py-1 text-xs bg-gray-600 text-gray-200 rounded hover:bg-gray-500"
-                      @click="addProfileMember"
-                    >
-                      +
-                    </button>
-                  </div>
-                </div>
-
-                <div>
-                  <label class="block text-sm text-gray-400 mb-1">群名模板</label>
-                  <input
-                    v-model="editingGroupInvite.group_name_template"
-                    class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <p class="text-xs text-gray-500 mt-1">可用变量: {customer_name}, {kefu_name}</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Auto Contact Share -->
-            <div class="space-y-3 border-l-2 border-green-500/30 pl-4">
-              <div class="flex items-center gap-2">
-                <input
-                  v-model="editingContactShare.enabled"
-                  type="checkbox"
-                  class="rounded border-gray-600 bg-gray-700 text-green-600 focus:ring-green-500"
+              <div v-show="getDeviceOverride(activeTab).enabled">
+                <!-- Review Gate (device) -->
+                <ReviewGateForm
+                  v-if="activeTab === 'review_gate'"
+                  :model-value="{ enabled: true, ...(getDeviceOverride('review_gate').config as any) }"
+                  :disabled="false"
+                  @update:model-value="patchDeviceSection('review_gate', $event)"
                 />
-                <span class="text-sm font-medium text-gray-200">自动发名片</span>
+                <!-- Auto Blacklist (device) -->
+                <AutoBlacklistForm
+                  v-if="activeTab === 'auto_blacklist'"
+                  :model-value="{ enabled: true, ...(getDeviceOverride('auto_blacklist').config as any) }"
+                  :disabled="false"
+                  @update:model-value="patchDeviceSection('auto_blacklist', $event)"
+                />
+                <!-- Auto Group Invite (device) -->
+                <AutoGroupInviteForm
+                  v-if="activeTab === 'auto_group_invite'"
+                  :model-value="{ enabled: true, ...(getDeviceOverride('auto_group_invite').config as any) }"
+                  :disabled="false"
+                  :preview-context="previewCtx"
+                  @update:model-value="patchDeviceSection('auto_group_invite', $event)"
+                />
+                <!-- Auto Contact Share (device) -->
+                <AutoContactShareForm
+                  v-if="activeTab === 'auto_contact_share'"
+                  :model-value="{ enabled: true, ...(getDeviceOverride('auto_contact_share').config as any) }"
+                  :disabled="false"
+                  :preview-context="previewCtx"
+                  @update:model-value="patchDeviceSection('auto_contact_share', $event)"
+                />
               </div>
 
-              <div v-if="editingContactShare.enabled" class="space-y-3">
-                <div>
-                  <label class="block text-sm text-gray-400 mb-1">名片联系人名称</label>
-                  <input
-                    v-model="editingContactShare.contact_name"
-                    class="w-full bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-green-500"
-                    placeholder="输入要发送的名片联系人名称"
-                  />
-                </div>
+              <!-- Reset button -->
+              <div class="mt-4 pt-3 border-t border-gray-700/50">
+                <button
+                  class="text-xs text-gray-500 hover:text-red-400 transition-colors"
+                  @click="resetDeviceOverride(activeTab)"
+                >
+                  重置为全局默认
+                </button>
               </div>
-            </div>
+            </template>
 
-            <!-- Save / Reset buttons -->
-            <div class="flex items-center gap-3 pt-2">
-              <button
-                class="px-4 py-1.5 bg-blue-600 text-white text-sm font-medium rounded hover:bg-blue-700 transition-colors"
-                @click="saveDeviceProfile"
-              >
-                保存设备配置
-              </button>
-              <button
-                v-if="deviceProfilesStore.selectedDeviceActions.length > 0"
-                class="px-4 py-1.5 bg-gray-600 text-gray-200 text-sm rounded hover:bg-gray-500 transition-colors"
-                @click="deleteDeviceProfile('auto_group_invite'); deleteDeviceProfile('auto_contact_share')"
-              >
-                重置为全局默认
-              </button>
-            </div>
-          </div>
+            <!-- No override — show hint -->
+            <template v-else>
+              <div class="py-8 text-center text-gray-500 text-sm">
+                <p>此设备正在使用全局默认配置</p>
+                <p class="mt-1 text-xs text-gray-600">打开上方的开关以设置设备专属配置</p>
+              </div>
+            </template>
+          </template>
         </div>
 
-        <div v-else class="text-sm text-gray-500 py-4 text-center">
-          暂无设备数据。请先连接设备并进行同步操作以录入设备信息。
-        </div>
-      </div>
-
-      <!-- Save Button -->
-      <div class="flex justify-end">
-        <button
-          id="save-media-action-settings"
-          :disabled="saving"
-          class="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          @click="saveSettings"
-        >
-          {{ saving ? t('media_actions.saving') : t('media_actions.save') }}
-        </button>
-      </div>
-
-      <!-- Test Section -->
-      <div class="bg-wecom-darker rounded-lg p-5 border border-wecom-border">
-        <h2 class="text-lg font-semibold text-gray-100 mb-4">
-          {{ t('media_actions.test_title') }}
-        </h2>
-        <p class="text-sm text-gray-400 mb-4">
-          {{ t('media_actions.test_desc') }}
-        </p>
-
-        <div class="grid grid-cols-3 gap-4 mb-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">{{
-              t('media_actions.test_device_serial')
-            }}</label>
-            <input
-              v-model="testDeviceSerial"
-              type="text"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">{{
-              t('media_actions.test_customer_name')
-            }}</label>
-            <input
-              v-model="testCustomerName"
-              type="text"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-300 mb-1">{{
-              t('media_actions.test_message_type')
-            }}</label>
-            <select
-              v-model="testMessageType"
-              class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="image">{{ t('media_actions.type_image') }}</option>
-              <option value="video">{{ t('media_actions.type_video') }}</option>
-            </select>
-          </div>
-        </div>
-
-        <button
-          :disabled="testing"
-          class="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 disabled:opacity-50 transition-colors"
-          @click="runTest"
-        >
-          {{ testing ? t('media_actions.running_test') : t('media_actions.run_test') }}
-        </button>
-
-        <!-- Test Results -->
-        <div v-if="testResults.length > 0" class="mt-4 space-y-2">
-          <h3 class="text-sm font-medium text-gray-300">{{ t('media_actions.test_results') }}</h3>
-          <div
-            v-for="(result, idx) in testResults"
-            :key="idx"
-            :class="[
-              'flex items-center gap-3 px-3 py-2 rounded-md text-sm',
-              result.status === 'success'
-                ? 'bg-green-900/30 text-green-300'
-                : result.status === 'skipped'
-                  ? 'bg-gray-700/50 text-gray-400'
-                  : 'bg-red-900/30 text-red-300',
-            ]"
+        <!-- Save -->
+        <div class="flex justify-end">
+          <button
+            id="save-media-action-settings"
+            :disabled="saving"
+            class="px-6 py-2.5 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            @click="isGlobal ? saveSettings() : saveDeviceOverrides()"
           >
-            <span class="font-mono">{{ result.action_name }}</span>
-            <span
+            {{ saving ? t('media_actions.saving') : isGlobal ? t('media_actions.save') : '保存设备配置' }}
+          </button>
+        </div>
+
+        <!-- Test Section -->
+        <div class="bg-wecom-darker rounded-lg p-5 border border-wecom-border">
+          <h2 class="text-lg font-semibold text-gray-100 mb-4">
+            {{ t('media_actions.test_title') }}
+          </h2>
+          <p class="text-sm text-gray-400 mb-4">{{ t('media_actions.test_desc') }}</p>
+
+          <div class="grid grid-cols-3 gap-4 mb-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{
+                t('media_actions.test_device_serial')
+              }}</label>
+              <input
+                v-model="testDeviceSerial"
+                type="text"
+                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{
+                t('media_actions.test_customer_name')
+              }}</label>
+              <input
+                v-model="testCustomerName"
+                type="text"
+                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-300 mb-1">{{
+                t('media_actions.test_message_type')
+              }}</label>
+              <select
+                v-model="testMessageType"
+                class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              >
+                <option value="image">{{ t('media_actions.type_image') }}</option>
+                <option value="video">{{ t('media_actions.type_video') }}</option>
+              </select>
+            </div>
+          </div>
+
+          <button
+            :disabled="testing"
+            class="px-4 py-2 bg-amber-600 text-white text-sm font-medium rounded-md hover:bg-amber-700 disabled:opacity-50 transition-colors"
+            @click="runTest"
+          >
+            {{ testing ? t('media_actions.running_test') : t('media_actions.run_test') }}
+          </button>
+
+          <div v-if="testResults.length > 0" class="mt-4 space-y-2">
+            <h3 class="text-sm font-medium text-gray-300">{{ t('media_actions.test_results') }}</h3>
+            <div
+              v-for="(result, idx) in testResults"
+              :key="idx"
               :class="[
-                'px-2 py-0.5 rounded text-xs font-medium',
+                'flex items-center gap-3 px-3 py-2 rounded-md text-sm',
                 result.status === 'success'
-                  ? 'bg-green-600/30'
+                  ? 'bg-green-900/30 text-green-300'
                   : result.status === 'skipped'
-                    ? 'bg-gray-600/30'
-                    : 'bg-red-600/30',
+                    ? 'bg-gray-700/50 text-gray-400'
+                    : 'bg-red-900/30 text-red-300',
               ]"
             >
-              {{ result.status }}
-            </span>
-            <span class="text-gray-400">{{ result.message }}</span>
+              <span class="font-mono">{{ result.action_name }}</span>
+              <span
+                :class="[
+                  'px-2 py-0.5 rounded text-xs font-medium',
+                  result.status === 'success'
+                    ? 'bg-green-600/30'
+                    : result.status === 'skipped'
+                      ? 'bg-gray-600/30'
+                      : 'bg-red-600/30',
+                ]"
+              >
+                {{ result.status }}
+              </span>
+              <span class="text-gray-400">{{ result.message }}</span>
+            </div>
           </div>
         </div>
       </div>
