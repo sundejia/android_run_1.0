@@ -1792,27 +1792,6 @@ onMounted(async () => {
           </div>
         </div>
 
-        <!-- Show Logs Panel -->
-        <div class="flex items-center justify-between">
-          <div>
-            <label class="text-sm font-medium text-wecom-text">Show Logs Panel</label>
-            <p class="text-xs text-wecom-muted">
-              Display real-time logs in Sidecar view. Disable to improve performance on slower
-              devices.
-            </p>
-          </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input
-              v-model="settings.sidecarShowLogs"
-              type="checkbox"
-              class="sr-only peer"
-              @change="saveSettings"
-            />
-            <div
-              class="w-11 h-6 bg-wecom-surface peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-wecom-primary"
-            ></div>
-          </label>
-        </div>
       </div>
     </section>
 

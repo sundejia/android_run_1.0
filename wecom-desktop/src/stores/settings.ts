@@ -213,7 +213,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   countdownSeconds: 0,
   sendViaSidecar: false,
   sidecarPollInterval: 2,  // default 2 seconds (lowered from 10 to avoid multi-device send clustering)
-  sidecarShowLogs: true,  // default to show logs
+  sidecarShowLogs: false,  // default to hide logs
   sidecarMaxPanels: 3,
   // AI Reply defaults
   useAIReply: false,  // Default to mock reply (existing behavior)
