@@ -496,7 +496,7 @@ success = await sender.send_via_favorites(favorite_index=0)
 CREATE TABLE device_action_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_serial TEXT NOT NULL,
-    action_type TEXT NOT NULL,        -- 'auto_group_invite' | 'auto_contact_share'
+    action_type TEXT NOT NULL,        -- 'auto_blacklist' | 'review_gate' | 'auto_group_invite' | 'auto_contact_share'
     enabled BOOLEAN NOT NULL DEFAULT 1,
     config_json TEXT NOT NULL DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -1065,3 +1065,11 @@ async def _generate_message(  # ✅ Now async
 ### Bugs & Issues
 
 - `docs/04-bugs-and-fixes/` - Known issues and fixes (organized by status)
+
+### Media Auto-Actions
+
+- `docs/implementation/2026-05-14-review-gate-blacklist-registration-and-realtime-notifications.md` - ReviewGate AutoBlacklistAction registration fix + frontend realtime WebSocket notifications
+- `docs/implementation/2026-05-13-per-kefu-action-profiles.md` - Per-device action profiles replacing per-kefu model
+- `docs/implementation/2026-05-12-media-actions-settings-dedup-ssot.md` - Settings SSOT (single source of truth) for review gate server URL
+- `docs/implementation/2026-05-09-contact-share-review-gate.md` - Contact share + review gate integration
+- `docs/implementation/2026-05-07-contact-share-reliability.md` - Contact share UI automation reliability fixes

@@ -4,6 +4,8 @@ import { api } from '../services/api'
 import type { MediaAutoActionSettings } from '../services/api'
 import { useI18n } from '../composables/useI18n'
 import { useDeviceProfilesStore } from '../stores/deviceProfiles'
+import { useGlobalWebSocketStore } from '../stores/globalWebSocket'
+import type { GlobalWebSocketEvent } from '../stores/globalWebSocket'
 
 import ReviewGateForm from '../components/mediaActions/ReviewGateForm.vue'
 import AutoBlacklistForm from '../components/mediaActions/AutoBlacklistForm.vue'
@@ -18,7 +20,12 @@ const reachabilityTesting = ref(false)
 const reachabilityResult = ref<{ reachable: boolean; message: string } | null>(null)
 const toast = ref<{ message: string; type: 'success' | 'error' } | null>(null)
 
+// Real-time action result notifications
+const realtimeNotifications = ref<Array<{ action_name: string; status: string; message: string; timestamp: string; device_serial?: string; customer_name?: string }>>([])
+const MAX_NOTIFICATIONS = 20
+
 const deviceProfilesStore = useDeviceProfilesStore()
+const wsStore = useGlobalWebSocketStore()
 
 // --- Selection state ---
 // 'global' or a device serial
@@ -309,8 +316,58 @@ onMounted(() => {
     if (!loading.value) deviceProfilesStore.fetchProfiles()
   }, 10000)
 })
+
+// WebSocket listeners for real-time media action feedback
+function _onMediaActionTriggered(event: GlobalWebSocketEvent) {
+  const data = event.data
+  if (!data?.results) return
+  for (const r of data.results) {
+    realtimeNotifications.value.unshift({
+      action_name: r.action_name || '',
+      status: r.status || '',
+      message: r.message || '',
+      timestamp: event.timestamp || new Date().toISOString(),
+      device_serial: data.device_serial,
+      customer_name: data.customer_name,
+    })
+  }
+  // Trim to max
+  if (realtimeNotifications.value.length > MAX_NOTIFICATIONS) {
+    realtimeNotifications.value = realtimeNotifications.value.slice(0, MAX_NOTIFICATIONS)
+  }
+}
+
+function _onSettingsUpdated(_event: GlobalWebSocketEvent) {
+  // Another session updated settings — reload to stay in sync
+  if (!loading.value && !saving.value) {
+    loadSettings()
+  }
+}
+
+onMounted(() => {
+  wsStore.addListener('media_action_triggered', _onMediaActionTriggered)
+  wsStore.addListener('media_action_settings_updated', _onSettingsUpdated)
+})
+
 onUnmounted(() => {
   if (_profileRefreshTimer) clearInterval(_profileRefreshTimer)
+  wsStore.removeListener('media_action_triggered', _onMediaActionTriggered)
+  wsStore.removeListener('media_action_settings_updated', _onSettingsUpdated)
+})
+
+// Auto-dismiss old notifications after 10s
+let _notifCleanupTimer: ReturnType<typeof setInterval> | null = null
+onMounted(() => {
+  const TEN_SECONDS = 10_000
+  _notifCleanupTimer = setInterval(() => {
+    const cutoff = Date.now() - 30_000 // remove older than 30s
+    realtimeNotifications.value = realtimeNotifications.value.filter(n => {
+      return new Date(n.timestamp).getTime() > cutoff
+    })
+  }, TEN_SECONDS)
+})
+onUnmounted(() => {
+  if (_notifCleanupTimer) clearInterval(_notifCleanupTimer)
 })
 </script>
 
@@ -733,6 +790,52 @@ onUnmounted(() => {
                 {{ result.status }}
               </span>
               <span class="text-gray-400">{{ result.message }}</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Real-time Action Notifications -->
+        <div v-if="realtimeNotifications.length > 0" class="bg-wecom-darker rounded-lg p-5 border border-cyan-800/40">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-semibold text-cyan-300">实时动作通知</h2>
+            <button
+              class="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+              @click="realtimeNotifications = []"
+            >
+              清空
+            </button>
+          </div>
+          <div class="space-y-1.5 max-h-48 overflow-y-auto">
+            <div
+              v-for="(n, idx) in realtimeNotifications"
+              :key="idx"
+              :class="[
+                'flex items-center gap-2 px-3 py-1.5 rounded text-xs',
+                n.status === 'success'
+                  ? 'bg-green-900/20 text-green-300'
+                  : n.status === 'skipped'
+                    ? 'bg-gray-700/30 text-gray-500'
+                    : n.status === 'error'
+                      ? 'bg-red-900/20 text-red-300'
+                      : 'bg-gray-700/30 text-gray-400',
+              ]"
+            >
+              <span class="font-mono shrink-0 w-28 truncate">{{ n.action_name }}</span>
+              <span
+                :class="[
+                  'px-1.5 py-0.5 rounded text-[10px] font-medium shrink-0',
+                  n.status === 'success'
+                    ? 'bg-green-600/20'
+                    : n.status === 'error'
+                      ? 'bg-red-600/20'
+                      : 'bg-gray-600/20',
+                ]"
+              >
+                {{ n.status }}
+              </span>
+              <span v-if="n.customer_name" class="text-gray-500 shrink-0">{{ n.customer_name }}</span>
+              <span class="text-gray-600 truncate flex-1">{{ n.message }}</span>
+              <span class="text-gray-600 shrink-0 tabular-nums">{{ new Date(n.timestamp).toLocaleTimeString() }}</span>
             </div>
           </div>
         </div>

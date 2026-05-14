@@ -42,6 +42,13 @@ vi.mock('../stores/deviceProfiles', () => ({
   }),
 }))
 
+vi.mock('../stores/globalWebSocket', () => ({
+  useGlobalWebSocketStore: () => ({
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+  }),
+}))
+
 const baseSettings = {
   enabled: true,
   auto_blacklist: {
