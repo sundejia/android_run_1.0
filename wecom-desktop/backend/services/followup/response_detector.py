@@ -18,6 +18,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Any
 
 # Add project root to path for imports
@@ -1225,6 +1226,15 @@ class ResponseDetector:
         return len(text) > 18
 
     @classmethod
+    def _preview_looks_more_like_name(cls, name: str, preview: str) -> bool:
+        """Detect likely name/preview swap: preview looks like a customer name while name does not."""
+        if re.match(r"^B\d{8,}", preview) and not re.match(r"^B\d{8,}", name):
+            return True
+        if re.match(r"^\d{4,}", preview) and not re.match(r"^\d{4,}", name):
+            return True
+        return False
+
+    @classmethod
     def _is_low_confidence_priority_user(cls, user: Any) -> bool:
         """Guard priority ingestion against parser-produced fake targets.
 
@@ -1241,9 +1251,19 @@ class ResponseDetector:
             return False
         if unread_count <= 0:
             return False
-        if preview not in (None, "", "None"):
-            return False
-        return cls._looks_like_low_confidence_message_name(name)
+
+        name_suspicious = cls._looks_like_low_confidence_message_name(name)
+
+        if preview in (None, "", "None") and name_suspicious:
+            return True
+
+        # Cross-field swap check: name is message-like AND preview looks
+        # more like a customer name (e.g., B-prefixed ID) → likely swap.
+        if name_suspicious and preview and preview not in ("", "None"):
+            if cls._preview_looks_more_like_name(name, preview):
+                return True
+
+        return False
 
     async def _detect_first_page_unread(self, wecom, serial: str) -> list[Any]:
         """
