@@ -87,6 +87,7 @@ from routers import (
     sidecar,
     streamers,
     sync,
+    sync_bridge,
     webhooks,
 )
 from services.conversation_storage import DEVICE_STORAGE_ROOT, get_control_db_path, list_device_conversation_targets
@@ -272,9 +273,46 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         print(f"[startup] [WARN] Dashboard heartbeat client failed: {e}")
 
+    # Start analytics sync client if configured
+    try:
+        from services.settings.service import get_settings_service
+        from services.sync_client import SyncClient
+        from services.sync_event_bridge import set_sync_client
+
+        settings_svc = get_settings_service()
+        general = settings_svc.get_general_settings()
+        sync_enabled = getattr(general, "analytics_sync_enabled", False)
+        sync_url = getattr(general, "analytics_sync_url", "")
+        sync_token = getattr(general, "analytics_sync_token", "")
+
+        if sync_enabled and sync_url and sync_token:
+            sync_client = SyncClient(
+                sync_url=sync_url,
+                sync_token=sync_token,
+                settings_service=settings_svc,
+            )
+            await sync_client.start()
+            set_sync_client(sync_client)
+            app.state.sync_client = sync_client
+            print(f"[startup] [OK] Analytics sync client started (url={sync_url})")
+        else:
+            print(f"[startup] [INFO] Analytics sync not configured (enabled={sync_enabled})")
+    except Exception as e:
+        print(f"[startup] [WARN] Analytics sync client failed: {e}")
+
     yield  # Application is running
 
     # ========== SHUTDOWN ==========
+    try:
+        sync_client = getattr(app.state, "sync_client", None)
+        if sync_client:
+            await sync_client.stop()
+            from services.sync_event_bridge import set_sync_client
+            set_sync_client(None)
+            print("[shutdown] Analytics sync client stopped")
+    except Exception:
+        pass
+
     try:
         from services.dashboard_service import get_dashboard_service
         await get_dashboard_service().reload(enabled=False, url="")
@@ -342,6 +380,8 @@ app.include_router(media_actions.router, prefix="/api/media-actions", tags=["med
 # Monitoring endpoints (heartbeat, AI health, process events)
 app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
+# Analytics sync bridge diagnostics
+app.include_router(sync_bridge.router, tags=["sync-bridge"])
 
 
 @app.get("/health")

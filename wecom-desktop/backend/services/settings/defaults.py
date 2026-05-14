@@ -306,6 +306,12 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     # ============================================================================
     (SettingCategory.DASHBOARD.value, "enabled", ValueType.BOOLEAN.value, False, "是否启用监控面板上报", False),
     (SettingCategory.DASHBOARD.value, "url", ValueType.STRING.value, "", "监控面板 WebSocket 地址", False),
+    # ============================================================================
+    # Analytics Sync Settings (实时数据同步到分析平台)
+    # ============================================================================
+    (SettingCategory.GENERAL.value, "analytics_sync_enabled", ValueType.BOOLEAN.value, False, "启用实时数据同步到分析平台", False),
+    (SettingCategory.GENERAL.value, "analytics_sync_url", ValueType.STRING.value, "", "分析平台 WebSocket 地址 (ws://host:8000/api/sync/ws)", False),
+    (SettingCategory.GENERAL.value, "analytics_sync_token", ValueType.STRING.value, "", "同步鉴权令牌", True),
 ]
 
 
@@ -399,6 +405,10 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     # Dashboard
     "dashboardEnabled": (SettingCategory.DASHBOARD.value, "enabled"),
     "dashboardUrl": (SettingCategory.DASHBOARD.value, "url"),
+    # Analytics Sync
+    "analyticsSyncEnabled": (SettingCategory.GENERAL.value, "analytics_sync_enabled"),
+    "analyticsSyncUrl": (SettingCategory.GENERAL.value, "analytics_sync_url"),
+    "analyticsSyncToken": (SettingCategory.GENERAL.value, "analytics_sync_token"),
 }
 
 
