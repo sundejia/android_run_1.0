@@ -87,6 +87,7 @@ from routers import (
     sidecar,
     streamers,
     sync,
+    system,
     webhooks,
 )
 from services.conversation_storage import DEVICE_STORAGE_ROOT, get_control_db_path, list_device_conversation_targets
@@ -257,12 +258,16 @@ async def lifespan(app: FastAPI):
 
     # Start heartbeat client if dashboard is configured
     try:
+        from routers.sync import get_device_manager
         from services.dashboard_service import get_dashboard_service
+        from services.realtime_reply_manager import get_realtime_reply_manager
         from services.settings.service import get_settings_service
 
         settings_svc = get_settings_service()
         dashboard_settings = settings_svc.get_dashboard_settings()
-        dashboard_svc = get_dashboard_service(settings_svc)
+        dm = get_device_manager()
+        rrm = get_realtime_reply_manager()
+        dashboard_svc = get_dashboard_service(settings_svc, dm, rrm)
         await dashboard_svc.reload(
             enabled=dashboard_settings.enabled,
             url=dashboard_settings.url or "",
@@ -342,6 +347,8 @@ app.include_router(media_actions.router, prefix="/api/media-actions", tags=["med
 # Monitoring endpoints (heartbeat, AI health, process events)
 app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
+# System operations (restart/stop WeCom app on Android)
+app.include_router(system.router)
 
 
 @app.get("/health")

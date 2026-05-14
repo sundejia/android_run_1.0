@@ -15,9 +15,15 @@ _instance: DashboardService | None = None
 class DashboardService:
     """Manages HeartbeatClient start/stop/replace based on settings changes."""
 
-    def __init__(self, settings_service: Any, device_manager: Any = None) -> None:
+    def __init__(
+        self,
+        settings_service: Any,
+        device_manager: Any = None,
+        realtime_reply_manager: Any = None,
+    ) -> None:
         self._settings_service = settings_service
         self._device_manager = device_manager
+        self._realtime_reply_manager = realtime_reply_manager
         self._client: HeartbeatClient | None = None
         self._url: str = ""
         self._enabled: bool = False
@@ -33,12 +39,18 @@ class DashboardService:
             self._client = None
 
         if enabled and url and self._client is None:
+            from .dashboard_events import get_dashboard_emitter
+
+            emitter = get_dashboard_emitter()
             self._client = HeartbeatClient(
                 dashboard_url=url,
                 settings_service=self._settings_service,
                 device_manager=self._device_manager,
+                realtime_reply_manager=self._realtime_reply_manager,
                 app_version="1.0.0",
             )
+            # Share the emitter's queue so events are sent on the same WS
+            self._client._event_queue = emitter.queue
             await self._client.start()
 
         self._enabled = enabled
@@ -82,7 +94,9 @@ class DashboardService:
 
 
 def get_dashboard_service(
-    settings_service: Any = None, device_manager: Any = None
+    settings_service: Any = None,
+    device_manager: Any = None,
+    realtime_reply_manager: Any = None,
 ) -> DashboardService:
     """Return the process-wide singleton (created on first call with deps)."""
     global _instance
@@ -91,5 +105,7 @@ def get_dashboard_service(
             raise RuntimeError(
                 "DashboardService not yet initialized; pass settings_service on first call"
             )
-        _instance = DashboardService(settings_service, device_manager)
+        _instance = DashboardService(
+            settings_service, device_manager, realtime_reply_manager
+        )
     return _instance

@@ -75,6 +75,14 @@ def setup_logging(serial: str, debug: bool = False):
     return get_logger("scanner", device=serial)
 
 
+def dash_event(kind: str, serial: str, **payload) -> None:
+    """Print a structured marker line for the parent process to forward to device-dashboard."""
+    import json as _json
+
+    line = _json.dumps({"kind": kind, "serial": serial, **payload}, ensure_ascii=False)
+    print(f"[DASHEVENT] {line}", flush=True)
+
+
 async def run(args):
     """主执行流程"""
     logger = setup_logging(args.serial, args.debug)
@@ -237,6 +245,19 @@ async def run(args):
                     )
                 except Exception as ch_err:
                     logger.debug(f"Failed to write click_health sample: {ch_err}")
+
+            # Report telemetry to dashboard
+            red_dot_count = result.get("users_processed", 0)
+            current_processing = result.get("current_target")
+            dash_event("red_dot_update", args.serial,
+                       pending=red_dot_count, current_target=current_processing)
+
+            ai_calls = int(result.get("ai_calls", 0) or 0)
+            ai_failures_scan = int(result.get("ai_failures", 0) or 0)
+            if ai_calls > 0 or ai_failures_scan > 0:
+                dash_event("ai_request", args.serial,
+                           result="ok" if ai_failures_scan == 0 else "error",
+                           calls=ai_calls, failures=ai_failures_scan)
 
             # 报告结果
             responses = result.get("responses_detected", 0)
