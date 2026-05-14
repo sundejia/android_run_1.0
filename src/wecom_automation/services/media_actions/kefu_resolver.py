@@ -1,11 +1,14 @@
 """
 Per-kefu media action settings resolver.
 
-Merges global settings (from ``settings_loader``) with per-kefu overrides
-stored in ``kefu_action_profiles``, producing a single settings dict that
-is structurally identical to what ``load_media_auto_action_settings`` returns.
-Downstream actions (``AutoGroupInviteAction``, ``AutoContactShareAction``)
-receive the merged dict without needing any code changes.
+.. deprecated:: 2026-05-13 (schema v16)
+    Superseded by :mod:`device_resolver` which resolves settings per **device**
+    rather than per kefu.  The ``kefu_action_profiles`` table is no longer written
+    by any active code path; existing rows were migrated to ``device_action_profiles``
+    by the v15→v16 migration.  This module is retained only for backward-compat
+    reference.  Do **not** add new callers — use
+    :func:`~wecom_automation.services.media_actions.device_resolver.resolve_media_settings_by_device`
+    instead.
 """
 
 from __future__ import annotations

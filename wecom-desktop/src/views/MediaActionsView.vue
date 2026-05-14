@@ -69,6 +69,9 @@ const settings = ref<MediaAutoActionSettings>(createPlaceholderSettings())
 // for the currently selected device. Populated when user selects a device.
 const deviceOverrides = ref<Record<string, { enabled: boolean; config: Record<string, unknown> }>>({})
 
+// Effective settings display for the selected device
+const showEffectiveSettings = ref(false)
+
 const isGlobal = computed(() => selectedTarget.value === 'global')
 const selectedDevice = computed(() =>
   isGlobal.value ? null : deviceProfilesStore.profiles.find(d => d.device_serial === selectedTarget.value)
@@ -144,6 +147,7 @@ function selectTarget(target: string) {
 }
 
 async function loadDeviceOverrides(serial: string) {
+  showEffectiveSettings.value = false
   try {
     await deviceProfilesStore.selectDevice(serial)
     // Build local editing state from the store's loaded actions
@@ -155,6 +159,8 @@ async function loadDeviceOverrides(serial: string) {
       }
     }
     deviceOverrides.value = overrides
+    // Pre-fetch effective settings for display
+    await deviceProfilesStore.fetchEffectiveSettings(serial)
   } catch {
     deviceOverrides.value = {}
   }
@@ -593,6 +599,49 @@ onUnmounted(() => {
             </template>
           </template>
         </div>
+
+        <!-- Effective settings preview (device mode only) -->
+        <template v-if="!isGlobal">
+          <div class="bg-wecom-darker rounded-lg border border-wecom-border">
+            <button
+              class="w-full flex items-center justify-between px-5 py-3 text-sm font-medium text-gray-300 hover:text-gray-100 transition-colors"
+              @click="showEffectiveSettings = !showEffectiveSettings"
+            >
+              <span>查看有效配置 (全局 + 设备覆盖)</span>
+              <span :class="['transition-transform', showEffectiveSettings ? 'rotate-180' : '']">&#9660;</span>
+            </button>
+            <div v-if="showEffectiveSettings && deviceProfilesStore.effectiveSettings" class="px-5 pb-4 space-y-3">
+              <p class="text-xs text-gray-500">以下是此设备最终使用的合并配置（全局默认 + 设备覆盖）</p>
+              <div
+                v-for="sectionKey in SECTION_KEYS"
+                :key="sectionKey"
+                class="border border-gray-700/50 rounded-md p-3"
+              >
+                <div class="flex items-center gap-2 mb-2">
+                  <span
+                    class="inline-block w-2 h-2 rounded-full"
+                    :class="isDeviceOverridden(sectionKey) ? 'bg-green-500' : 'bg-gray-600'"
+                  ></span>
+                  <span class="text-sm font-medium text-gray-200">{{ t(TAB_META[sectionKey].labelKey) }}</span>
+                  <span v-if="isDeviceOverridden(sectionKey)" class="text-xs text-green-400">(已覆盖)</span>
+                  <span v-else class="text-xs text-gray-500">(继承全局)</span>
+                </div>
+                <pre class="text-xs text-gray-400 bg-gray-800/50 rounded p-2 overflow-x-auto">{{
+                  JSON.stringify(
+                    isDeviceOverridden(sectionKey)
+                      ? { enabled: getDeviceOverride(sectionKey).enabled, ...getDeviceOverride(sectionKey).config }
+                      : (deviceProfilesStore.effectiveSettings.settings as any)?.[sectionKey] || '未配置',
+                    null,
+                    2,
+                  )
+                }}</pre>
+              </div>
+            </div>
+            <div v-else-if="showEffectiveSettings && !deviceProfilesStore.effectiveSettings" class="px-5 pb-4 text-xs text-gray-500">
+              加载中...
+            </div>
+          </div>
+        </template>
 
         <!-- Save -->
         <div class="flex justify-end">

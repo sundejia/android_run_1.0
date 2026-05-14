@@ -1,6 +1,6 @@
 # Auto Contact Share Review Gate — Integration & E2E (2026-05-09)
 
-> **日期**: 2026-05-09（修订：同日复核 db_path 与真机正向路径）  
+> **日期**: 2026-05-09（修订：2026-05-12 SSOT；2026-05-14 per-device settings 修复）
 > **关联**: [Auto Contact Share](../features/auto-contact-share.md) | [Media Auto-Actions](../features/media-auto-actions.md)
 
 ## 背景
@@ -48,6 +48,8 @@
 **文件**: `wecom-desktop/backend/services/review_gate_runtime.py`
 
 - Webhook / 占位注册的 `AutoContactShareAction` 仍可能 `db_path=None`；真机路径以 `response_detector` → `build_media_event_bus` 为准。
+
+**2026-05-14 更正（per-device settings）**：`ReviewGate.on_verdict()` 现在接受 `settings_db_path` 参数，在 emit 前根据 `pending.device_serial` 调用 `resolve_media_settings_by_device()` 合并 per-device 覆盖。Webhook 驱动的 review gate 动作（建群、名片推送）现在能正确使用设备专属配置，不再只使用全局设置。详见 [Per-Device Action Profiles](./2026-05-13-per-kefu-action-profiles.md#post-implementation-fixes-2026-05-14)。
 
 **2026-05-12 更正（SSOT）**：图片审核服务器的 **HTTP 基址与超时** 不再存放在 `media_auto_actions.review_gate`（已移除 `rating_server_url` / `upload_timeout_seconds` / `upload_max_attempts`）。与实时回复路径一致，统一在 **`general.image_server_ip`**、**`general.image_review_timeout_seconds`**、**`general.image_upload_enabled`**（系统设置「图片审核」页）配置；`review_gate` 仅保留门控开关与 `video_review_policy`。详见 [Media actions settings dedup (SSOT)](./2026-05-12-media-actions-settings-dedup-ssot.md)。
 

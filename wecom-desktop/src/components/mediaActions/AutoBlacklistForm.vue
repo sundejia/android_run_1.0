@@ -47,5 +47,19 @@ function patch(fields: Partial<AutoBlacklistSettings>) {
         {{ t('media_actions.skip_already_blacklisted') }}
       </label>
     </div>
+
+    <div class="flex items-center gap-2">
+      <input
+        id="require-review-pass"
+        :checked="modelValue.require_review_pass"
+        :disabled="disabled"
+        type="checkbox"
+        class="rounded border-gray-600 bg-gray-700 text-blue-600 focus:ring-blue-500"
+        @change="patch({ require_review_pass: ($event.target as HTMLInputElement).checked })"
+      />
+      <label for="require-review-pass" class="text-sm text-gray-300">
+        需要通过图片审核才拉黑（依赖审核管道）
+      </label>
+    </div>
   </div>
 </template>

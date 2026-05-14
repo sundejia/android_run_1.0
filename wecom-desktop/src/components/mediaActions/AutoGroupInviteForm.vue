@@ -238,5 +238,58 @@ const testMessagePreview = computed(() =>
         {{ t('media_actions.skip_group_exists') }}
       </label>
     </div>
+
+    <!-- Post-confirm wait seconds -->
+    <div>
+      <label class="block text-sm font-medium text-gray-300 mb-1">
+        建群后等待确认时间（秒）
+      </label>
+      <input
+        :value="modelValue.post_confirm_wait_seconds"
+        :disabled="disabled"
+        type="number"
+        min="0"
+        step="1"
+        class="w-32 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        @input="patch({ post_confirm_wait_seconds: parseInt(($event.target as HTMLInputElement).value) || 1 })"
+      />
+      <p class="text-xs text-gray-500 mt-1">
+        建群后等待群创建确认再发送欢迎消息的时间
+      </p>
+    </div>
+
+    <!-- Duplicate name policy -->
+    <div>
+      <label class="block text-sm font-medium text-gray-300 mb-1">
+        同名群处理策略
+      </label>
+      <select
+        :value="modelValue.duplicate_name_policy"
+        :disabled="disabled"
+        class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        @change="patch({ duplicate_name_policy: ($event.target as HTMLSelectElement).value })"
+      >
+        <option value="first">使用第一个匹配的群</option>
+        <option value="skip">跳过（不建群）</option>
+        <option value="suffix">添加后缀创建新群</option>
+      </select>
+    </div>
+
+    <!-- Video invite policy -->
+    <div>
+      <label class="block text-sm font-medium text-gray-300 mb-1">
+        视频消息建群策略
+      </label>
+      <select
+        :value="modelValue.video_invite_policy || 'extract_frame'"
+        :disabled="disabled"
+        class="w-full bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        @change="patch({ video_invite_policy: ($event.target as HTMLSelectElement).value })"
+      >
+        <option value="extract_frame">提取视频帧后正常处理</option>
+        <option value="skip">跳过视频消息</option>
+        <option value="always">始终建群（不依赖审核）</option>
+      </select>
+    </div>
   </div>
 </template>

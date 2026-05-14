@@ -64,12 +64,14 @@ class ReviewGate:
         settings_provider: Callable[[], dict[str, Any]] | None = None,
         evaluator: PolicyEvaluator | None = None,
         guard=None,
+        settings_db_path: str | None = None,
     ) -> None:
         self._storage = storage
         self._bus = bus
         self._settings_provider = settings_provider or (lambda: {})
         self._evaluator = evaluator or PolicyEvaluator()
         self._guard = guard
+        self._settings_db_path = settings_db_path
         self._processed: set[int] = set()
 
     @property
@@ -122,6 +124,13 @@ class ReviewGate:
 
         event = self._build_event(pending)
         settings = self._settings_provider() or {}
+
+        # Resolve per-device overrides when device_serial and db path are available.
+        if pending.device_serial and self._settings_db_path:
+            from wecom_automation.services.media_actions.device_resolver import resolve_media_settings_by_device
+            settings = resolve_media_settings_by_device(
+                settings, pending.device_serial, self._settings_db_path,
+            )
 
         if self._guard is not None:
             from wecom_automation.services.governance.guard import (

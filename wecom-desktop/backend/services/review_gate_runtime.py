@@ -87,6 +87,7 @@ def get_review_gate(*, storage: ReviewStorage | None = None) -> ReviewGate | Non
             settings_provider=_settings_provider,
             evaluator=PolicyEvaluator(),
             guard=guard,
+            settings_db_path=str(get_control_db_path()),
         )
         _singleton["gate"] = gate
         _singleton["bus"] = bus

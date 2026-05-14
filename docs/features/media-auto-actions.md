@@ -58,7 +58,7 @@
 
 - `GET /` — 列出所有设备及其覆盖状态（`DeviceActionProfileSummary[]`）
 - `GET /{device_serial}/actions` — 读取指定设备的全部动作覆盖
-- `PUT /{device_serial}/actions/{action_type}` — 创建或更新一条覆盖（`action_type` 为 `auto_group_invite` 或 `auto_contact_share`），成功后广播 `device_action_profile_updated` WebSocket 事件
+- `PUT /{device_serial}/actions/{action_type}` — 创建或更新一条覆盖（`action_type` 为 `auto_blacklist` / `review_gate` / `auto_group_invite` / `auto_contact_share`），成功后广播 `device_action_profile_updated` WebSocket 事件
 - `DELETE /{device_serial}/actions/{action_type}` — 删除覆盖（回退到全局默认），成功后广播 `device_action_profile_deleted`
 - `GET /{device_serial}/effective` — 返回该设备的最终合并配置（全局 + per-device），供调试与预览
 
@@ -187,9 +187,9 @@
 
 ## 相关文档
 
-- [Per-Kefu Action Profiles (2026-05-13)](../implementation/2026-05-13-per-kefu-action-profiles.md) — 按客服独立配置 auto_group_invite / auto_contact_share；`kefu_resolver.py` 合并逻辑；API 端点；`kefu_overrides` 迁移
+- [Per-Device Action Profiles (2026-05-13)](../implementation/2026-05-13-per-kefu-action-profiles.md) — 按设备独立配置全部 4 个 section（auto_blacklist / review_gate / auto_group_invite / auto_contact_share）；`device_resolver.py` 合并逻辑；API 端点；`kefu_overrides` 迁移；2026-05-14 补充 review gate webhook / test-trigger 路径修复
 - [Media actions settings dedup (SSOT, 2026-05-12)](../implementation/2026-05-12-media-actions-settings-dedup-ssot.md) — 审核服务器地址与超时统一到 `general`；`review_gate` 仅门控与视频策略；迁移与测试索引
-- [Auto Contact Share (自动推送主管名片)](auto-contact-share.md) — 名片分享 UI 流程、per-kefu 配置、幂等表、多版本 Resource ID、页面状态校验与诊断 dump
+- [Auto Contact Share (自动推送主管名片)](auto-contact-share.md) — 名片分享 UI 流程、per-device 配置、幂等表、多版本 Resource ID、页面状态校验与诊断 dump
 - [Contact share reliability (2026-05)](../implementation/2026-05-07-contact-share-reliability.md) — 假成功治理、附件面板 `aij`/`aif`、边缘手势区与滑动参数、测试索引
 - [安卓拉群工作流实现说明](../implementation/2026-04-04-android-group-invite-workflow.md) — 模块划分、时序、配置与限制（含建群后 `restore_navigation`）
 - [自动拉群后私聊列表导航](../bugs/2026-04-12-auto-group-invite-private-chats-navigation.md) — 实时跟进场景根因与三层修复

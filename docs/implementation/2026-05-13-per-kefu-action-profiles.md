@@ -1,6 +1,6 @@
 # Per-Device Action Profiles (按设备覆盖配置)
 
-> **Date**: 2026-05-13
+> **Date**: 2026-05-13 (updated 2026-05-14)
 > **Status**: Implemented
 > **Supersedes**: Per-kefu action profiles (schema v15) → per-device action profiles (schema v16)
 
@@ -28,7 +28,7 @@ Code defaults (DEFAULT_MEDIA_AUTO_ACTION_SETTINGS)
 CREATE TABLE device_action_profiles (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     device_serial TEXT NOT NULL,
-    action_type TEXT NOT NULL,          -- 'auto_group_invite' | 'auto_contact_share'
+    action_type TEXT NOT NULL,          -- 'auto_blacklist' | 'review_gate' | 'auto_group_invite' | 'auto_contact_share'
     enabled BOOLEAN NOT NULL DEFAULT 1,
     config_json TEXT NOT NULL DEFAULT '{}',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -90,14 +90,15 @@ New router at `/api/device-profiles` (`routers/device_profiles.py`):
 | `/{device_serial}/actions/{action_type}` | DELETE | Remove override (revert to global). Broadcasts `device_action_profile_deleted` WebSocket event. |
 | `/{device_serial}/effective` | GET | Get fully resolved settings (calls `resolve_media_settings_by_device_from_db`). Uses `device_resolver` to merge global + per-device. |
 
-Valid `action_type` values: `auto_group_invite`, `auto_contact_share`.
+Valid `action_type` values: `auto_blacklist`, `review_gate`, `auto_group_invite`, `auto_contact_share`.
 
 ### Frontend
 
-`MediaActionsView.vue` has a "按设备覆盖配置" section showing connected devices. Each device is a button with a green badge if configured; clicking opens an edit panel with group invite and contact share config fields.
+`MediaActionsView.vue` has a "按设备覆盖配置" section showing connected devices. Each device is a button with colored dots indicating which sections have overrides; clicking opens an edit panel with all four action section config fields.
 
 - **Pinia store**: `wecom-desktop/src/stores/deviceProfiles.ts` (`useDeviceProfilesStore`) manages profile list, selected device actions, and effective settings.
 - **API client types**: `DeviceActionProfileSummary`, `DeviceActionProfile`, `DeviceEffectiveSettings` (defined in `services/api.ts`).
+- **Effective settings preview**: When a device is selected, the view calls `fetchEffectiveSettings(serial)` to display the fully merged configuration (global + device overrides) in a collapsible panel.
 - **WebSocket events**: `device_action_profile_updated`, `device_action_profile_deleted` broadcast via global WebSocket manager.
 
 ### Cleanup of Deprecated Per-Kefu Code
@@ -111,7 +112,7 @@ The following were removed or deprecated:
 - Per-Kefu Overrides template section in `MediaActionsView.vue` — **replaced** with Per-Device Override section.
 
 Kept for backward compatibility:
-- `kefu_resolver.py` — still used by `kefu_profiles.py` router (legacy API remains registered).
+- `kefu_resolver.py` — **deprecated** (2026-05-14). Marked with deprecation docstring; no active code path calls it. Use `device_resolver.py` instead.
 - `kefu_profiles.py` router — still registered at `/api/kefu-profiles` for any external consumers.
 - `kefu_action_profiles` table — not dropped; migration only copies data to `device_action_profiles`.
 
@@ -134,3 +135,44 @@ Kept for backward compatibility:
 | `wecom-desktop/src/stores/kefuProfiles.ts` | **Deleted** |
 | `wecom-desktop/src/services/api.ts` | New device profile types + methods; remove kefu types |
 | `wecom-desktop/src/views/MediaActionsView.vue` | Per-device config UI replaces per-kefu |
+
+## Post-Implementation Fixes (2026-05-14)
+
+Three gaps were identified and fixed after the initial implementation:
+
+### Fix 1: Review Gate Webhook Path — Per-Device Settings Resolution
+
+**Problem**: `review_gate_runtime.py` constructed its `MediaEventBus` as a process-level singleton via `MediaEventBus()` directly (bypassing `build_media_event_bus`). When the rating-server webhook returned a verdict and triggered `ReviewGate.on_verdict()`, the settings passed to `bus.emit()` were global-only — per-device overrides from `device_action_profiles` were never applied.
+
+**Root cause**: The ReviewGate was designed as a process-level singleton initialized without device context. While `pending.device_serial` was available from the `pending_reviews` table at runtime, the settings resolution did not use it.
+
+**Fix**:
+- `gate.py`: Added `settings_db_path: str | None = None` parameter to `ReviewGate.__init__`. In `on_verdict()`, after loading global settings via `self._settings_provider()`, the gate now calls `resolve_media_settings_by_device()` using `pending.device_serial` and `self._settings_db_path`.
+- `review_gate_runtime.py`: Passes `settings_db_path=str(get_control_db_path())` to the `ReviewGate` constructor.
+
+### Fix 2: Test-Trigger Endpoint — Per-Device Settings Resolution
+
+**Problem**: `POST /api/media-actions/test-trigger` in `media_actions.py` manually constructed a `MediaEventBus()` and used `_get_settings()` (global-only), bypassing both `build_media_event_bus()` and the per-device resolver. Test triggers always used global settings regardless of the `device_serial` parameter.
+
+**Fix**: Replaced manual bus construction with `build_media_event_bus(db_path, device_serial=device_serial)`. When media actions are disabled for the device, returns `{"status": "disabled"}` instead of running with global settings.
+
+### Fix 3: Frontend — Effective Settings Display
+
+**Problem**: The `GET /{serial}/effective` API endpoint, `fetchEffectiveSettings()` store method, and `getDeviceEffectiveSettings()` API client were all implemented but never called from `MediaActionsView.vue`. Users could not see the merged settings (global + device overrides) their device would actually use.
+
+**Fix**: `MediaActionsView.vue` now calls `fetchEffectiveSettings(serial)` when a device is selected and displays a collapsible "查看有效配置" panel showing the fully merged configuration for each section, with visual indicators for overridden vs inherited fields.
+
+### Fix 4: Frontend Form — Missing UI Controls
+
+**Problem**: Several data model fields had no UI controls in form components.
+
+**Fix**:
+- `AutoBlacklistForm.vue`: Added `require_review_pass` checkbox.
+- `AutoGroupInviteForm.vue`: Added `post_confirm_wait_seconds` number input, `duplicate_name_policy` select, `video_invite_policy` select.
+- `AutoContactShareForm.vue`: Added `cooldown_seconds` number input.
+
+### Fix 5: Legacy Code Cleanup
+
+**Problem**: `kefu_resolver.py` was retained with no deprecation notice despite having zero active callers.
+
+**Fix**: Added deprecation docstring directing to `device_resolver.py`.

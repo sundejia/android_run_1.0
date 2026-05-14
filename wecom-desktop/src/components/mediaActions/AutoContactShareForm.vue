@@ -120,5 +120,24 @@ const preSharePreview = computed(() =>
         {{ t('media_actions.skip_already_shared') }}
       </label>
     </div>
+
+    <!-- Cooldown -->
+    <div>
+      <label class="block text-sm font-medium text-gray-300 mb-1">
+        分享冷却时间（秒）
+      </label>
+      <input
+        :value="modelValue.cooldown_seconds"
+        :disabled="disabled"
+        type="number"
+        min="0"
+        step="1"
+        class="w-32 bg-gray-700 border border-gray-600 rounded-md px-3 py-2 text-sm text-gray-200 focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
+        @input="patch({ cooldown_seconds: parseInt(($event.target as HTMLInputElement).value) || 0 })"
+      />
+      <p class="text-xs text-gray-500 mt-1">
+        同一联系人两次分享之间的最小间隔，0 表示不限制
+      </p>
+    </div>
   </div>
 </template>

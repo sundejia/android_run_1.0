@@ -406,14 +406,22 @@ async def test_trigger_media_action(
     This simulates a customer sending media without requiring actual device interaction.
     """
     try:
+        from services.conversation_storage import get_control_db_path
+        from wecom_automation.services.media_actions.factory import build_media_event_bus
         from wecom_automation.services.media_actions.interfaces import MediaEvent
-        from wecom_automation.services.media_actions.event_bus import MediaEventBus
-        from wecom_automation.services.media_actions.actions.auto_blacklist import AutoBlacklistAction
-        from wecom_automation.services.media_actions.actions.auto_group_invite import AutoGroupInviteAction
-        from wecom_automation.services.media_actions.actions.auto_contact_share import AutoContactShareAction
-        from wecom_automation.services.blacklist_service import BlacklistWriter
 
-        settings = _get_settings()
+        db_path = str(get_control_db_path())
+        bus, settings = build_media_event_bus(
+            db_path,
+            device_serial=device_serial,
+        )
+
+        if bus is None:
+            return {
+                "status": "disabled",
+                "results": [],
+                "message": "Media auto-actions are disabled (either globally or for this device)",
+            }
 
         event = MediaEvent(
             event_type="customer_media_detected",
@@ -426,19 +434,6 @@ async def test_trigger_media_action(
             message_id=None,
             timestamp=datetime.now(),
         )
-
-        bus = MediaEventBus()
-
-        writer = BlacklistWriter()
-        bus.register(AutoBlacklistAction(blacklist_writer=writer))
-
-        from wecom_automation.services.media_actions.group_chat_service import GroupChatService
-        group_service = GroupChatService()
-        bus.register(AutoGroupInviteAction(group_chat_service=group_service))
-
-        from wecom_automation.services.contact_share.service import ContactShareService
-        contact_share_service = ContactShareService(wecom_service=None)
-        bus.register(AutoContactShareAction(contact_share_service=contact_share_service))
 
         results = await bus.emit(event, settings)
 
