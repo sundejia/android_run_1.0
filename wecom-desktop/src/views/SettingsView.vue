@@ -139,7 +139,6 @@ async function testDashboardConnection() {
 }
 
 // Log upload
-const showLogUploadToken = ref(false)
 const logUploadLoading = ref(false)
 const logUploadResult = ref<{ success: boolean; message: string } | null>(null)
 const logUploadStatus = ref<{
@@ -150,7 +149,6 @@ const logUploadStatus = ref<{
   person_name: string
   upload_time: string
   upload_url: string
-  has_token: boolean
   timezone: string
   is_uploading: boolean
   config_error?: string | null
@@ -1910,35 +1908,6 @@ onMounted(async () => {
           />
         </div>
 
-        <div class="flex items-center justify-between">
-          <div>
-            <label class="text-sm font-medium text-wecom-text">{{
-              t('settings.log_upload_token')
-            }}</label>
-            <p class="text-xs text-wecom-muted">{{ t('settings.log_upload_token_desc') }}</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <input
-              v-model="settings.logUploadToken"
-              :type="showLogUploadToken ? 'text' : 'password'"
-              class="input-field w-80 text-sm font-mono"
-              placeholder="upload-token"
-              @change="saveSettings"
-            />
-            <button
-              type="button"
-              class="btn-secondary text-xs px-2"
-              @click="showLogUploadToken = !showLogUploadToken"
-            >
-              {{
-                showLogUploadToken
-                  ? t('settings.log_upload_hide_token')
-                  : t('settings.log_upload_show_token')
-              }}
-            </button>
-          </div>
-        </div>
-
         <div class="bg-wecom-surface/50 rounded-lg px-4 py-3 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-sm text-wecom-text">{{ t('settings.log_upload_scheduler') }}</span>
@@ -2020,7 +1989,7 @@ onMounted(async () => {
           </div>
           <button
             class="btn-secondary text-sm"
-            :disabled="logUploadLoading || !settings.logUploadUrl || !settings.logUploadToken"
+            :disabled="logUploadLoading || !settings.logUploadUrl"
             @click="triggerLogUploadNow"
           >
             <span v-if="logUploadLoading" class="animate-spin">⏳</span>

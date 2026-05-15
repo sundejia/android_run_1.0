@@ -95,7 +95,6 @@ class UpdateSettingsRequest(BaseModel):
     log_upload_enabled: Optional[bool] = None
     log_upload_time: Optional[str] = None
     log_upload_url: Optional[str] = None
-    log_upload_token: Optional[str] = None
     timezone: Optional[str] = None
     email_enabled: Optional[bool] = None
     image_upload_enabled: Optional[bool] = None
@@ -373,8 +372,6 @@ async def update_settings(request: UpdateSettingsRequest):
         updates["logUploadTime"] = request.log_upload_time.strip() or "02:00"
     if request.log_upload_url is not None:
         updates["logUploadUrl"] = request.log_upload_url.strip()
-    if request.log_upload_token is not None:
-        updates["logUploadToken"] = request.log_upload_token.strip()
     if request.timezone:
         updates["timezone"] = request.timezone
         try:
