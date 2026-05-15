@@ -312,6 +312,9 @@ async function syncEmailSettings() {
         receiver_email: settings.value.emailReceiverEmail,
         notify_on_voice: settings.value.emailNotifyOnVoice,
         notify_on_human_request: settings.value.emailNotifyOnHumanRequest,
+        notify_on_error: settings.value.emailNotifyOnError,
+        error_notify_min_level: settings.value.emailErrorNotifyMinLevel,
+        error_rate_limit_minutes: settings.value.emailErrorRateLimitMinutes,
       }),
     })
   } catch (error) {
@@ -1657,6 +1660,56 @@ onMounted(async () => {
                   class="w-9 h-5 bg-wecom-surface peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-wecom-primary"
                 ></div>
               </label>
+            </div>
+
+            <!-- Error Notification Toggle -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">🚨</span>
+                <span class="text-sm text-wecom-muted">On system errors</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  v-model="settings.emailNotifyOnError"
+                  type="checkbox"
+                  class="sr-only peer"
+                  @change="saveEmailSettings"
+                />
+                <div
+                  class="w-9 h-5 bg-wecom-surface peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-wecom-primary"
+                ></div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Error Notification Settings (shown when enabled) -->
+          <div v-if="settings.emailNotifyOnError" class="space-y-3 bg-wecom-surface/30 rounded-lg p-4">
+            <label class="text-sm font-medium text-wecom-text">Error Notification Settings</label>
+
+            <!-- Min Log Level -->
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-wecom-muted">Minimum level</span>
+              <select
+                v-model="settings.emailErrorNotifyMinLevel"
+                class="bg-wecom-surface text-wecom-text text-sm rounded px-2 py-1 border border-wecom-border/30"
+                @change="saveEmailSettings"
+              >
+                <option value="ERROR">ERROR</option>
+                <option value="CRITICAL">CRITICAL</option>
+              </select>
+            </div>
+
+            <!-- Rate Limit -->
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-wecom-muted">Rate limit (min)</span>
+              <input
+                v-model.number="settings.emailErrorRateLimitMinutes"
+                type="number"
+                min="5"
+                max="1440"
+                class="w-20 bg-wecom-surface text-wecom-text text-sm rounded px-2 py-1 border border-wecom-border/30 text-right"
+                @change="saveEmailSettings"
+              />
             </div>
           </div>
 

@@ -149,6 +149,7 @@ def init_logging(
     log_dir: Path | None = None,
     console: bool = True,
     serial: str | None = None,  # 新增：设备序列号，用于多进程日志隔离
+    error_notification: bool = False,  # 启用错误邮件通知 sink
 ) -> None:
     """
     初始化日志配置（支持主进程和子进程）
@@ -214,6 +215,16 @@ def init_logging(
         )
 
     _initialized = True
+
+    # Install error-notification sink if requested (subprocess convenience)
+    if error_notification:
+        try:
+            from wecom_automation.services.notification.loguru_sink import install_error_notification_sink
+
+            install_error_notification_sink()
+            print("[logging] Error notification sink installed")
+        except Exception as e:
+            print(f"[logging] Error notification sink install failed: {e}")
 
 
 def add_device_sink(

@@ -154,6 +154,9 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     (SettingCategory.EMAIL.value, "receiver_email", ValueType.STRING.value, "", "收件人邮箱", False),
     (SettingCategory.EMAIL.value, "notify_on_voice", ValueType.BOOLEAN.value, True, "语音消息通知", False),
     (SettingCategory.EMAIL.value, "notify_on_human_request", ValueType.BOOLEAN.value, True, "转人工通知", False),
+    (SettingCategory.EMAIL.value, "notify_on_error", ValueType.BOOLEAN.value, False, "系统错误邮件通知", False),
+    (SettingCategory.EMAIL.value, "error_notify_min_level", ValueType.STRING.value, "ERROR", "错误通知最低日志级别 (ERROR/CRITICAL)", False),
+    (SettingCategory.EMAIL.value, "error_rate_limit_minutes", ValueType.INT.value, 30, "相同错误邮件最小间隔(分钟)", False),
     # ============================================================================
     # Sidecar Settings
     # ============================================================================
@@ -369,6 +372,9 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "emailReceiverEmail": (SettingCategory.EMAIL.value, "receiver_email"),
     "emailNotifyOnVoice": (SettingCategory.EMAIL.value, "notify_on_voice"),
     "emailNotifyOnHumanRequest": (SettingCategory.EMAIL.value, "notify_on_human_request"),
+    "emailNotifyOnError": (SettingCategory.EMAIL.value, "notify_on_error"),
+    "emailErrorNotifyMinLevel": (SettingCategory.EMAIL.value, "error_notify_min_level"),
+    "emailErrorRateLimitMinutes": (SettingCategory.EMAIL.value, "error_rate_limit_minutes"),
     # Sidecar
     "sendViaSidecar": (SettingCategory.SIDECAR.value, "send_via_sidecar"),
     "countdownSeconds": (SettingCategory.SIDECAR.value, "countdown_seconds"),

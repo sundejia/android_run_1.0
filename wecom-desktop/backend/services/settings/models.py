@@ -200,6 +200,9 @@ class EmailSettings:
     receiver_email: str = ""
     notify_on_voice: bool = True
     notify_on_human_request: bool = True
+    notify_on_error: bool = False
+    error_notify_min_level: str = "ERROR"
+    error_rate_limit_minutes: int = 30
 
 
 @dataclass
@@ -359,6 +362,9 @@ class AllSettings:
             "emailReceiverEmail": self.email.receiver_email,
             "emailNotifyOnVoice": self.email.notify_on_voice,
             "emailNotifyOnHumanRequest": self.email.notify_on_human_request,
+            "emailNotifyOnError": self.email.notify_on_error,
+            "emailErrorNotifyMinLevel": self.email.error_notify_min_level,
+            "emailErrorRateLimitMinutes": self.email.error_rate_limit_minutes,
             # Sidecar
             "sendViaSidecar": self.sidecar.send_via_sidecar,
             "countdownSeconds": self.sidecar.countdown_seconds,

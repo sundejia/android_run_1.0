@@ -54,7 +54,7 @@ def setup_logging(serial: str, debug: bool = False):
 
     # 初始化 loguru（传入 serial 参数，只写设备专属日志，避免文件锁定冲突）
     # 注意：loguru 默认输出到 stderr，这里我们需要自定义控制台输出到 stdout
-    init_logging(hostname=hostname, level=level, console=False, serial=serial)
+    init_logging(hostname=hostname, level=level, console=False, serial=serial, error_notification=True)
 
     # 手动添加 stdout handler（用于父进程捕获）
     from loguru import logger as _loguru_logger

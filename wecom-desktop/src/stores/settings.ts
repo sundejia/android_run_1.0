@@ -139,6 +139,9 @@ export type AppSettings = {
   emailReceiverEmail: string  // Receiver email address
   emailNotifyOnVoice: boolean  // Send email when user sends voice message
   emailNotifyOnHumanRequest: boolean  // Send email when user requests human agent
+  emailNotifyOnError: boolean  // Send email on system errors
+  emailErrorNotifyMinLevel: string  // Minimum log level for error notifications (ERROR/CRITICAL)
+  emailErrorRateLimitMinutes: number  // Minimum minutes between same-error emails
 
   // Dashboard monitoring settings
   dashboardEnabled: boolean  // Enable heartbeat reporting to device-dashboard
@@ -251,6 +254,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   emailReceiverEmail: '',
   emailNotifyOnVoice: true,  // Notify when user sends voice
   emailNotifyOnHumanRequest: true,  // Notify when user requests human agent
+  emailNotifyOnError: false,  // Error email notifications disabled by default
+  emailErrorNotifyMinLevel: 'ERROR',  // Notify on ERROR and above
+  emailErrorRateLimitMinutes: 30,  // 30 min between same-error emails
 
   // Dashboard monitoring defaults
   dashboardEnabled: false,  // Disabled by default

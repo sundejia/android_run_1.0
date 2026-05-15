@@ -141,6 +141,18 @@ def setup_backend_logging():
     init_logging(hostname=hostname, level="INFO", console=True)
     print(f"[startup] Logging: console; per-device file logs/{hostname}-<serial>.log from sync/realtime subprocesses")
 
+    # Install error-notification loguru sink (captures ERROR+ from all modules)
+    try:
+        from wecom_automation.services.notification.loguru_sink import install_error_notification_sink
+
+        sink_id = install_error_notification_sink()
+        if sink_id is not None:
+            print("[startup] [OK] Error notification loguru sink installed")
+        else:
+            print("[startup] [WARN] Error notification loguru sink install returned None")
+    except Exception as e:
+        print(f"[startup] [WARN] Error notification sink skipped: {e}")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -313,6 +325,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Error notification middleware — catches unhandled 5xx and dispatches email
+try:
+    from services.error_notification_middleware import ErrorNotificationMiddleware
+    app.add_middleware(ErrorNotificationMiddleware)
+except Exception:
+    pass  # non-fatal: middleware is best-effort
 
 # Include routers
 app.include_router(avatars.router, prefix="/avatars", tags=["avatars"])
