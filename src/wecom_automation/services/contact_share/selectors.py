@@ -33,19 +33,24 @@ ATTACH_DESC_PATTERNS: tuple[str, ...] = ("更多功能", "more functions", "more
 #   * "ahe": legacy (validated 1080x2340 + older 720 builds)
 #   * "aij": validated WeCom Android 720x1612, 2026-05-06 build
 #           (captured from contact_share_dump on the live device)
+#   * "agf": validated WeCom Android 1080x2400, 2026-05-15 build
+#           (captured from contact_share_dump_20260515_205404_*_attach_button.json;
+#            panel was open but previous selectors missed it, causing 16 consecutive
+#            fail_attach_button_state_check errors)
 # Append-only so older fleet devices keep working.
-ATTACH_GRID_RESOURCE_PATTERNS: tuple[str, ...] = ("ahe", "aij")
+ATTACH_GRID_RESOURCE_PATTERNS: tuple[str, ...] = ("ahe", "aij", "agf")
 
 # ── Attachment menu item LABELS (the visible text node in each cell) ──
 # All attach-panel item cells share one resourceId for their label TextView.
 # Like the GridView, this drifts between builds:
 #   * "aha": legacy
 #   * "aif": validated WeCom Android 720x1612, 2026-05-06 build
+#   * "agb": validated WeCom Android 1080x2400, 2026-05-15 build
 # This is used for *page-state recognition only* (count ≥ N tells you the
 # attach panel really opened). Do NOT add it to CARD_RESOURCE_PATTERNS —
 # every item shares this id, so substring matching it would tap the wrong
 # cell. Selecting Contact Card must still go through CARD_TEXT_PATTERNS.
-ATTACH_ITEM_RESOURCE_PATTERNS: tuple[str, ...] = ("aha", "aif")
+ATTACH_ITEM_RESOURCE_PATTERNS: tuple[str, ...] = ("aha", "aif", "agb")
 
 # ── "Contact Card" item in attachment menu page 2 ────────────────
 CARD_TEXT_PATTERNS: tuple[str, ...] = ("Contact Card", "名片", "Personal Card")
