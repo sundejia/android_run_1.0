@@ -123,7 +123,6 @@ class GeneralSettings:
     log_upload_enabled: bool = False
     log_upload_time: str = "02:00"
     log_upload_url: str = ""
-    log_upload_token: str = ""
     image_server_ip: str = ""
     image_upload_enabled: bool = True
     image_review_timeout_seconds: int = 40
@@ -315,7 +314,6 @@ class AllSettings:
             "logUploadEnabled": self.general.log_upload_enabled,
             "logUploadTime": self.general.log_upload_time,
             "logUploadUrl": self.general.log_upload_url,
-            "logUploadToken": self.general.log_upload_token,
             "imageServerIp": self.general.image_server_ip,
             "imageUploadEnabled": self.general.image_upload_enabled,
             "imageReviewTimeoutSeconds": self.general.image_review_timeout_seconds,

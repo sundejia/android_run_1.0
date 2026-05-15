@@ -61,7 +61,6 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     ),
     (SettingCategory.GENERAL.value, "log_upload_time", ValueType.STRING.value, "02:00", "日志每日上传时间", False),
     (SettingCategory.GENERAL.value, "log_upload_url", ValueType.STRING.value, "", "日志上传平台地址", False),
-    (SettingCategory.GENERAL.value, "log_upload_token", ValueType.STRING.value, "", "日志上传鉴权令牌", True),
     (SettingCategory.GENERAL.value, "image_server_ip", ValueType.STRING.value, "http://localhost:8080", "图片审核服务器地址（指向 welike-platform gateway）", False),
     (
         SettingCategory.GENERAL.value,
@@ -325,7 +324,6 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "logUploadEnabled": (SettingCategory.GENERAL.value, "log_upload_enabled"),
     "logUploadTime": (SettingCategory.GENERAL.value, "log_upload_time"),
     "logUploadUrl": (SettingCategory.GENERAL.value, "log_upload_url"),
-    "logUploadToken": (SettingCategory.GENERAL.value, "log_upload_token"),
     "imageServerIp": (SettingCategory.GENERAL.value, "image_server_ip"),
     "imageUploadEnabled": (SettingCategory.GENERAL.value, "image_upload_enabled"),
     "imageReviewTimeoutSeconds": (SettingCategory.GENERAL.value, "image_review_timeout_seconds"),

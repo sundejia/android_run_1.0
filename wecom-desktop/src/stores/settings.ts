@@ -67,7 +67,6 @@ export type AppSettings = {
   logUploadEnabled: boolean
   logUploadTime: string
   logUploadUrl: string
-  logUploadToken: string
   lowSpecMode: boolean
   
   // Sync settings
@@ -198,7 +197,6 @@ export const DEFAULT_SETTINGS: AppSettings = {
   logUploadEnabled: false,
   logUploadTime: '02:00',
   logUploadUrl: '',
-  logUploadToken: '',
   lowSpecMode: false,
   timingMultiplier: 1.0,
   autoPlaceholder: true,
@@ -396,7 +394,6 @@ export const useSettingsStore = defineStore('settings', () => {
             log_upload_enabled: settings.value.logUploadEnabled,
             log_upload_time: settings.value.logUploadTime,
             log_upload_url: settings.value.logUploadUrl,
-            log_upload_token: settings.value.logUploadToken,
             // AI Settings
             ai_server_url: settings.value.aiServerUrl,
             system_prompt: settings.value.systemPrompt,  // 只保存自定义提示词（不含预设）

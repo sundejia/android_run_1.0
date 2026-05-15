@@ -34,16 +34,26 @@ class _DummyAsyncClient:
     async def __aexit__(self, exc_type, exc, tb):
         return None
 
-    async def post(self, url, *, headers=None, data=None, files=None):
+    async def post(self, url, *, data=None, files=None):
         self.post_calls.append(
             {
                 "url": url,
-                "headers": headers,
                 "data": data,
                 "files": files,
             }
         )
-        return _DummyResponse({"success": True, "stored_path": "/tmp/upload.bin"})
+        return _DummyResponse({
+            "success": True,
+            "data": {
+                "success": True,
+                "upload_id": "test-uuid",
+                "filename": "sample.log",
+                "stored_path": "/tmp/upload.bin",
+                "size": 5,
+                "checksum": "abc123",
+                "message": "uploaded",
+            },
+        })
 
 
 @pytest.mark.asyncio
@@ -63,7 +73,6 @@ async def test_log_upload_client_sends_person_name(monkeypatch, tmp_path):
     client = LogUploadClient(timeout_seconds=5.0)
     result = await client.upload_file(
         base_url="http://localhost:8085",
-        token="secret-token",
         device_id="device-123",
         hostname="host-a",
         person_name="张三",
@@ -79,8 +88,8 @@ async def test_log_upload_client_sends_person_name(monkeypatch, tmp_path):
 
     payload = created_clients[0].post_calls[0]
     assert payload["url"] == "http://localhost:8085/api/android-logs/upload"
-    assert payload["headers"] == {"X-Upload-Token": "secret-token"}
     assert payload["data"]["device_id"] == "device-123"
     assert payload["data"]["hostname"] == "host-a"
     assert payload["data"]["person_name"] == "张三"
     assert payload["data"]["upload_kind"] == "runtime-log"
+    assert result["data"]["stored_path"] == "/tmp/upload.bin"
