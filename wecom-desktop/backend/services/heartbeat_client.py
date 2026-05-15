@@ -304,7 +304,11 @@ class HeartbeatClient:
         seen: dict[str, dict] = {}
         store = get_telemetry_store()
 
-        # DeviceManager (sync processes)
+        # ADB-connected devices (base layer)
+        for serial, info in self._discover_adb_devices().items():
+            seen[serial] = info
+
+        # DeviceManager (sync processes) — enrich existing or add new
         if self._device_manager:
             try:
                 for serial, proc in getattr(self._device_manager, "_processes", {}).items():
@@ -313,14 +317,18 @@ class HeartbeatClient:
                         if hasattr(proc, "returncode")
                         else (proc.poll() is None if hasattr(proc, "poll") else False)
                     )
-                    seen[serial] = {
-                        "serial": serial,
-                        "name": serial,
-                        "status": "online",
-                        "running": True,
-                        "sync_running": alive,
-                        "followup_running": False,
-                    }
+                    if serial in seen:
+                        seen[serial]["sync_running"] = alive
+                        seen[serial]["running"] = alive
+                    else:
+                        seen[serial] = {
+                            "serial": serial,
+                            "name": serial,
+                            "status": "online",
+                            "running": True,
+                            "sync_running": alive,
+                            "followup_running": False,
+                        }
             except Exception:
                 pass
 
@@ -335,7 +343,7 @@ class HeartbeatClient:
                     )
                     if serial in seen:
                         seen[serial]["followup_running"] = alive
-                        seen[serial]["running"] = seen[serial]["sync_running"] or alive
+                        seen[serial]["running"] = seen[serial].get("sync_running", False) or alive
                     else:
                         seen[serial] = {
                             "serial": serial,
@@ -356,3 +364,32 @@ class HeartbeatClient:
             devices.append(info)
 
         return devices
+
+    def _discover_adb_devices(self) -> dict[str, dict]:
+        """Run adb devices synchronously and return serial -> base info dict."""
+        import shutil
+        import subprocess
+
+        result: dict[str, dict] = {}
+        adb = shutil.which("adb")
+        if not adb:
+            return result
+        try:
+            proc = subprocess.run(
+                [adb, "devices"], capture_output=True, text=True, timeout=5,
+            )
+            for line in proc.stdout.strip().splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == "device":
+                    serial = parts[0]
+                    result[serial] = {
+                        "serial": serial,
+                        "name": serial,
+                        "status": "online",
+                        "running": False,
+                        "sync_running": False,
+                        "followup_running": False,
+                    }
+        except Exception:
+            pass
+        return result
