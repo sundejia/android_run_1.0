@@ -11,6 +11,7 @@ errors, Starlette routing errors, etc.).
 from __future__ import annotations
 
 import logging
+import time
 import traceback
 from typing import Any, Callable, MutableMapping
 
@@ -19,6 +20,9 @@ from starlette.responses import Response, StreamingResponse
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 logger = logging.getLogger(__name__)
+
+# Re-read settings from DB every 5 minutes so runtime changes take effect.
+_REFRESH_INTERVAL = 300
 
 
 class ErrorNotificationMiddleware:
@@ -84,15 +88,18 @@ class ErrorNotificationMiddleware:
 
 
 # ---------------------------------------------------------------------------
-# Lazy service accessor
+# Lazy service accessor with periodic refresh
 # ---------------------------------------------------------------------------
 
 _service_instance: Any | None = None
+_last_refresh: float = 0
 
 
 def _get_service():
-    global _service_instance
-    if _service_instance is not None:
+    global _service_instance, _last_refresh
+
+    now = time.monotonic()
+    if _service_instance is not None and (now - _last_refresh) < _REFRESH_INTERVAL:
         return _service_instance
 
     try:
@@ -104,6 +111,7 @@ def _get_service():
         settings_svc = get_settings_service()
         email_settings = settings_svc.get_email_settings()
         _service_instance = ErrorNotificationService.from_settings(email_settings)
+        _last_refresh = now
         return _service_instance
     except Exception:
         return None

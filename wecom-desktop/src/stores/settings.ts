@@ -419,6 +419,17 @@ export const useSettingsStore = defineStore('settings', () => {
             // Generic
             timezone: settings.value.timezone,
             email_enabled: settings.value.emailEnabled,
+            email_smtp_server: settings.value.emailSmtpServer,
+            email_smtp_port: settings.value.emailSmtpPort,
+            email_sender_email: settings.value.emailSenderEmail,
+            email_sender_password: settings.value.emailSenderPassword,
+            email_sender_name: settings.value.emailSenderName,
+            email_receiver_email: settings.value.emailReceiverEmail,
+            email_notify_on_voice: settings.value.emailNotifyOnVoice,
+            email_notify_on_human_request: settings.value.emailNotifyOnHumanRequest,
+            email_notify_on_error: settings.value.emailNotifyOnError,
+            email_error_notify_min_level: settings.value.emailErrorNotifyMinLevel,
+            email_error_rate_limit_minutes: settings.value.emailErrorRateLimitMinutes,
 
             // Dashboard
             dashboard_enabled: settings.value.dashboardEnabled,

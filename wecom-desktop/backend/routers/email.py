@@ -178,10 +178,30 @@ class EmailSettings(BaseModel):
     receiver_email: str = ""
     notify_on_voice: bool = True
     notify_on_human_request: bool = True
+    notify_on_error: bool = False
+    error_notify_min_level: str = "ERROR"
+    error_rate_limit_minutes: int = 30
 
 
 # Import the settings service
 from services.settings import get_settings_service, SettingCategory
+
+
+def _reset_notification_services() -> None:
+    """Reset cached notification services so setting changes take effect immediately."""
+    try:
+        from wecom_automation.services.notification.loguru_sink import _reset_service
+        _reset_service()
+    except Exception:
+        pass
+
+    try:
+        from services.error_notification_middleware import _get_service
+        import services.error_notification_middleware as mod
+        mod._service_instance = None
+        mod._last_refresh = 0
+    except Exception:
+        pass
 
 
 @router.get("/settings")
@@ -200,6 +220,9 @@ async def get_email_settings():
             "receiver_email": email.receiver_email,
             "notify_on_voice": email.notify_on_voice,
             "notify_on_human_request": email.notify_on_human_request,
+            "notify_on_error": email.notify_on_error,
+            "error_notify_min_level": email.error_notify_min_level,
+            "error_rate_limit_minutes": email.error_rate_limit_minutes,
         }
     except Exception:
         return EmailSettings().model_dump()
@@ -212,6 +235,9 @@ async def save_email_settings(settings: EmailSettings):
         service = get_settings_service()
         data = settings.model_dump()
         service.set_category(SettingCategory.EMAIL.value, data, "api")
+
+        # Reset cached notification services so new settings take effect immediately
+        _reset_notification_services()
 
         return {"success": True, "message": "Settings saved"}
     except Exception as e:

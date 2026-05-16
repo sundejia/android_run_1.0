@@ -97,6 +97,17 @@ class UpdateSettingsRequest(BaseModel):
     log_upload_url: Optional[str] = None
     timezone: Optional[str] = None
     email_enabled: Optional[bool] = None
+    email_smtp_server: Optional[str] = None
+    email_smtp_port: Optional[int] = None
+    email_sender_email: Optional[str] = None
+    email_sender_password: Optional[str] = None
+    email_sender_name: Optional[str] = None
+    email_receiver_email: Optional[str] = None
+    email_notify_on_voice: Optional[bool] = None
+    email_notify_on_human_request: Optional[bool] = None
+    email_notify_on_error: Optional[bool] = None
+    email_error_notify_min_level: Optional[str] = None
+    email_error_rate_limit_minutes: Optional[int] = None
     image_upload_enabled: Optional[bool] = None
     image_server_ip: Optional[str] = None
     image_review_timeout_seconds: Optional[int] = None
@@ -380,6 +391,28 @@ async def update_settings(request: UpdateSettingsRequest):
             pass
     if request.email_enabled is not None:
         updates["emailEnabled"] = request.email_enabled
+    if request.email_smtp_server is not None:
+        updates["emailSmtpServer"] = request.email_smtp_server.strip()
+    if request.email_smtp_port is not None:
+        updates["emailSmtpPort"] = request.email_smtp_port
+    if request.email_sender_email is not None:
+        updates["emailSenderEmail"] = request.email_sender_email.strip()
+    if request.email_sender_password is not None:
+        updates["emailSenderPassword"] = request.email_sender_password
+    if request.email_sender_name is not None:
+        updates["emailSenderName"] = request.email_sender_name.strip()
+    if request.email_receiver_email is not None:
+        updates["emailReceiverEmail"] = request.email_receiver_email.strip()
+    if request.email_notify_on_voice is not None:
+        updates["emailNotifyOnVoice"] = request.email_notify_on_voice
+    if request.email_notify_on_human_request is not None:
+        updates["emailNotifyOnHumanRequest"] = request.email_notify_on_human_request
+    if request.email_notify_on_error is not None:
+        updates["emailNotifyOnError"] = request.email_notify_on_error
+    if request.email_error_notify_min_level is not None:
+        updates["emailErrorNotifyMinLevel"] = request.email_error_notify_min_level
+    if request.email_error_rate_limit_minutes is not None:
+        updates["emailErrorRateLimitMinutes"] = request.email_error_rate_limit_minutes
     if request.image_upload_enabled is not None:
         updates["imageUploadEnabled"] = request.image_upload_enabled
     if request.image_server_ip is not None:
@@ -401,6 +434,23 @@ async def update_settings(request: UpdateSettingsRequest):
 
     # Update in database
     service.update_from_frontend_partial(updates, "frontend")
+
+    # If email settings changed, reset cached notification services
+    _has_email_change = any(
+        k.startswith("email") for k in updates
+    )
+    if _has_email_change:
+        try:
+            from wecom_automation.services.notification.loguru_sink import _reset_service
+            _reset_service()
+        except Exception:
+            pass
+        try:
+            import services.error_notification_middleware as _mid
+            _mid._service_instance = None
+            _mid._last_refresh = 0
+        except Exception:
+            pass
 
     # If dashboard settings changed, reload the heartbeat client
     if request.dashboard_enabled is not None or request.dashboard_url is not None:
