@@ -18,6 +18,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+import re
 from typing import Any
 
 # Add project root to path for imports
@@ -573,6 +574,13 @@ class ResponseDetector:
         """重置取消标志"""
         self._cancel_requested = False
 
+    @staticmethod
+    def _emit_dash_event(kind: str, serial: str, **payload) -> None:
+        """Print [DASHEVENT] marker for parent process to pick up."""
+        import json as _json
+        line = _json.dumps({"kind": kind, "serial": serial, **payload}, ensure_ascii=False)
+        print(f"[DASHEVENT] {line}", flush=True)
+
     def _clean_expired_click_cooldowns(self) -> None:
         """Remove expired entries from the click-failure cooldown map.
 
@@ -1034,6 +1042,7 @@ class ResponseDetector:
 
                 if not initial_unread:
                     self._logger.info(f"[{serial}] ✅ No red dot users found")
+                    self._emit_dash_event("red_dot_update", serial, pending=0, current_target=None)
                     self._logger.info(f"[{serial}] 🔄 Triggering one followup check in idle state")
                     try:
                         await self._try_followup_if_idle(wecom, serial, client)
@@ -1095,6 +1104,9 @@ class ResponseDetector:
                     self._logger.info(
                         f"[{serial}] [{process_count}] 🔴 Processing: {user_name} (queue: {len(user_queue)} remaining)"
                     )
+                    self._emit_dash_event("red_dot_update", serial,
+                                          pending=len(user_queue) + 1,
+                                          current_target=user_name)
 
                     try:
                         # Process this user with interactive wait
@@ -1225,6 +1237,15 @@ class ResponseDetector:
         return len(text) > 18
 
     @classmethod
+    def _preview_looks_more_like_name(cls, name: str, preview: str) -> bool:
+        """Detect likely name/preview swap: preview looks like a customer name while name does not."""
+        if re.match(r"^B\d{8,}", preview) and not re.match(r"^B\d{8,}", name):
+            return True
+        if re.match(r"^\d{4,}", preview) and not re.match(r"^\d{4,}", name):
+            return True
+        return False
+
+    @classmethod
     def _is_low_confidence_priority_user(cls, user: Any) -> bool:
         """Guard priority ingestion against parser-produced fake targets.
 
@@ -1241,9 +1262,19 @@ class ResponseDetector:
             return False
         if unread_count <= 0:
             return False
-        if preview not in (None, "", "None"):
-            return False
-        return cls._looks_like_low_confidence_message_name(name)
+
+        name_suspicious = cls._looks_like_low_confidence_message_name(name)
+
+        if preview in (None, "", "None") and name_suspicious:
+            return True
+
+        # Cross-field swap check: name is message-like AND preview looks
+        # more like a customer name (e.g., B-prefixed ID) → likely swap.
+        if name_suspicious and preview and preview not in ("", "None"):
+            if cls._preview_looks_more_like_name(name, preview):
+                return True
+
+        return False
 
     async def _detect_first_page_unread(self, wecom, serial: str) -> list[Any]:
         """
@@ -1728,6 +1759,9 @@ class ResponseDetector:
                         self._ai_circuit_breaker.record_success()
                     else:
                         self._ai_circuit_breaker.record_failure()
+                    self._emit_dash_event("ai_request", serial,
+                                          result="ok" if reply else "error",
+                                          latency_ms=round(ai_generation_time))
 
                 if reply:
                     self._logger.info(f"[{serial}]    Sending reply: {reply[:40]}...")
@@ -3318,6 +3352,13 @@ class ResponseDetector:
 
         # 执行补刀
         self._logger.info(f"[{serial}]    🚀 开始执行补刀...")
+
+        # Emit followup_started to dashboard
+        import uuid as _uuid
+        _batch_id = str(_uuid.uuid4())[:8]
+        self._emit_dash_event("followup_started", serial,
+                              batch_id=_batch_id, total_targets=pending_count)
+
         followup_result = await queue_manager.execute_pending_followups(
             skip_check=skip_check,
             ai_reply_callback=ai_reply_callback if settings.use_ai_reply else None,
@@ -3335,7 +3376,7 @@ class ResponseDetector:
         self._logger.info(f"[{serial}] " + "║" + f"  skipped: {followup_result.get('skipped', 0):<47}" + "║")
         self._logger.info(f"[{serial}] " + "╚" + "═" * 58 + "╝")
 
-        # 输出详细结果
+        # Emit per-target results + followup_finished to dashboard
         details = followup_result.get("details", [])
         if details:
             self._logger.info(f"[{serial}]    详细结果:")
@@ -3350,6 +3391,17 @@ class ResponseDetector:
                 )
                 if detail.get("error"):
                     self._logger.info(f"[{serial}]       错误: {detail.get('error')[:50]}")
+                self._emit_dash_event("followup_result", serial,
+                                      batch_id=_batch_id,
+                                      target=detail.get("customer", ""),
+                                      success=detail.get("status") == "success",
+                                      error=detail.get("error"))
+
+        self._emit_dash_event("followup_finished", serial,
+                              batch_id=_batch_id,
+                              success_count=followup_result.get("success", 0),
+                              fail_count=followup_result.get("failed", 0),
+                              skipped_count=followup_result.get("skipped", 0))
 
         self._logger.info(f"[{serial}] " + "─" * 60)
 

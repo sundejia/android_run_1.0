@@ -408,6 +408,11 @@ class DeviceManager:
                 if not text:
                     continue
 
+                # Forward [DASHEVENT] markers to dashboard emitter
+                if text.startswith("[DASHEVENT] "):
+                    self._forward_dash_event(text[12:])
+                    continue
+
                 # Parse log level from output
                 # Default to INFO instead of ERROR for stderr - Python logging uses stderr by default
                 level = "INFO"
@@ -431,6 +436,20 @@ class DeviceManager:
             pass
         except Exception as e:
             await self._broadcast_log(serial, "ERROR", f"Output read error: {e}")
+
+    @staticmethod
+    def _forward_dash_event(json_str: str) -> None:
+        """Parse a [DASHEVENT] JSON line and forward to DashboardEventEmitter."""
+        try:
+            import json
+            data = json.loads(json_str)
+            kind = data.pop("kind", None)
+            serial = data.pop("serial", None)
+            if kind and serial:
+                from services.dashboard_events import get_dashboard_emitter
+                get_dashboard_emitter().emit(kind, serial, data)
+        except Exception:
+            pass
 
     async def _parse_and_update_state(self, serial: str, message: str, level: str):
         """Parse log messages to update sync state with monotonic progress.
@@ -842,6 +861,13 @@ class DeviceManager:
             self._sync_states[serial].message = "Sync started"
             await self._broadcast_status(serial)
 
+            # Notify dashboard
+            try:
+                from services.dashboard_events import get_dashboard_emitter
+                get_dashboard_emitter().emit("device_launched", serial, {"source": "sync"})
+            except Exception:
+                pass
+
             # Windows: Create job object for pause/resume support
             if platform.system() == "Windows":
                 try:
@@ -1073,6 +1099,13 @@ class DeviceManager:
                 await self._broadcast_status(serial)
 
             await self._broadcast_log(serial, "INFO", "Sync stopped")
+
+            # Notify dashboard
+            try:
+                from services.dashboard_events import get_dashboard_emitter
+                get_dashboard_emitter().emit("device_stopped", serial, {"source": "sync"})
+            except Exception:
+                pass
 
             # Clean up
             if serial in self._processes:

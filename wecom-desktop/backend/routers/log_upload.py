@@ -22,7 +22,6 @@ class LogUploadStatusResponse(BaseModel):
     person_name: str
     upload_time: str
     upload_url: str
-    has_token: bool
     timezone: str
     is_uploading: bool
     config_error: str | None = None

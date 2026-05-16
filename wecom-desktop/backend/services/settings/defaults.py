@@ -61,8 +61,7 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     ),
     (SettingCategory.GENERAL.value, "log_upload_time", ValueType.STRING.value, "02:00", "日志每日上传时间", False),
     (SettingCategory.GENERAL.value, "log_upload_url", ValueType.STRING.value, "", "日志上传平台地址", False),
-    (SettingCategory.GENERAL.value, "log_upload_token", ValueType.STRING.value, "", "日志上传鉴权令牌", True),
-    (SettingCategory.GENERAL.value, "image_server_ip", ValueType.STRING.value, "", "图片审核服务器地址", False),
+    (SettingCategory.GENERAL.value, "image_server_ip", ValueType.STRING.value, "http://localhost:8080", "图片审核服务器地址（指向 welike-platform gateway）", False),
     (
         SettingCategory.GENERAL.value,
         "image_upload_enabled",
@@ -96,8 +95,8 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
         SettingCategory.AI_REPLY.value,
         "server_url",
         ValueType.STRING.value,
-        "http://localhost:8000",
-        "AI 服务器地址",
+        "http://localhost:8080",
+        "AI 服务器地址（指向 welike-platform gateway）",
         False,
     ),
     (SettingCategory.AI_REPLY.value, "reply_timeout", ValueType.INT.value, 10, "AI 回复超时(秒)", False),
@@ -154,6 +153,9 @@ SETTING_DEFINITIONS: list[tuple[str, str, str, Any, str, bool]] = [
     (SettingCategory.EMAIL.value, "receiver_email", ValueType.STRING.value, "", "收件人邮箱", False),
     (SettingCategory.EMAIL.value, "notify_on_voice", ValueType.BOOLEAN.value, True, "语音消息通知", False),
     (SettingCategory.EMAIL.value, "notify_on_human_request", ValueType.BOOLEAN.value, True, "转人工通知", False),
+    (SettingCategory.EMAIL.value, "notify_on_error", ValueType.BOOLEAN.value, False, "系统错误邮件通知", False),
+    (SettingCategory.EMAIL.value, "error_notify_min_level", ValueType.STRING.value, "ERROR", "错误通知最低日志级别 (ERROR/CRITICAL)", False),
+    (SettingCategory.EMAIL.value, "error_rate_limit_minutes", ValueType.INT.value, 30, "相同错误邮件最小间隔(分钟)", False),
     # ============================================================================
     # Sidecar Settings
     # ============================================================================
@@ -328,7 +330,6 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "logUploadEnabled": (SettingCategory.GENERAL.value, "log_upload_enabled"),
     "logUploadTime": (SettingCategory.GENERAL.value, "log_upload_time"),
     "logUploadUrl": (SettingCategory.GENERAL.value, "log_upload_url"),
-    "logUploadToken": (SettingCategory.GENERAL.value, "log_upload_token"),
     "imageServerIp": (SettingCategory.GENERAL.value, "image_server_ip"),
     "imageUploadEnabled": (SettingCategory.GENERAL.value, "image_upload_enabled"),
     "imageReviewTimeoutSeconds": (SettingCategory.GENERAL.value, "image_review_timeout_seconds"),
@@ -375,6 +376,9 @@ FRONTEND_KEY_MAPPING: dict[str, tuple[str, str]] = {
     "emailReceiverEmail": (SettingCategory.EMAIL.value, "receiver_email"),
     "emailNotifyOnVoice": (SettingCategory.EMAIL.value, "notify_on_voice"),
     "emailNotifyOnHumanRequest": (SettingCategory.EMAIL.value, "notify_on_human_request"),
+    "emailNotifyOnError": (SettingCategory.EMAIL.value, "notify_on_error"),
+    "emailErrorNotifyMinLevel": (SettingCategory.EMAIL.value, "error_notify_min_level"),
+    "emailErrorRateLimitMinutes": (SettingCategory.EMAIL.value, "error_rate_limit_minutes"),
     # Sidecar
     "sendViaSidecar": (SettingCategory.SIDECAR.value, "send_via_sidecar"),
     "countdownSeconds": (SettingCategory.SIDECAR.value, "countdown_seconds"),

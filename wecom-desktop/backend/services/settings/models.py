@@ -123,7 +123,6 @@ class GeneralSettings:
     log_upload_enabled: bool = False
     log_upload_time: str = "02:00"
     log_upload_url: str = ""
-    log_upload_token: str = ""
     image_server_ip: str = ""
     image_upload_enabled: bool = True
     image_review_timeout_seconds: int = 40
@@ -200,6 +199,9 @@ class EmailSettings:
     receiver_email: str = ""
     notify_on_voice: bool = True
     notify_on_human_request: bool = True
+    notify_on_error: bool = False
+    error_notify_min_level: str = "ERROR"
+    error_rate_limit_minutes: int = 30
 
 
 @dataclass
@@ -312,7 +314,6 @@ class AllSettings:
             "logUploadEnabled": self.general.log_upload_enabled,
             "logUploadTime": self.general.log_upload_time,
             "logUploadUrl": self.general.log_upload_url,
-            "logUploadToken": self.general.log_upload_token,
             "imageServerIp": self.general.image_server_ip,
             "imageUploadEnabled": self.general.image_upload_enabled,
             "imageReviewTimeoutSeconds": self.general.image_review_timeout_seconds,
@@ -359,6 +360,9 @@ class AllSettings:
             "emailReceiverEmail": self.email.receiver_email,
             "emailNotifyOnVoice": self.email.notify_on_voice,
             "emailNotifyOnHumanRequest": self.email.notify_on_human_request,
+            "emailNotifyOnError": self.email.notify_on_error,
+            "emailErrorNotifyMinLevel": self.email.error_notify_min_level,
+            "emailErrorRateLimitMinutes": self.email.error_rate_limit_minutes,
             # Sidecar
             "sendViaSidecar": self.sidecar.send_via_sidecar,
             "countdownSeconds": self.sidecar.countdown_seconds,

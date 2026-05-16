@@ -285,6 +285,13 @@ class RealtimeReplyManager:
             self._states[serial].message = "Follow-up running"
             await self._broadcast_status(serial)
 
+            # Notify dashboard
+            try:
+                from services.dashboard_events import get_dashboard_emitter
+                get_dashboard_emitter().emit("device_launched", serial, {"source": "followup"})
+            except Exception:
+                pass
+
             # Windows: 创建 Job Object
             if platform.system() == "Windows":
                 try:
@@ -383,6 +390,13 @@ class RealtimeReplyManager:
                 await self._broadcast_status(serial)
 
             await self._broadcast_log(serial, "INFO", "Follow-up stopped")
+
+            # Notify dashboard
+            try:
+                from services.dashboard_events import get_dashboard_emitter
+                get_dashboard_emitter().emit("device_stopped", serial, {"source": "followup"})
+            except Exception:
+                pass
 
             # Windows: 清理 Job Object
             if platform.system() == "Windows":
@@ -622,6 +636,11 @@ class RealtimeReplyManager:
                 if not text:
                     continue
 
+                # Forward [DASHEVENT] markers to dashboard emitter
+                if text.startswith("[DASHEVENT] "):
+                    self._forward_dash_event(text[12:])
+                    continue
+
                 # 解析日志级别
                 level = "INFO"
                 match = re.match(r"[\d:]+\s*\|\s*(\w+)\s*\|\s*(.+)", text)
@@ -641,6 +660,20 @@ class RealtimeReplyManager:
             pass
         except Exception as e:
             await self._broadcast_log(serial, "ERROR", f"Output read error: {e}")
+
+    @staticmethod
+    def _forward_dash_event(json_str: str) -> None:
+        """Parse a [DASHEVENT] JSON line and forward to DashboardEventEmitter."""
+        try:
+            import json
+            data = json.loads(json_str)
+            kind = data.pop("kind", None)
+            serial = data.pop("serial", None)
+            if kind and serial:
+                from services.dashboard_events import get_dashboard_emitter
+                get_dashboard_emitter().emit(kind, serial, data)
+        except Exception:
+            pass
 
     async def _parse_and_update_state(self, serial: str, message: str, level: str):
         """解析日志更新状态

@@ -88,6 +88,7 @@ from routers import (
     streamers,
     sync,
     sync_bridge,
+    system,
     webhooks,
 )
 from services.conversation_storage import DEVICE_STORAGE_ROOT, get_control_db_path, list_device_conversation_targets
@@ -140,6 +141,18 @@ def setup_backend_logging():
     print(f"[startup] Initializing logging for hostname: {hostname}")
     init_logging(hostname=hostname, level="INFO", console=True)
     print(f"[startup] Logging: console; per-device file logs/{hostname}-<serial>.log from sync/realtime subprocesses")
+
+    # Install error-notification loguru sink (captures ERROR+ from all modules)
+    try:
+        from wecom_automation.services.notification.loguru_sink import install_error_notification_sink
+
+        sink_id = install_error_notification_sink()
+        if sink_id is not None:
+            print("[startup] [OK] Error notification loguru sink installed")
+        else:
+            print("[startup] [WARN] Error notification loguru sink install returned None")
+    except Exception as e:
+        print(f"[startup] [WARN] Error notification sink skipped: {e}")
 
 
 @asynccontextmanager
@@ -258,12 +271,16 @@ async def lifespan(app: FastAPI):
 
     # Start heartbeat client if dashboard is configured
     try:
+        from routers.sync import get_device_manager
         from services.dashboard_service import get_dashboard_service
+        from services.realtime_reply_manager import get_realtime_reply_manager
         from services.settings.service import get_settings_service
 
         settings_svc = get_settings_service()
         dashboard_settings = settings_svc.get_dashboard_settings()
-        dashboard_svc = get_dashboard_service(settings_svc)
+        dm = get_device_manager()
+        rrm = get_realtime_reply_manager()
+        dashboard_svc = get_dashboard_service(settings_svc, dm, rrm)
         await dashboard_svc.reload(
             enabled=dashboard_settings.enabled,
             url=dashboard_settings.url or "",
@@ -347,6 +364,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Error notification middleware — catches unhandled 5xx and dispatches email
+try:
+    from services.error_notification_middleware import ErrorNotificationMiddleware
+    app.add_middleware(ErrorNotificationMiddleware)
+except Exception:
+    pass  # non-fatal: middleware is best-effort
+
 # Include routers
 app.include_router(avatars.router, prefix="/avatars", tags=["avatars"])
 app.include_router(devices.router, prefix="/devices", tags=["devices"])
@@ -380,8 +404,13 @@ app.include_router(media_actions.router, prefix="/api/media-actions", tags=["med
 # Monitoring endpoints (heartbeat, AI health, process events)
 app.include_router(monitoring.router, prefix="/api/monitoring", tags=["monitoring"])
 app.include_router(webhooks.router, prefix="/api/webhooks", tags=["webhooks"])
+<<<<<<< HEAD
 # Analytics sync bridge diagnostics
 app.include_router(sync_bridge.router, tags=["sync-bridge"])
+=======
+# System operations (restart/stop WeCom app on Android)
+app.include_router(system.router)
+>>>>>>> origin/main
 
 
 @app.get("/health")

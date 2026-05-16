@@ -168,3 +168,28 @@ def test_empty_or_none_preview_is_not_a_welcome():
     for preview in ("", None):
         assert not sync_extractor._is_new_friend_welcome(preview)  # type: ignore[arg-type]
         assert not user_extractor._is_new_friend_welcome(preview)  # type: ignore[arg-type]
+
+
+# ---------------------------------------------------------------------------
+# Parity: PREVIEW_RESOURCE_ID_HINTS and NAME_RESOURCE_ID_HINTS must match
+# ---------------------------------------------------------------------------
+
+
+def test_preview_resource_id_hints_match_between_both_copies():
+    sync_hints = _sync_service_extractor().PREVIEW_RESOURCE_ID_HINTS
+    user_hints = _user_module_extractor().PREVIEW_RESOURCE_ID_HINTS
+
+    assert tuple(sync_hints) == tuple(user_hints), (
+        "PREVIEW_RESOURCE_ID_HINTS drift between sync_service.py and "
+        "user/unread_detector.py. Keep the two copies in lock-step."
+    )
+
+
+def test_name_resource_id_hints_match_between_both_copies():
+    sync_hints = _sync_service_extractor().NAME_RESOURCE_ID_HINTS
+    user_hints = _user_module_extractor().NAME_RESOURCE_ID_HINTS
+
+    assert tuple(sync_hints) == tuple(user_hints), (
+        "NAME_RESOURCE_ID_HINTS drift between sync_service.py and "
+        "user/unread_detector.py. Keep the two copies in lock-step."
+    )

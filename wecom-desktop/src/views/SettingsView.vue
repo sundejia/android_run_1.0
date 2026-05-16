@@ -139,7 +139,6 @@ async function testDashboardConnection() {
 }
 
 // Log upload
-const showLogUploadToken = ref(false)
 const logUploadLoading = ref(false)
 const logUploadResult = ref<{ success: boolean; message: string } | null>(null)
 const logUploadStatus = ref<{
@@ -150,7 +149,6 @@ const logUploadStatus = ref<{
   person_name: string
   upload_time: string
   upload_url: string
-  has_token: boolean
   timezone: string
   is_uploading: boolean
   config_error?: string | null
@@ -312,6 +310,9 @@ async function syncEmailSettings() {
         receiver_email: settings.value.emailReceiverEmail,
         notify_on_voice: settings.value.emailNotifyOnVoice,
         notify_on_human_request: settings.value.emailNotifyOnHumanRequest,
+        notify_on_error: settings.value.emailNotifyOnError,
+        error_notify_min_level: settings.value.emailErrorNotifyMinLevel,
+        error_rate_limit_minutes: settings.value.emailErrorRateLimitMinutes,
       }),
     })
   } catch (error) {
@@ -1658,6 +1659,56 @@ onMounted(async () => {
                 ></div>
               </label>
             </div>
+
+            <!-- Error Notification Toggle -->
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="text-lg">🚨</span>
+                <span class="text-sm text-wecom-muted">On system errors</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input
+                  v-model="settings.emailNotifyOnError"
+                  type="checkbox"
+                  class="sr-only peer"
+                  @change="saveEmailSettings"
+                />
+                <div
+                  class="w-9 h-5 bg-wecom-surface peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-wecom-primary"
+                ></div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Error Notification Settings (shown when enabled) -->
+          <div v-if="settings.emailNotifyOnError" class="space-y-3 bg-wecom-surface/30 rounded-lg p-4">
+            <label class="text-sm font-medium text-wecom-text">Error Notification Settings</label>
+
+            <!-- Min Log Level -->
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-wecom-muted">Minimum level</span>
+              <select
+                v-model="settings.emailErrorNotifyMinLevel"
+                class="bg-wecom-surface text-wecom-text text-sm rounded px-2 py-1 border border-wecom-border/30"
+                @change="saveEmailSettings"
+              >
+                <option value="ERROR">ERROR</option>
+                <option value="CRITICAL">CRITICAL</option>
+              </select>
+            </div>
+
+            <!-- Rate Limit -->
+            <div class="flex items-center justify-between">
+              <span class="text-sm text-wecom-muted">Rate limit (min)</span>
+              <input
+                v-model.number="settings.emailErrorRateLimitMinutes"
+                type="number"
+                min="5"
+                max="1440"
+                class="w-20 bg-wecom-surface text-wecom-text text-sm rounded px-2 py-1 border border-wecom-border/30 text-right"
+                @change="saveEmailSettings"
+              />
+            </div>
           </div>
 
           <!-- Test Email Button -->
@@ -1857,35 +1908,6 @@ onMounted(async () => {
           />
         </div>
 
-        <div class="flex items-center justify-between">
-          <div>
-            <label class="text-sm font-medium text-wecom-text">{{
-              t('settings.log_upload_token')
-            }}</label>
-            <p class="text-xs text-wecom-muted">{{ t('settings.log_upload_token_desc') }}</p>
-          </div>
-          <div class="flex items-center gap-2">
-            <input
-              v-model="settings.logUploadToken"
-              :type="showLogUploadToken ? 'text' : 'password'"
-              class="input-field w-80 text-sm font-mono"
-              placeholder="upload-token"
-              @change="saveSettings"
-            />
-            <button
-              type="button"
-              class="btn-secondary text-xs px-2"
-              @click="showLogUploadToken = !showLogUploadToken"
-            >
-              {{
-                showLogUploadToken
-                  ? t('settings.log_upload_hide_token')
-                  : t('settings.log_upload_show_token')
-              }}
-            </button>
-          </div>
-        </div>
-
         <div class="bg-wecom-surface/50 rounded-lg px-4 py-3 space-y-2">
           <div class="flex items-center justify-between">
             <span class="text-sm text-wecom-text">{{ t('settings.log_upload_scheduler') }}</span>
@@ -1967,7 +1989,7 @@ onMounted(async () => {
           </div>
           <button
             class="btn-secondary text-sm"
-            :disabled="logUploadLoading || !settings.logUploadUrl || !settings.logUploadToken"
+            :disabled="logUploadLoading || !settings.logUploadUrl"
             @click="triggerLogUploadNow"
           >
             <span v-if="logUploadLoading" class="animate-spin">⏳</span>

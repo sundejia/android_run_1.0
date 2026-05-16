@@ -21,7 +21,6 @@ class LogUploadClient:
         self,
         *,
         base_url: str,
-        token: str,
         device_id: str,
         hostname: str,
         person_name: str,
@@ -31,7 +30,6 @@ class LogUploadClient:
         file_path: Path,
     ) -> dict[str, Any]:
         url = f"{base_url.rstrip('/')}/api/android-logs/upload"
-        headers = {"X-Upload-Token": token} if token else {}
         data = {
             "device_id": device_id,
             "hostname": hostname,
@@ -46,18 +44,18 @@ class LogUploadClient:
                 with file_path.open("rb") as fh:
                     response = await client.post(
                         url,
-                        headers=headers,
                         data=data,
                         files={"file": (file_path.name, fh, "application/octet-stream")},
                     )
             response.raise_for_status()
             payload = response.json()
+            inner_data = payload.get("data", payload)
             payload_success = bool(payload.get("success", True))
             return {
                 "success": payload_success,
                 "status_code": response.status_code,
-                "data": payload,
-                "error": payload.get("error_message") if not payload_success else None,
+                "data": inner_data,
+                "error": payload.get("error") if not payload_success else None,
             }
         except httpx.HTTPStatusError as exc:
             detail = None

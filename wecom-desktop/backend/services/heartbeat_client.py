@@ -6,7 +6,8 @@ import asyncio
 import json
 import logging
 import platform
-from datetime import datetime, timezone
+import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -20,18 +21,21 @@ class HeartbeatClient:
         dashboard_url: str,
         settings_service: Any,
         device_manager: Any = None,
+        realtime_reply_manager: Any = None,
         interval_s: float = 10.0,
         app_version: str = "1.0.0",
     ) -> None:
         self._dashboard_url = dashboard_url
         self._settings = settings_service
         self._device_manager = device_manager
+        self._realtime_reply_manager = realtime_reply_manager
         self._interval = interval_s
         self._app_version = app_version
         self._task: asyncio.Task | None = None
         self._status: str = "disconnected"  # disconnected | connecting | connected
         self._instance_id: str = ""
         self._ws: Any = None
+        self._event_queue: asyncio.Queue = asyncio.Queue()
 
     @property
     def status(self) -> str:
@@ -63,9 +67,7 @@ class HeartbeatClient:
         try:
             import websockets.asyncio.client
 
-            async with websockets.asyncio.client.connect(
-                self._dashboard_url, open_timeout=5
-            ) as ws:
+            async with websockets.asyncio.client.connect(self._dashboard_url, open_timeout=5) as ws:
                 payload = self._build_heartbeat()
                 await ws.send(json.dumps(payload))
                 raw = await asyncio.wait_for(ws.recv(), timeout=5)
@@ -102,21 +104,190 @@ class HeartbeatClient:
         ) as ws:
             self._ws = ws
             self._status = "connected"
+            # Serialize concurrent ws.send() calls between writer/reader/command tasks.
+            # `websockets` allows concurrent recv+send but not concurrent send+send.
+            send_lock = asyncio.Lock()
 
-            # Send first heartbeat
-            payload = self._build_heartbeat()
-            await asyncio.wait_for(ws.send(json.dumps(payload)), timeout=10)
-            raw = await asyncio.wait_for(ws.recv(), timeout=15)
+            async def safe_send(obj: dict) -> None:
+                async with send_lock:
+                    await asyncio.wait_for(ws.send(json.dumps(obj)), timeout=10)
+
+            # First heartbeat handshake (must complete before reader starts so we
+            # surface auth/duplicate failures synchronously).
+            await safe_send(self._build_heartbeat())
+            await asyncio.wait_for(ws.recv(), timeout=15)
             logger.info("heartbeat_client_connected: url=%s", self._dashboard_url)
 
-            while True:
-                await asyncio.sleep(self._interval)
-                payload = self._build_heartbeat()
-                await asyncio.wait_for(ws.send(json.dumps(payload)), timeout=10)
-                await asyncio.wait_for(ws.recv(), timeout=15)
+            reader_task = asyncio.create_task(self._reader_loop(ws, safe_send))
+            writer_task = asyncio.create_task(self._writer_loop(safe_send))
+            try:
+                done, _pending = await asyncio.wait(
+                    {reader_task, writer_task},
+                    return_when=asyncio.FIRST_EXCEPTION,
+                )
+                # Re-raise the first exception (typically a disconnect) so the
+                # outer reconnect loop in _run() can back off and retry.
+                for t in done:
+                    exc = t.exception()
+                    if exc is not None:
+                        raise exc
+            finally:
+                for t in (reader_task, writer_task):
+                    if not t.done():
+                        t.cancel()
+                for t in (reader_task, writer_task):
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
+
+    async def _reader_loop(self, ws, safe_send) -> None:
+        """Continuously read from the WebSocket and dispatch incoming messages.
+
+        Commands are handled in spawned tasks so a slow command (e.g.
+        device_restart, which sleeps 2s) does not block subsequent commands or
+        acks. Heartbeat acks are silently consumed.
+        """
+        while True:
+            raw = await ws.recv()
+            try:
+                data = json.loads(raw)
+            except Exception:
+                logger.warning("heartbeat_client_invalid_json")
+                continue
+            msg_type = data.get("type", "ack")
+            if msg_type == "command":
+                # Fire-and-forget; the handler will send command_result via safe_send.
+                asyncio.create_task(self._handle_command(safe_send, data))
+            # ack / welcome / unknown: nothing to do
+
+    async def _writer_loop(self, safe_send) -> None:
+        """Send heartbeats on a fixed interval and drain the event queue.
+
+        Reading is handled by `_reader_loop`; this loop only writes via
+        `safe_send`, which holds the shared write lock.
+        """
+        while True:
+            try:
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=self._interval)
+                general = self._settings.get_general_settings()
+                iid = general.device_id or (general.hostname or platform.node())
+                event["instance_id"] = iid
+                await safe_send(event)
+                while not self._event_queue.empty():
+                    try:
+                        ev = self._event_queue.get_nowait()
+                        ev["instance_id"] = iid
+                        await safe_send(ev)
+                    except asyncio.QueueEmpty:
+                        break
+            except TimeoutError:
+                pass
+            await safe_send(self._build_heartbeat())
+
+    async def _handle_command(self, safe_send, data: dict) -> None:
+        """Execute a remote command and send back its result."""
+        command_id = data.get("command_id", str(uuid.uuid4()))
+        action = data.get("action", "")
+        serial = data.get("serial", "")
+
+        logger.info("remote_command_received: action=%s serial=%s command_id=%s", action, serial, command_id)
+
+        try:
+            if action == "device_start":
+                result = await self._cmd_device_start(serial)
+            elif action == "device_stop":
+                result = await self._cmd_device_stop(serial)
+            elif action == "device_pause":
+                result = await self._cmd_device_pause(serial)
+            elif action == "device_resume":
+                result = await self._cmd_device_resume(serial)
+            elif action == "device_restart":
+                result = await self._cmd_device_restart(serial)
+            elif action == "app_restart":
+                result = await self._cmd_app_restart(serial)
+            else:
+                result = {"success": False, "message": f"Unknown action: {action}"}
+        except Exception as e:
+            logger.error("remote_command_error: action=%s serial=%s error=%s", action, serial, e)
+            result = {"success": False, "message": str(e)}
+
+        response = {
+            "type": "command_result",
+            "command_id": command_id,
+            **result,
+        }
+        try:
+            await safe_send(response)
+        except Exception as e:
+            logger.warning("remote_command_reply_failed: %s", e)
+
+    async def _cmd_device_start(self, serial: str) -> dict:
+        manager = self._get_realtime_manager()
+        if not manager:
+            return {"success": False, "message": "RealtimeReplyManager not available"}
+        success = await manager.start_realtime_reply(serial)
+        return {"success": success, "message": "Started" if success else "Failed to start"}
+
+    async def _cmd_device_stop(self, serial: str) -> dict:
+        manager = self._get_realtime_manager()
+        if not manager:
+            return {"success": False, "message": "RealtimeReplyManager not available"}
+        success = await manager.stop_realtime_reply(serial)
+        return {"success": success, "message": "Stopped" if success else "Failed to stop"}
+
+    async def _cmd_device_pause(self, serial: str) -> dict:
+        manager = self._get_realtime_manager()
+        if not manager:
+            return {"success": False, "message": "RealtimeReplyManager not available"}
+        success = await manager.pause_realtime_reply(serial)
+        return {"success": success, "message": "Paused" if success else "Failed to pause"}
+
+    async def _cmd_device_resume(self, serial: str) -> dict:
+        manager = self._get_realtime_manager()
+        if not manager:
+            return {"success": False, "message": "RealtimeReplyManager not available"}
+        success = await manager.resume_realtime_reply(serial)
+        return {"success": success, "message": "Resumed" if success else "Failed to resume"}
+
+    async def _cmd_device_restart(self, serial: str) -> dict:
+        manager = self._get_realtime_manager()
+        if not manager:
+            return {"success": False, "message": "RealtimeReplyManager not available"}
+        # Stop
+        await manager.stop_realtime_reply(serial)
+        await asyncio.sleep(2)
+        # Start
+        success = await manager.start_realtime_reply(serial)
+        return {"success": success, "message": "Restarted" if success else "Failed to restart"}
+
+    async def _cmd_app_restart(self, serial: str) -> dict:
+        """Restart the WeCom app on the Android device via ADB."""
+        try:
+            import httpx
+
+            # Call the local system API to restart the WeCom app
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(f"http://localhost:8765/api/system/restart-wecom-app/{serial}")
+                if resp.status_code == 200:
+                    return {"success": True, "message": "WeCom app restarted"}
+                return {"success": False, "message": f"API error: {resp.status_code} {resp.text}"}
+        except Exception as e:
+            return {"success": False, "message": str(e)}
+
+    def _get_realtime_manager(self):
+        """Get the RealtimeReplyManager instance."""
+        if self._realtime_reply_manager:
+            return self._realtime_reply_manager
+        try:
+            from services.realtime_reply_manager import get_realtime_reply_manager
+
+            return get_realtime_reply_manager()
+        except Exception:
+            return None
 
     def _build_heartbeat(self) -> dict:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # Get identity
         general = self._settings.get_general_settings()
@@ -128,18 +299,8 @@ class HeartbeatClient:
         ai_reply = self._settings.get_ai_reply_settings()
         brain_url = ai_reply.server_url if ai_reply.use_ai_reply else ""
 
-        # Get devices
-        devices = []
-        if self._device_manager:
-            try:
-                for serial, proc_info in getattr(self._device_manager, "_processes", {}).items():
-                    devices.append({
-                        "serial": serial,
-                        "name": serial,
-                        "status": "online" if proc_info and proc_info.poll() is None else "offline",
-                    })
-            except Exception:
-                pass
+        # Build unified device list from DeviceManager + RealtimeReplyManager
+        devices = self._build_device_list()
 
         # Get AI health (simplified)
         ai_reachable = True
@@ -161,3 +322,103 @@ class HeartbeatClient:
                 "ai_response_ms": ai_response_ms,
             },
         }
+
+    def _build_device_list(self) -> list[dict]:
+        """Build the union of all known device serials from both managers."""
+        from .dashboard_events import get_telemetry_store
+
+        seen: dict[str, dict] = {}
+        store = get_telemetry_store()
+
+        # ADB-connected devices (base layer)
+        for serial, info in self._discover_adb_devices().items():
+            seen[serial] = info
+
+        # DeviceManager (sync processes) — enrich existing or add new
+        if self._device_manager:
+            try:
+                for serial, proc in getattr(self._device_manager, "_processes", {}).items():
+                    alive = proc is not None and (
+                        proc.returncode is None
+                        if hasattr(proc, "returncode")
+                        else (proc.poll() is None if hasattr(proc, "poll") else False)
+                    )
+                    if serial in seen:
+                        seen[serial]["sync_running"] = alive
+                        seen[serial]["running"] = alive
+                    else:
+                        seen[serial] = {
+                            "serial": serial,
+                            "name": serial,
+                            "status": "online",
+                            "running": True,
+                            "sync_running": alive,
+                            "followup_running": False,
+                        }
+            except Exception:
+                pass
+
+        # RealtimeReplyManager (followup processes)
+        if self._realtime_reply_manager:
+            try:
+                for serial, proc in getattr(self._realtime_reply_manager, "_processes", {}).items():
+                    alive = proc is not None and (
+                        proc.returncode is None
+                        if hasattr(proc, "returncode")
+                        else (proc.poll() is None if hasattr(proc, "poll") else False)
+                    )
+                    if serial in seen:
+                        seen[serial]["followup_running"] = alive
+                        seen[serial]["running"] = seen[serial].get("sync_running", False) or alive
+                    else:
+                        seen[serial] = {
+                            "serial": serial,
+                            "name": serial,
+                            "status": "online",
+                            "running": alive,
+                            "sync_running": False,
+                            "followup_running": alive,
+                        }
+            except Exception:
+                pass
+
+        # Merge telemetry store data (red dots, followup, ai)
+        devices = []
+        for serial, info in seen.items():
+            telem = store.get_snapshot(serial)
+            info.update(telem)
+            devices.append(info)
+
+        return devices
+
+    def _discover_adb_devices(self) -> dict[str, dict]:
+        """Run adb devices synchronously and return serial -> base info dict."""
+        import shutil
+        import subprocess
+
+        result: dict[str, dict] = {}
+        adb = shutil.which("adb")
+        if not adb:
+            return result
+        try:
+            proc = subprocess.run(
+                [adb, "devices"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            for line in proc.stdout.strip().splitlines():
+                parts = line.split()
+                if len(parts) >= 2 and parts[1] == "device":
+                    serial = parts[0]
+                    result[serial] = {
+                        "serial": serial,
+                        "name": serial,
+                        "status": "online",
+                        "running": False,
+                        "sync_running": False,
+                        "followup_running": False,
+                    }
+        except Exception:
+            pass
+        return result

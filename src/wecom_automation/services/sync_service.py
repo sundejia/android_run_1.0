@@ -149,7 +149,22 @@ class UnreadUserExtractor:
     # Badge detection hints
     BADGE_CLASS_HINTS = ("textview", "text", "badge", "unread", "count", "number")
     BADGE_RESOURCE_ID_HINTS = ("badge", "unread", "count", "num", "dot", "red")
-    NAME_RESOURCE_ID_HINTS = ("title", "name", "nickname", "username", "contact")
+    NAME_RESOURCE_ID_HINTS = ("title", "name", "nickname", "username", "contact", "mid1txt")
+    PREVIEW_RESOURCE_ID_HINTS = (
+        "content",
+        "summary",
+        "desc",
+        "preview",
+        "snippet",
+        "message",
+        "msg",
+        "body",
+        "mid2txt",
+        "idk",
+        "icx",
+        "ig6",
+        "igj",
+    )
     CHANNEL_TEXT_PATTERNS = ("@WeChat", "@微信", "@wechat", "＠WeChat", "＠微信", "＠wechat")
 
     # Container detection hints
@@ -399,6 +414,73 @@ class UnreadUserExtractor:
             return True
 
         return False
+
+    @classmethod
+    def _looks_like_customer_name(cls, value: str) -> bool:
+        """Check if text looks like a customer name (as opposed to a message preview)."""
+        if not value:
+            return False
+        text = value.strip()
+        if len(text) <= 1:
+            return False
+        # B-prefixed IDs: B2605132089-(保底正常)
+        if re.match(r"^B\d{8,}", text):
+            return True
+        # bili-prefixed IDs: bili_82076709740-1787652898(重复[保底正常])
+        if re.match(r"^bili_\d+", text):
+            return True
+        # Numeric IDs with optional tags: 1766909895-[重复(保底正常)]
+        if re.match(r"^\d{4,}", text):
+            return True
+        # Alphanumeric ID patterns with brackets/parentheses (system-generated names)
+        if re.match(r"^[\w]+_\d+-\d+", text):
+            return True
+        # Short Chinese names: 2-4 chars, no punctuation/message particles
+        if 2 <= len(text) <= 4:
+            if not any(mark in text for mark in ("，", "。", "！", "？", ",", "!", "?")):
+                if not any(hint in text for hint in cls.MESSAGE_TEXT_HINTS):
+                    return True
+        # Names with emoji (common in WeChat display names)
+        if re.search(r"[\U0001F300-\U0001F9FF]", text):
+            return True
+        return False
+
+    @classmethod
+    def _is_strong_customer_id(cls, value: str) -> bool:
+        """Check if text is a strong (system-generated) customer identifier.
+
+        Matches B-prefixed IDs, bili-prefixed IDs, and numeric IDs with brackets.
+        These are unambiguous — they can never be message text.
+        """
+        if not value:
+            return False
+        text = value.strip()
+        if re.match(r"^B\d{8,}", text):
+            return True
+        if re.match(r"^bili_\d+", text):
+            return True
+        if re.match(r"^\d{4,}", text):
+            return True
+        if re.match(r"^[\w]+_\d+-\d+", text):
+            return True
+        return False
+
+    @classmethod
+    def _check_and_fix_name_preview_swap(
+        cls, name: str | None, message_preview: str | None
+    ) -> tuple[str | None, str | None]:
+        """Detect and correct name/preview swaps after extraction."""
+        if not name or not message_preview:
+            return name, message_preview
+        # Strong ID in preview + current name is NOT a strong ID → swap
+        if cls._is_strong_customer_id(message_preview) and not cls._is_strong_customer_id(name):
+            return message_preview, name
+        # Generic: preview clearly looks like a name but name clearly does not
+        name_is_name = cls._looks_like_customer_name(name)
+        preview_is_name = cls._looks_like_customer_name(message_preview)
+        if preview_is_name and not name_is_name:
+            return message_preview, name
+        return name, message_preview
 
     @classmethod
     def _is_name_position_candidate(
@@ -685,7 +767,14 @@ class UnreadUserExtractor:
             if cls._is_badge_text(text) and len(text) <= 3:
                 continue
 
-            if not name and any(hint in rid for hint in cls.NAME_RESOURCE_ID_HINTS):
+            matches_preview = any(hint in rid for hint in cls.PREVIEW_RESOURCE_ID_HINTS)
+            matches_name = any(hint in rid for hint in cls.NAME_RESOURCE_ID_HINTS)
+
+            if not message_preview and matches_preview:
+                message_preview = text
+                continue
+
+            if not name and matches_name and not matches_preview:
                 name = text
                 continue
 
@@ -742,6 +831,9 @@ class UnreadUserExtractor:
         # Skip dropdown/filter elements
         if name and cls._looks_like_dropdown_filter(name):
             return None
+
+        # Swap detection: validate name/preview consistency
+        name, message_preview = cls._check_and_fix_name_preview_swap(name, message_preview)
 
         # 检测是否为新好友（消息预览包含欢迎语）
         is_new_friend = cls._is_new_friend_welcome(message_preview)

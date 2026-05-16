@@ -78,9 +78,6 @@ class LogUploadService:
             "upload_url": str(
                 settings_service.get("general", "log_upload_url", "")
             ).strip(),
-            "upload_token": str(
-                settings_service.get("general", "log_upload_token", "")
-            ).strip(),
             "timezone": timezone_name or "Asia/Shanghai",
         }
 
@@ -121,8 +118,6 @@ class LogUploadService:
             return "Invalid log upload time"
         if not config["upload_url"]:
             return "Log upload URL is not configured"
-        if not config["upload_token"]:
-            return "Log upload token is not configured"
         return None
 
     def _collect_pending_files(self, hostname: str) -> list[PendingUploadFile]:
@@ -245,7 +240,6 @@ class LogUploadService:
             "person_name": config["person_name"],
             "upload_time": config["upload_time"],
             "upload_url": config["upload_url"],
-            "has_token": bool(config["upload_token"]),
             "timezone": config["timezone"],
             "is_uploading": self._upload_lock.locked(),
             "config_error": self._get_schedule_validation_error(config)
@@ -371,25 +365,6 @@ class LogUploadService:
                     "run_id": run_id,
                 }
 
-            if not config["upload_token"]:
-                message = "Log upload token is not configured"
-                completed_at = self._now(config["timezone"])
-                self._repository.finish_run(
-                    run_id,
-                    status="error",
-                    completed_at=completed_at,
-                    files_total=0,
-                    files_uploaded=0,
-                    files_skipped=0,
-                    error_message=message,
-                )
-                return {
-                    "success": False,
-                    "status": "error",
-                    "message": message,
-                    "run_id": run_id,
-                }
-
             pending_files = self._collect_pending_files(config["hostname"])
             if not pending_files:
                 completed_at = self._now(config["timezone"])
@@ -431,7 +406,6 @@ class LogUploadService:
 
                     result = await self._client.upload_file(
                         base_url=config["upload_url"],
-                        token=config["upload_token"],
                         device_id=config["device_id"],
                         hostname=config["hostname"],
                         person_name=config["person_name"],

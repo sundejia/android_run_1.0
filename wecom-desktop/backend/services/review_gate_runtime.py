@@ -78,7 +78,7 @@ def get_review_gate(*, storage: ReviewStorage | None = None) -> ReviewGate | Non
             storage = ReviewStorage(str(get_control_db_path()))
 
         bus = MediaEventBus()
-        _register_default_actions(bus)
+        _register_default_actions(bus, db_path=str(get_control_db_path()))
 
         guard = ExecutionPolicyGuard(storage=storage)
         gate = ReviewGate(
@@ -106,15 +106,32 @@ def reset_for_tests() -> None:
         _singleton.clear()
 
 
-def _register_default_actions(bus: MediaEventBus) -> None:
+def _register_default_actions(bus: MediaEventBus, *, db_path: str | None = None) -> None:
     """Best-effort registration of canonical auto-actions.
 
-    Each action requires a live ``WeComService``. In production that is
-    injected per device by the sync subprocess via :func:`bind_wecom_service`.
-    Here we register placeholders that short-circuit in ``should_execute``
-    until wired up. If an import fails (e.g. running without the full
-    dependency tree), we skip gracefully — tests register their own actions.
+    Registration order mirrors ``build_media_event_bus`` in
+    ``services/media_actions/factory.py``:
+        1. AutoBlacklistAction  — pure DB, no WeComService needed
+        2. AutoGroupInviteAction — requires WeComService for UI automation
+        3. AutoContactShareAction — requires WeComService for UI automation
+
+    Each UI-dependent action starts with ``service=None`` and short-circuits
+    in ``should_execute`` until :func:`bind_wecom_service` wires it up.
+    If an import fails we skip gracefully — tests register their own actions.
     """
+    # 1. AutoBlacklistAction — pure database operation, no WeComService
+    try:
+        from wecom_automation.services.blacklist_service import BlacklistWriter
+        from wecom_automation.services.media_actions.actions.auto_blacklist import (
+            AutoBlacklistAction,
+        )
+
+        action = AutoBlacklistAction(BlacklistWriter(db_path), db_path=db_path)
+        bus.register(action)
+    except Exception as exc:
+        logger.warning("AutoBlacklistAction not registered: %s", exc)
+
+    # 2. AutoGroupInviteAction — requires WeComService for UI automation
     try:
         from wecom_automation.services.media_actions.actions.auto_group_invite import (
             AutoGroupInviteAction,
@@ -125,6 +142,7 @@ def _register_default_actions(bus: MediaEventBus) -> None:
     except Exception as exc:
         logger.warning("AutoGroupInviteAction not registered: %s", exc)
 
+    # 3. AutoContactShareAction — requires WeComService for UI automation
     try:
         from wecom_automation.services.media_actions.actions.auto_contact_share import (
             AutoContactShareAction,
@@ -146,6 +164,8 @@ def bind_wecom_service(wecom_service: Any, *, db_path: str | None = None) -> Non
     Called by the follow-up / sync subprocess once it has acquired a device
     session.  Builds concrete service objects (GroupChatService,
     ContactShareService) and replaces the placeholder ``action._service``.
+    AutoBlacklistAction does not need WeComService (pure DB), but we
+    update its ``_db_path`` so it queries the correct conversation database.
     """
     bus = _singleton.get("bus")
     if bus is None:
@@ -154,7 +174,13 @@ def bind_wecom_service(wecom_service: Any, *, db_path: str | None = None) -> Non
     for action in getattr(bus, "_actions", []):
         name = getattr(action, "action_name", "")
         try:
-            if name == "auto_group_invite":
+            if name == "auto_blacklist":
+                if db_path:
+                    action._db_path = db_path
+                    if hasattr(action, "_writer") and hasattr(action._writer, "_db_path"):
+                        action._writer._db_path = db_path
+                bound += 1
+            elif name == "auto_group_invite":
                 from wecom_automation.services.media_actions.group_chat_service import (
                     GroupChatService,
                 )
@@ -162,6 +188,7 @@ def bind_wecom_service(wecom_service: Any, *, db_path: str | None = None) -> Non
                 action._service = GroupChatService(
                     wecom_service=wecom_service, db_path=db_path
                 )
+                action._db_path = db_path
                 bound += 1
             elif name == "auto_contact_share":
                 from wecom_automation.services.contact_share.service import (

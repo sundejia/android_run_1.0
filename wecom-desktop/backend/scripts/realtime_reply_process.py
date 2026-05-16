@@ -54,7 +54,7 @@ def setup_logging(serial: str, debug: bool = False):
 
     # 初始化 loguru（传入 serial 参数，只写设备专属日志，避免文件锁定冲突）
     # 注意：loguru 默认输出到 stderr，这里我们需要自定义控制台输出到 stdout
-    init_logging(hostname=hostname, level=level, console=False, serial=serial)
+    init_logging(hostname=hostname, level=level, console=False, serial=serial, error_notification=True)
 
     # 手动添加 stdout handler（用于父进程捕获）
     from loguru import logger as _loguru_logger
@@ -73,6 +73,14 @@ def setup_logging(serial: str, debug: bool = False):
         sys.stdout.reconfigure(line_buffering=True)
 
     return get_logger("scanner", device=serial)
+
+
+def dash_event(kind: str, serial: str, **payload) -> None:
+    """Print a structured marker line for the parent process to forward to device-dashboard."""
+    import json as _json
+
+    line = _json.dumps({"kind": kind, "serial": serial, **payload}, ensure_ascii=False)
+    print(f"[DASHEVENT] {line}", flush=True)
 
 
 async def run(args):
@@ -237,6 +245,19 @@ async def run(args):
                     )
                 except Exception as ch_err:
                     logger.debug(f"Failed to write click_health sample: {ch_err}")
+
+            # Report telemetry to dashboard
+            red_dot_count = result.get("users_processed", 0)
+            current_processing = result.get("current_target")
+            dash_event("red_dot_update", args.serial,
+                       pending=red_dot_count, current_target=current_processing)
+
+            ai_calls = int(result.get("ai_calls", 0) or 0)
+            ai_failures_scan = int(result.get("ai_failures", 0) or 0)
+            if ai_calls > 0 or ai_failures_scan > 0:
+                dash_event("ai_request", args.serial,
+                           result="ok" if ai_failures_scan == 0 else "error",
+                           calls=ai_calls, failures=ai_failures_scan)
 
             # 报告结果
             responses = result.get("responses_detected", 0)
