@@ -7,7 +7,7 @@ import json
 import logging
 import platform
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -67,9 +67,7 @@ class HeartbeatClient:
         try:
             import websockets.asyncio.client
 
-            async with websockets.asyncio.client.connect(
-                self._dashboard_url, open_timeout=5
-            ) as ws:
+            async with websockets.asyncio.client.connect(self._dashboard_url, open_timeout=5) as ws:
                 payload = self._build_heartbeat()
                 await ws.send(json.dumps(payload))
                 raw = await asyncio.wait_for(ws.recv(), timeout=5)
@@ -106,59 +104,89 @@ class HeartbeatClient:
         ) as ws:
             self._ws = ws
             self._status = "connected"
+            # Serialize concurrent ws.send() calls between writer/reader/command tasks.
+            # `websockets` allows concurrent recv+send but not concurrent send+send.
+            send_lock = asyncio.Lock()
 
-            # Send first heartbeat
-            payload = self._build_heartbeat()
-            await asyncio.wait_for(ws.send(json.dumps(payload)), timeout=10)
-            raw = await asyncio.wait_for(ws.recv(), timeout=15)
+            async def safe_send(obj: dict) -> None:
+                async with send_lock:
+                    await asyncio.wait_for(ws.send(json.dumps(obj)), timeout=10)
+
+            # First heartbeat handshake (must complete before reader starts so we
+            # surface auth/duplicate failures synchronously).
+            await safe_send(self._build_heartbeat())
+            await asyncio.wait_for(ws.recv(), timeout=15)
             logger.info("heartbeat_client_connected: url=%s", self._dashboard_url)
 
-            while True:
-                # Wait for either the heartbeat interval or an event in the queue
-                try:
-                    event = await asyncio.wait_for(
-                        self._event_queue.get(), timeout=self._interval
-                    )
-                    # Inject instance_id so dashboard knows the source
-                    general = self._settings.get_general_settings()
-                    event["instance_id"] = general.device_id or (general.hostname or platform.node())
-                    await asyncio.wait_for(ws.send(json.dumps(event)), timeout=10)
-                    # Read response(s) — may be ack or command
-                    await self._read_ws_response(ws)
-                    # Drain remaining queued events without blocking
-                    while not self._event_queue.empty():
-                        try:
-                            ev = self._event_queue.get_nowait()
-                            ev["instance_id"] = event["instance_id"]
-                            await asyncio.wait_for(ws.send(json.dumps(ev)), timeout=10)
-                            await self._read_ws_response(ws)
-                        except asyncio.QueueEmpty:
-                            break
-                except asyncio.TimeoutError:
-                    pass
-                # Always send a heartbeat after draining events / on interval
-                payload = self._build_heartbeat()
-                await asyncio.wait_for(ws.send(json.dumps(payload)), timeout=10)
-                await self._read_ws_response(ws)
+            reader_task = asyncio.create_task(self._reader_loop(ws, safe_send))
+            writer_task = asyncio.create_task(self._writer_loop(safe_send))
+            try:
+                done, _pending = await asyncio.wait(
+                    {reader_task, writer_task},
+                    return_when=asyncio.FIRST_EXCEPTION,
+                )
+                # Re-raise the first exception (typically a disconnect) so the
+                # outer reconnect loop in _run() can back off and retry.
+                for t in done:
+                    exc = t.exception()
+                    if exc is not None:
+                        raise exc
+            finally:
+                for t in (reader_task, writer_task):
+                    if not t.done():
+                        t.cancel()
+                for t in (reader_task, writer_task):
+                    try:
+                        await t
+                    except (asyncio.CancelledError, Exception):
+                        pass
 
-    async def _read_ws_response(self, ws) -> None:
-        """Read one or more messages from the WebSocket.
+    async def _reader_loop(self, ws, safe_send) -> None:
+        """Continuously read from the WebSocket and dispatch incoming messages.
 
-        Handles both simple acks and incoming commands from the dashboard.
+        Commands are handled in spawned tasks so a slow command (e.g.
+        device_restart, which sleeps 2s) does not block subsequent commands or
+        acks. Heartbeat acks are silently consumed.
         """
-        try:
-            raw = await asyncio.wait_for(ws.recv(), timeout=15)
-            data = json.loads(raw)
+        while True:
+            raw = await ws.recv()
+            try:
+                data = json.loads(raw)
+            except Exception:
+                logger.warning("heartbeat_client_invalid_json")
+                continue
             msg_type = data.get("type", "ack")
-
             if msg_type == "command":
-                await self._handle_command(ws, data)
-            # ack or other types: nothing to do
-        except asyncio.TimeoutError:
-            pass
+                # Fire-and-forget; the handler will send command_result via safe_send.
+                asyncio.create_task(self._handle_command(safe_send, data))
+            # ack / welcome / unknown: nothing to do
 
-    async def _handle_command(self, ws, data: dict) -> None:
-        """Handle a remote command received from the dashboard."""
+    async def _writer_loop(self, safe_send) -> None:
+        """Send heartbeats on a fixed interval and drain the event queue.
+
+        Reading is handled by `_reader_loop`; this loop only writes via
+        `safe_send`, which holds the shared write lock.
+        """
+        while True:
+            try:
+                event = await asyncio.wait_for(self._event_queue.get(), timeout=self._interval)
+                general = self._settings.get_general_settings()
+                iid = general.device_id or (general.hostname or platform.node())
+                event["instance_id"] = iid
+                await safe_send(event)
+                while not self._event_queue.empty():
+                    try:
+                        ev = self._event_queue.get_nowait()
+                        ev["instance_id"] = iid
+                        await safe_send(ev)
+                    except asyncio.QueueEmpty:
+                        break
+            except TimeoutError:
+                pass
+            await safe_send(self._build_heartbeat())
+
+    async def _handle_command(self, safe_send, data: dict) -> None:
+        """Execute a remote command and send back its result."""
         command_id = data.get("command_id", str(uuid.uuid4()))
         action = data.get("action", "")
         serial = data.get("serial", "")
@@ -190,7 +218,7 @@ class HeartbeatClient:
             **result,
         }
         try:
-            await asyncio.wait_for(ws.send(json.dumps(response)), timeout=10)
+            await safe_send(response)
         except Exception as e:
             logger.warning("remote_command_reply_failed: %s", e)
 
@@ -236,14 +264,11 @@ class HeartbeatClient:
     async def _cmd_app_restart(self, serial: str) -> dict:
         """Restart the WeCom app on the Android device via ADB."""
         try:
-            from routers.devices import get_discovery_service
             import httpx
 
             # Call the local system API to restart the WeCom app
             async with httpx.AsyncClient(timeout=30.0) as client:
-                resp = await client.post(
-                    f"http://localhost:8765/api/system/restart-wecom-app/{serial}"
-                )
+                resp = await client.post(f"http://localhost:8765/api/system/restart-wecom-app/{serial}")
                 if resp.status_code == 200:
                     return {"success": True, "message": "WeCom app restarted"}
                 return {"success": False, "message": f"API error: {resp.status_code} {resp.text}"}
@@ -256,12 +281,13 @@ class HeartbeatClient:
             return self._realtime_reply_manager
         try:
             from services.realtime_reply_manager import get_realtime_reply_manager
+
             return get_realtime_reply_manager()
         except Exception:
             return None
 
     def _build_heartbeat(self) -> dict:
-        now = datetime.now(timezone.utc).isoformat()
+        now = datetime.now(UTC).isoformat()
 
         # Get identity
         general = self._settings.get_general_settings()
@@ -376,7 +402,10 @@ class HeartbeatClient:
             return result
         try:
             proc = subprocess.run(
-                [adb, "devices"], capture_output=True, text=True, timeout=5,
+                [adb, "devices"],
+                capture_output=True,
+                text=True,
+                timeout=5,
             )
             for line in proc.stdout.strip().splitlines():
                 parts = line.split()

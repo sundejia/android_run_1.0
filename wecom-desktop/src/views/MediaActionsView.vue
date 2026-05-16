@@ -201,7 +201,7 @@ function toggleDeviceOverride(actionType: string) {
   }
 }
 
-function patchDeviceSection(actionType: string, fields: Record<string, unknown>) {
+function patchDeviceSection(actionType: string, fields: object) {
   const existing = deviceOverrides.value[actionType]
   if (!existing) return
   deviceOverrides.value = {
