@@ -84,10 +84,16 @@ SEND_TEXT_PATTERNS: tuple[str, ...] = ("Send", "SEND", "发送", "确定")
 # for Cancel. Without "de5" here, ContactShareService._confirm_send falls
 # back to text-substring matching ("Send"), which previously matched the
 # picker's "Send to:" label and dialog detection silently failed.
-SEND_RESOURCE_PATTERNS: tuple[str, ...] = ("dak", "blz", "i_2", "de5")
+#   * "dbf": validated WeCom Android 1080x2400, 2026-05-17 build
+#           (captured from contact_share_dump_20260517_230459_*_contact_picker.json;
+#            confirm dialog rendered as TextView—not Button—so text-based Button
+#            matching missed both Send and Cancel; resource-id path was the only
+#            viable signal but "dbf"/"dbc" were not yet in the catalog)
+SEND_RESOURCE_PATTERNS: tuple[str, ...] = ("dak", "blz", "i_2", "de5", "dbf")
 
 # ── "Cancel" button in the confirmation dialog ───────────────────
 CANCEL_TEXT_PATTERNS: tuple[str, ...] = ("Cancel", "取消")
 # Substrings matched against resourceId for the confirm-dialog Cancel button.
 # 2026-05-07 build: TextView with rid=de2 (paired with rid=de5 for Send).
-CANCEL_RESOURCE_PATTERNS: tuple[str, ...] = ("dah", "de2")
+#   * "dbc": validated WeCom Android 1080x2400, 2026-05-17 build (paired with "dbf")
+CANCEL_RESOURCE_PATTERNS: tuple[str, ...] = ("dah", "de2", "dbc")
