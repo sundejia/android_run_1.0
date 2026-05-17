@@ -68,6 +68,7 @@ VALID_ACTION_TYPES = {
     "review_gate",
     "auto_group_invite",
     "auto_contact_share",
+    "_master",
 }
 
 
@@ -267,13 +268,17 @@ async def delete_device_action(device_serial: str, action_type: str):
 
 @router.get("/{device_serial}/effective", response_model=DeviceEffectiveSettingsResponse)
 async def get_effective_settings(device_serial: str):
-    """Get the fully resolved (global + per-device) media action settings for a device."""
+    """Get the fully resolved media action settings for a device.
+
+    Resolves from ``device_action_profiles`` only (with code defaults for
+    missing action types).  Does not read the global ``settings`` table.
+    """
     def _resolve():
         from wecom_automation.database.schema import get_db_path
-        from wecom_automation.services.media_actions.device_resolver import resolve_media_settings_by_device_from_db
+        from wecom_automation.services.media_actions.device_resolver import resolve_device_settings_from_profiles_only
 
         db_path = str(get_db_path())
-        return resolve_media_settings_by_device_from_db(device_serial, db_path)
+        return resolve_device_settings_from_profiles_only(device_serial, db_path)
 
     settings = await asyncio.to_thread(_resolve)
 

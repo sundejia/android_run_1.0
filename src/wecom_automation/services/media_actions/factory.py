@@ -15,7 +15,10 @@ from typing import Any
 from wecom_automation.services.blacklist_service import BlacklistWriter
 from wecom_automation.services.media_actions.actions.auto_blacklist import AutoBlacklistAction
 from wecom_automation.services.media_actions.event_bus import MediaEventBus
-from wecom_automation.services.media_actions.device_resolver import resolve_media_settings_by_device
+from wecom_automation.services.media_actions.device_resolver import (
+    resolve_device_settings_from_profiles_only,
+    resolve_media_settings_by_device,
+)
 from wecom_automation.services.media_actions.settings_loader import load_media_auto_action_settings
 
 logger = logging.getLogger(__name__)
@@ -51,17 +54,15 @@ def build_media_event_bus(
     effects_db_path = effects_db_path or settings_db_path or db_path
 
     try:
-        settings = load_media_auto_action_settings(settings_db_path)
+        if device_serial:
+            # Primary path: resolve from device_action_profiles only.
+            settings = resolve_device_settings_from_profiles_only(device_serial, settings_db_path)
+        else:
+            # Fallback (no device_serial): use legacy global + per-device merge.
+            settings = load_media_auto_action_settings(settings_db_path)
     except Exception as exc:
         logger.warning("Failed to load media auto-action settings: %s", exc)
         return None, {"enabled": False}
-
-    # Apply per-device overrides when device_serial is provided.
-    if device_serial:
-        try:
-            settings = resolve_media_settings_by_device(settings, device_serial, settings_db_path)
-        except Exception as exc:
-            logger.warning("Failed to resolve per-device settings for device=%s: %s", device_serial, exc)
 
     if not settings.get("enabled"):
         return None, settings

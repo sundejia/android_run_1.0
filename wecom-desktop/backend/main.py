@@ -215,6 +215,22 @@ async def lifespan(app: FastAPI):
             f"groups updated={migration_stats['groups_updated']}, "
             f"sources={migration_stats['source_dbs_scanned']}"
         )
+
+        # Migrate global media-auto-action settings to per-device profiles
+        try:
+            from services.media_actions_migration import migrate_global_to_device_profiles
+
+            profile_stats = migrate_global_to_device_profiles(control_db_path)
+            if profile_stats["devices_migrated"] > 0:
+                print(
+                    f"[startup] [OK] Global-to-device profile migration: "
+                    f"{profile_stats['devices_migrated']} device(s) migrated, "
+                    f"{profile_stats['rows_inserted']} rows inserted"
+                )
+            else:
+                print("[startup] [OK] Global-to-device profile migration: no migration needed")
+        except Exception as e:
+            print(f"[startup] [WARN] Global-to-device profile migration skipped: {e}")
         print("[startup] [OK] Database migrations completed")
     except Exception as e:
         print(f"[startup] [FAIL] Database migration failed: {e}")

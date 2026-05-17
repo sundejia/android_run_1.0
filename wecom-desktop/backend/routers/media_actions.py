@@ -152,9 +152,13 @@ def _save_settings(settings: dict[str, Any]) -> dict[str, Any]:
 # ============================================================================
 
 
-@router.get("/settings", response_model=MediaAutoActionSettings)
+@router.get("/settings", response_model=MediaAutoActionSettings, deprecated=True)
 async def get_media_action_settings():
-    """Get current media auto-action settings."""
+    """Get current media auto-action settings.
+
+    **Deprecated**: Use ``GET /api/device-profiles/{serial}/effective`` instead.
+    Each device now has independent settings stored in ``device_action_profiles``.
+    """
     try:
         settings = await asyncio.to_thread(_get_settings)
         return settings
@@ -187,9 +191,13 @@ def _apply_media_action_settings_update_sync(
     return _save_settings(current)
 
 
-@router.put("/settings", response_model=MediaAutoActionSettings)
+@router.put("/settings", response_model=MediaAutoActionSettings, deprecated=True)
 async def update_media_action_settings(request: UpdateMediaActionSettingsRequest):
-    """Update media auto-action settings (partial update supported)."""
+    """Update media auto-action settings (partial update supported).
+
+    **Deprecated**: Use ``PUT /api/device-profiles/{serial}/actions/{action_type}`` instead.
+    Each device now has independent settings stored in ``device_action_profiles``.
+    """
     try:
         saved = await asyncio.to_thread(_apply_media_action_settings_update_sync, request)
 
