@@ -273,17 +273,23 @@ Step 7: 对每个候选客户
     └── 进入聊天 → 判断最后消息 → 发送补刀
 ```
 
-### 3.2 动态红点检测 (优先队列)
+### 3.2 动态红点检测 (两层优先队列 — 热聊优先)
+
+在一个 scan cycle 内，已聊过又冒红点的用户（hot）始终优先于新陌生人（cold）。
 
 ```python
-# 使用队列处理红点用户
-user_queue: deque = deque(initial_unread)
+# 两层队列: hot_queue (已聊过又回复) 优先于 cold_queue (新红点)
+hot_queue: deque = deque()
+cold_queue: deque = deque(initial_unread)
 queued_names: Set[str] = {u.name for u in initial_unread}
 processed_names: Set[str] = set()
 
-while user_queue and not self._cancel_requested:
-    # 取出队首用户
-    user = user_queue.popleft()
+while (hot_queue or cold_queue) and not self._cancel_requested:
+    # 热聊用户永远优先
+    if hot_queue:
+        user = hot_queue.popleft()
+    else:
+        user = cold_queue.popleft()
 
     # 处理用户...
     result = await self._process_single_user(wecom, serial, user_name, user_channel)
@@ -291,9 +297,14 @@ while user_queue and not self._cancel_requested:
     # 处理完成后，重新检测红点
     new_unread = await self._detect_first_page_unread(wecom, serial)
 
-    # 新红点加入队首（优先处理）
-    for u in reversed(new_users + reprocess_users):
-        user_queue.appendleft(u)
+    # 分类插入: 已聊过的进 hot_queue, 新陌生人进 cold_queue
+    for u in new_unread:
+        if u.name in processed_names:
+            hot_queue.appendleft(u)          # 热聊优先
+            processed_names.discard(u.name)
+        elif u.name not in queued_names:
+            cold_queue.appendleft(u)         # 新陌生人排后
+            queued_names.add(u.name)
 ```
 
 **流程图**：
@@ -301,24 +312,25 @@ while user_queue and not self._cancel_requested:
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │  初始红点检测                                                │
-│  [A, B, C] → 加入队列                                       │
+│  [A, B, C] → 全部进入 cold_queue                            │
 └─────────────────────┬───────────────────────────────────────┘
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  处理队首用户 A                                              │
-│  - 进入聊天                                                  │
-│  - 判断最后消息发送方                                        │
-│  - 发送补刀 / 标记已回复                                     │
-│  - 返回列表                                                  │
+│  处理队首用户 A (cold)                                       │
+│  - 进入聊天 → AI 回复 → 返回列表                             │
+│  processed_names = {A}                                      │
 └─────────────────────┬───────────────────────────────────────┘
                       ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  重新检测红点                                                │
-│  新发现: [D, E] → 加入队首                                   │
-│  队列: [D, E, B, C]                                         │
+│  处理 B (cold) → 回列表 → 重新检测红点                       │
+│  发现: A 又回复了(hot) + D 新陌生人(cold)                     │
+│  hot_queue: [A]    cold_queue: [D, C]                       │
 └─────────────────────┬───────────────────────────────────────┘
                       ▼
-                   继续处理...
+┌─────────────────────────────────────────────────────────────┐
+│  下一个: 从 hot_queue 取 A (热聊优先 ✓)                      │
+│  再之后: D → C                                              │
+└─────────────────────────────────────────────────────────────┘
 ```
 
 ## 四、单用户处理 (scanner.py)
