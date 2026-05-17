@@ -578,6 +578,7 @@ class ResponseDetector:
     def _emit_dash_event(kind: str, serial: str, **payload) -> None:
         """Print [DASHEVENT] marker for parent process to pick up."""
         import json as _json
+
         line = _json.dumps({"kind": kind, "serial": serial, **payload}, ensure_ascii=False)
         print(f"[DASHEVENT] {line}", flush=True)
 
@@ -1053,11 +1054,14 @@ class ResponseDetector:
 
                 self._logger.info(f"[{serial}] 🔴 Found {len(initial_unread)} red dot users, adding to queue")
 
-                # Step 5: Process red dot users with dynamic prioritization
-                user_queue: deque = deque(initial_unread)
+                # Step 5: Process red dot users with two-tier prioritization
+                # hot_queue: users we already chatted with this scan cycle who replied again (热聊优先)
+                # cold_queue: users seen for the first time this scan cycle
+                hot_queue: deque = deque()
+                cold_queue: deque = deque(initial_unread)
                 queued_names: set[str] = {u.name for u in initial_unread}
                 processed_names: set[str] = set()
-                skipped_names: set[str] = set()  # Track skipped users (e.g., blacklisted)
+                skipped_names: set[str] = set()
                 process_count = 0
 
                 # Defensive: Clear any stale skip flags from previous scan cycle before processing users
@@ -1068,7 +1072,7 @@ class ResponseDetector:
                     except Exception as e:
                         self._logger.warning(f"[{serial}] ⚠️ Failed to clear skip flag at scan start: {e}")
 
-                while user_queue and not self._cancel_requested:
+                while (hot_queue or cold_queue) and not self._cancel_requested:
                     # Check for skip flag at start of each user processing
                     # This allows operator to skip current queued message and return to list
                     self._logger.debug(
@@ -1083,17 +1087,22 @@ class ResponseDetector:
                             skip_requested = await client.is_skip_requested()
                             self._logger.debug(f"[{serial}] 🔍 Skip check result: {skip_requested}")
                         except Exception as e:
-                            # Log detailed error for debugging
                             self._logger.error(f"[{serial}] ❌ Error checking skip flag: {type(e).__name__}: {e}")
 
                     if skip_requested:
                         self._logger.info(f"[{serial}] ⏭️ Skip requested - clearing queue and returning to chat list")
-                        user_queue.clear()  # Clear remaining queue
+                        hot_queue.clear()
+                        cold_queue.clear()
                         await self._handle_skip_once(wecom, serial, client)
                         break  # Exit while loop
 
-                    # Get user from queue
-                    user = user_queue.popleft()
+                    # Two-tier pop: hot (already-chatted) users always go first
+                    if hot_queue:
+                        user = hot_queue.popleft()
+                        tier = "hot"
+                    else:
+                        user = cold_queue.popleft()
+                        tier = "cold"
                     user_name = user.name
 
                     # Skip if already processed
@@ -1101,12 +1110,12 @@ class ResponseDetector:
                         continue
 
                     process_count += 1
+                    remaining = len(hot_queue) + len(cold_queue)
                     self._logger.info(
-                        f"[{serial}] [{process_count}] 🔴 Processing: {user_name} (queue: {len(user_queue)} remaining)"
+                        f"[{serial}] [{process_count}] 🔴 Processing ({tier}): {user_name} "
+                        f"(hot:{len(hot_queue)} cold:{len(cold_queue)} remaining)"
                     )
-                    self._emit_dash_event("red_dot_update", serial,
-                                          pending=len(user_queue) + 1,
-                                          current_target=user_name)
+                    self._emit_dash_event("red_dot_update", serial, pending=remaining + 1, current_target=user_name)
 
                     try:
                         # Process this user with interactive wait
@@ -1132,7 +1141,8 @@ class ResponseDetector:
                     except SkipRequested:
                         # Centralized skip handling (avoid double go_back)
                         self._logger.info(f"[{serial}] ⏭️ Skip requested during user processing - stopping scan")
-                        user_queue.clear()
+                        hot_queue.clear()
+                        cold_queue.clear()
                         await self._handle_skip_once(wecom, serial, client)
                         break
                     except Exception as e:
@@ -1149,31 +1159,30 @@ class ResponseDetector:
                     self._logger.debug(f"[{serial}] Checking for new red dots...")
                     new_unread = await self._detect_first_page_unread(wecom, serial)
 
-                    # Find new red dots (not processed, not skipped, and not in queue)
-                    new_users = []
+                    # Classify re-detected users into hot (reprocess) and cold (new)
+                    new_hot: list = []
+                    new_cold: list = []
                     for u in new_unread:
-                        if u.name not in processed_names and u.name not in skipped_names and u.name not in queued_names:
-                            new_users.append(u)
+                        if u.name in skipped_names:
+                            continue
+                        if u.name in processed_names:
+                            new_hot.append(u)
+                            processed_names.discard(u.name)
+                            queued_names.add(u.name)
+                        elif u.name not in queued_names:
+                            new_cold.append(u)
                             queued_names.add(u.name)
 
-                    # Check for re-appeared red dots (processed users with new messages)
-                    # NOTE: We only reprocess users who were actually processed, not skipped
-                    reprocess_users = []
-                    for u in new_unread:
-                        if u.name in processed_names and u.name not in skipped_names:
-                            reprocess_users.append(u)
-                            processed_names.discard(u.name)
-                            if u.name not in queued_names:
-                                queued_names.add(u.name)
-
-                    # Add new/reprocess users to front of queue (priority)
-                    if new_users or reprocess_users:
-                        priority_users = new_users + reprocess_users
+                    if new_hot:
                         self._logger.info(
-                            f"[{serial}] 🆕 Found {len(priority_users)} new/reprocess red dots, adding to queue front"
+                            f"[{serial}] 🔥 {len(new_hot)} hot-chat user(s) replied, adding to hot queue front"
                         )
-                        for u in reversed(priority_users):
-                            user_queue.appendleft(u)
+                        for u in reversed(new_hot):
+                            hot_queue.appendleft(u)
+                    if new_cold:
+                        self._logger.info(f"[{serial}] 🆕 {len(new_cold)} new red dot(s), adding to cold queue front")
+                        for u in reversed(new_cold):
+                            cold_queue.appendleft(u)
 
                 if self._cancel_requested:
                     self._logger.info(f"[{serial}] Cancel requested, stopping")
@@ -1344,10 +1353,7 @@ class ResponseDetector:
             # content rather than contact names, we are almost certainly parsing
             # the wrong screen (e.g., chat bubbles treated as user entries).
             if current_users and len(current_users) >= 2:
-                all_suspicious = all(
-                    self._looks_like_low_confidence_message_name(u.name)
-                    for u in current_users
-                )
+                all_suspicious = all(self._looks_like_low_confidence_message_name(u.name) for u in current_users)
                 if all_suspicious:
                     self._logger.warning(
                         f"[{serial}] ALL {len(current_users)} extracted users have "
@@ -1483,8 +1489,7 @@ class ResponseDetector:
                 screen = await wecom.get_current_screen()
                 if screen != "private_chats":
                     self._logger.warning(
-                        f"[{serial}] Wrong screen before processing {user_name}: '{screen}'. "
-                        f"Attempting recovery..."
+                        f"[{serial}] Wrong screen before processing {user_name}: '{screen}'. Attempting recovery..."
                     )
                     recovered = await wecom.ensure_on_private_chats()
                     if not recovered:
@@ -1759,9 +1764,9 @@ class ResponseDetector:
                         self._ai_circuit_breaker.record_success()
                     else:
                         self._ai_circuit_breaker.record_failure()
-                    self._emit_dash_event("ai_request", serial,
-                                          result="ok" if reply else "error",
-                                          latency_ms=round(ai_generation_time))
+                    self._emit_dash_event(
+                        "ai_request", serial, result="ok" if reply else "error", latency_ms=round(ai_generation_time)
+                    )
 
                 if reply:
                     self._logger.info(f"[{serial}]    Sending reply: {reply[:40]}...")
@@ -3355,9 +3360,9 @@ class ResponseDetector:
 
         # Emit followup_started to dashboard
         import uuid as _uuid
+
         _batch_id = str(_uuid.uuid4())[:8]
-        self._emit_dash_event("followup_started", serial,
-                              batch_id=_batch_id, total_targets=pending_count)
+        self._emit_dash_event("followup_started", serial, batch_id=_batch_id, total_targets=pending_count)
 
         followup_result = await queue_manager.execute_pending_followups(
             skip_check=skip_check,
@@ -3391,17 +3396,23 @@ class ResponseDetector:
                 )
                 if detail.get("error"):
                     self._logger.info(f"[{serial}]       错误: {detail.get('error')[:50]}")
-                self._emit_dash_event("followup_result", serial,
-                                      batch_id=_batch_id,
-                                      target=detail.get("customer", ""),
-                                      success=detail.get("status") == "success",
-                                      error=detail.get("error"))
+                self._emit_dash_event(
+                    "followup_result",
+                    serial,
+                    batch_id=_batch_id,
+                    target=detail.get("customer", ""),
+                    success=detail.get("status") == "success",
+                    error=detail.get("error"),
+                )
 
-        self._emit_dash_event("followup_finished", serial,
-                              batch_id=_batch_id,
-                              success_count=followup_result.get("success", 0),
-                              fail_count=followup_result.get("failed", 0),
-                              skipped_count=followup_result.get("skipped", 0))
+        self._emit_dash_event(
+            "followup_finished",
+            serial,
+            batch_id=_batch_id,
+            success_count=followup_result.get("success", 0),
+            fail_count=followup_result.get("failed", 0),
+            skipped_count=followup_result.get("skipped", 0),
+        )
 
         self._logger.info(f"[{serial}] " + "─" * 60)
 

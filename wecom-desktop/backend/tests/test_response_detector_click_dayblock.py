@@ -73,6 +73,16 @@ def _make_priority_user(
     )
 
 
+def _minimal_wecom_for_process(*, click_ok: bool = False):
+    """WeCom stub for ``_process_unread_user_with_wait`` (screen guard + click)."""
+    wecom = MagicMock()
+    wecom.click_user_in_list = AsyncMock(return_value=click_ok)
+    wecom.get_current_screen = AsyncMock(return_value="private_chats")
+    wecom.ensure_on_private_chats = AsyncMock(return_value=True)
+    wecom.go_back = AsyncMock()
+    return wecom
+
+
 def _stub_ui_tree(monkeypatch, users):
     """Patch the UI tree -> ``UnreadUserExtractor.extract_from_tree`` flow so
     ``_detect_first_page_unread`` returns the given list of priority users."""
@@ -80,8 +90,18 @@ def _stub_ui_tree(monkeypatch, users):
     async def _get_ui_state():
         return ({"dummy_tree": True}, None)
 
+    async def _get_current_screen():
+        return "private_chats"
+
+    async def _ensure_on_private_chats():
+        return True
+
     fake_adb = SimpleNamespace(get_ui_state=_get_ui_state)
-    fake_wecom = SimpleNamespace(adb=fake_adb)
+    fake_wecom = SimpleNamespace(
+        adb=fake_adb,
+        get_current_screen=_get_current_screen,
+        ensure_on_private_chats=_ensure_on_private_chats,
+    )
 
     import wecom_automation.services.sync_service as sync_service_module
 
@@ -112,18 +132,18 @@ async def test_cooldown_escalates_to_dayblock_after_threshold_failures():
     detector._click_fail_cooldown[key] = (_time.time() - 1.0, threshold - 1)
     assert key not in detector._click_dayblock
 
-    # Build a minimal wecom stub that always fails click.
-    wecom = MagicMock()
-    wecom.click_user_in_list = AsyncMock(return_value=False)
+    wecom = _minimal_wecom_for_process(click_ok=False)
 
     user = _make_priority_user(STUCK_USER, unread=0, new_friend=True)
 
-    with patch.object(detector, "_clean_expired_click_cooldowns", return_value=None), patch(
-        "wecom_automation.services.blacklist_service.BlacklistChecker.is_blacklisted",
-        return_value=False,
-    ), patch(
-        "wecom_automation.services.blacklist_service.BlacklistWriter"
-    ) as MockWriter:
+    with (
+        patch.object(detector, "_clean_expired_click_cooldowns", return_value=None),
+        patch(
+            "wecom_automation.services.blacklist_service.BlacklistChecker.is_blacklisted",
+            return_value=False,
+        ),
+        patch("wecom_automation.services.blacklist_service.BlacklistWriter") as MockWriter,
+    ):
         MockWriter.return_value.ensure_user_in_blacklist_table = MagicMock()
 
         result = await detector._process_unread_user_with_wait(
@@ -155,16 +175,17 @@ async def test_cooldown_below_threshold_does_not_dayblock():
     threshold = detector._click_dayblock_threshold
     detector._click_fail_cooldown[key] = (_time.time() - 1.0, threshold - 3)
 
-    wecom = MagicMock()
-    wecom.click_user_in_list = AsyncMock(return_value=False)
+    wecom = _minimal_wecom_for_process(click_ok=False)
     user = _make_priority_user(STUCK_USER, unread=0, new_friend=True)
 
-    with patch.object(detector, "_clean_expired_click_cooldowns", return_value=None), patch(
-        "wecom_automation.services.blacklist_service.BlacklistChecker.is_blacklisted",
-        return_value=False,
-    ), patch(
-        "wecom_automation.services.blacklist_service.BlacklistWriter"
-    ) as MockWriter:
+    with (
+        patch.object(detector, "_clean_expired_click_cooldowns", return_value=None),
+        patch(
+            "wecom_automation.services.blacklist_service.BlacklistChecker.is_blacklisted",
+            return_value=False,
+        ),
+        patch("wecom_automation.services.blacklist_service.BlacklistWriter") as MockWriter,
+    ):
         MockWriter.return_value.ensure_user_in_blacklist_table = MagicMock()
 
         await detector._process_unread_user_with_wait(
@@ -203,8 +224,7 @@ async def test_detect_first_page_unread_filters_dayblocked_customer(monkeypatch)
 
     names = [u.name for u in priority_users]
     assert STUCK_USER not in names, (
-        "Dayblocked customer leaked through priority detection — the queue "
-        "will get jammed again."
+        "Dayblocked customer leaked through priority detection — the queue will get jammed again."
     )
     assert OTHER_USER in names, "Non-blocked customer must still flow through."
 
@@ -242,8 +262,7 @@ async def test_dayblock_is_scoped_per_serial(monkeypatch):
 
     priority_on_other = await detector._detect_first_page_unread(wecom, other_serial)
     assert [u.name for u in priority_on_other] == [STUCK_USER], (
-        "Dayblock must be keyed on (serial, name); a block on device A must not "
-        "affect device B."
+        "Dayblock must be keyed on (serial, name); a block on device A must not affect device B."
     )
 
 
@@ -260,8 +279,7 @@ def test_day_rollover_clears_dayblock():
     detector._maybe_reset_click_dayblock()
 
     assert detector._click_dayblock == set(), (
-        "Day rollover must clear yesterday's dayblock so legitimate retries "
-        "are possible on the new day."
+        "Day rollover must clear yesterday's dayblock so legitimate retries are possible on the new day."
     )
     assert detector._click_dayblock_day != "1970-01-01"
 
@@ -300,8 +318,7 @@ def test_dayblock_survives_cooldown_expiry():
 
     assert key not in detector._click_fail_cooldown, "Expired cooldown should be cleared"
     assert key in detector._click_dayblock, (
-        "Dayblock must outlive cooldown expiry — the latter is short-term, "
-        "the former is the daily guardrail."
+        "Dayblock must outlive cooldown expiry — the latter is short-term, the former is the daily guardrail."
     )
 
 
@@ -354,9 +371,7 @@ async def test_replay_2026_05_09_repeated_priority_caps_at_five(monkeypatch):
 
     user = _make_priority_user(STUCK_USER, unread=0, new_friend=True)
 
-    # Stub the wecom layer so click ALWAYS fails (the original UI-mismatch).
-    wecom = MagicMock()
-    wecom.click_user_in_list = AsyncMock(return_value=False)
+    wecom = _minimal_wecom_for_process(click_ok=False)
 
     # Stub the priority-detection upstream so the customer keeps reappearing
     # on the first page (the original false-positive).
@@ -367,21 +382,20 @@ async def test_replay_2026_05_09_repeated_priority_caps_at_five(monkeypatch):
     async def _no_op_blacklist_check(*_a, **_kw):
         return False
 
-    with patch(
-        "wecom_automation.services.blacklist_service.BlacklistChecker.is_blacklisted",
-        return_value=False,
-    ), patch(
-        "wecom_automation.services.blacklist_service.BlacklistWriter"
-    ) as MockWriter:
+    with (
+        patch(
+            "wecom_automation.services.blacklist_service.BlacklistChecker.is_blacklisted",
+            return_value=False,
+        ),
+        patch("wecom_automation.services.blacklist_service.BlacklistWriter") as MockWriter,
+    ):
         MockWriter.return_value.ensure_user_in_blacklist_table = MagicMock()
 
         # Simulate many scan cycles. Force-expire any cooldown before each
         # process call so the failure path counter advances every cycle
         # (mirrors what happens after a 600s wait in real life).
-        for cycle in range(threshold + 10):  # well past the threshold
-            priority_users = await detector._detect_first_page_unread(
-                wecom_for_detect, SERIAL
-            )
+        for _cycle in range(threshold + 10):  # well past the threshold
+            priority_users = await detector._detect_first_page_unread(wecom_for_detect, SERIAL)
             if not priority_users:
                 # Dayblock has kicked in — the queue is empty for this user.
                 continue
